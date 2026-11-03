@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/dj-core", ]
+members = ["crates/dj-core", "crates/dj-devbridge", "src-tauri"]
 default-members = ["crates/dj-core"]
 
 [workspace.package]

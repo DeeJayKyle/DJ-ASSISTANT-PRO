@@ -1,0 +1,12 @@
+[package]
+name = "dj-devbridge"
+description = "DEVELOPMENT ONLY: serves the dj-core command API on 127.0.0.1 so the UI can be tested in a browser. Never shipped."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+dj-core = { path = "../dj-core" }
+serde_json.workspace = true
+tiny_http = "0.12"

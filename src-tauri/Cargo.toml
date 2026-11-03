@@ -1,0 +1,17 @@
+[package]
+name = "dj-assistant"
+description = "DJ Assistant desktop app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dj-core = { path = "../crates/dj-core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"

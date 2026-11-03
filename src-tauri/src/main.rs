@@ -1,0 +1,77 @@
+// Prevents an extra console window on Windows in release builds.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use dj_core::App;
+use serde_json::Value;
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
+
+struct State {
+    app: Arc<App>,
+    log_path: Option<PathBuf>,
+    log_lock: Mutex<()>,
+}
+
+impl State {
+    /// Local log: command name and error text only. No arguments are logged,
+    /// so search text and file paths typed by the user are not recorded.
+    fn log(&self, line: &str) {
+        let Some(p) = &self.log_path else { return };
+        let _g = self.log_lock.lock();
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+        {
+            let _ = writeln!(f, "{} {}", dj_core::db::now_ms(), line);
+        }
+    }
+}
+
+/// Single entry point for the UI. All commands are implemented (and tested)
+/// in dj-core; nothing here reads or writes music files directly.
+#[tauri::command]
+async fn api(state: tauri::State<'_, State>, cmd: String, args: Value) -> Result<Value, String> {
+    let st = state.inner();
+    let app = st.app.clone();
+    let c = cmd.clone();
+    // Run on a blocking worker so the UI thread never waits on the database.
+    let res = tauri::async_runtime::spawn_blocking(move || app.dispatch(&c, args))
+        .await
+        .map_err(|e| format!("internal error: {e}"))?;
+    res.map_err(|e| {
+        st.log(&format!("command {cmd} failed: {e}"));
+        e.to_string()
+    })
+}
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let data_dir = app.path().app_data_dir().expect("app data dir");
+            std::fs::create_dir_all(&data_dir)?;
+            let log_dir = app.path().app_log_dir().ok();
+            let log_path = log_dir.and_then(|d| {
+                std::fs::create_dir_all(&d)
+                    .ok()
+                    .map(|_| d.join("dj-assistant.log"))
+            });
+            let db_path = data_dir.join("catalogue.sqlite3");
+            let core = App::open(&db_path)
+                .map_err(|e| format!("could not open catalogue at {}: {e}", db_path.display()))?;
+            let state = State {
+                app: Arc::new(core),
+                log_path,
+                log_lock: Mutex::new(()),
+            };
+            state.log(&format!("started v{}", dj_core::api::APP_VERSION));
+            app.manage(state);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![api])
+        .run(tauri::generate_context!())
+        .expect("error while running DJ Assistant");
+}
