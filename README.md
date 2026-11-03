@@ -43,12 +43,12 @@ Version 0.1 is deliberately small and safe: it catalogues the folders you choose
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Download `DJ Assistant_<version>_x64-setup.exe` and `SHA256SUMS.txt` from the [Releases](../../releases) page.
-2. Optional but recommended — verify the download in PowerShell:
+1. Download the installer (`DJ.Assistant_0.1.0_x64-setup.exe` for v0.1.0; later releases use `DJ-Assistant_<version>_x64-setup.exe`) and `SHA256SUMS.txt` from the [Releases](../../releases) page.
+2. Recommended — verify the download in PowerShell:
    ```powershell
-   Get-FileHash ".\DJ Assistant_0.1.0_x64-setup.exe" -Algorithm SHA256
+   Get-FileHash ".\DJ.Assistant_0.1.0_x64-setup.exe" -Algorithm SHA256
    ```
-   Compare the hash with `SHA256SUMS.txt`.
+   The hash must equal the one in `SHA256SUMS.txt` (for v0.1.0: `2fb1525473aecd4685504965d6edd7b0766172dbc6876034c475d408314eefb9`). In v0.1.0 the file name inside `SHA256SUMS.txt` shows a space instead of the dot GitHub added; the hash is what matters.
 3. Run the installer. It installs for the current user (no admin needed).
 
 **The installer is not code-signed.** Windows SmartScreen will probably show “Windows protected your PC”. Choose **More info → Run anyway** only if the checksum matches. The app uses Microsoft Edge WebView2, which is built into Windows 11 and current Windows 10; if it is missing the installer downloads it from Microsoft.

@@ -52,7 +52,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item "target/release/bundle/nsis/*.exe" release/
+          # GitHub replaces spaces in asset names, so publish a space-free name
+          # that matches SHA256SUMS.txt exactly.
+          Get-ChildItem "target/release/bundle/nsis/*.exe" | ForEach-Object {
+            Copy-Item $_.FullName (Join-Path release ($_.Name -replace ' ', '-'))
+          }
           Push-Location release
           Get-ChildItem *.exe | ForEach-Object {
             "$((Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
