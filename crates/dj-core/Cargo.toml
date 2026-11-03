@@ -1,0 +1,21 @@
+[package]
+name = "dj-core"
+description = "Local, read-only music library core for DJ Assistant (no network access)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rusqlite = { version = "0.41", features = ["bundled", "functions"] }
+lofty = "0.25"
+walkdir = "2.5"
+blake3 = "1.8"
+thiserror = "2"
+crossbeam-channel = "0.5"
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+tempfile = "3"
