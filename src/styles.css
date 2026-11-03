@@ -320,3 +320,4 @@ label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px
 .planned .panel h3 { margin-bottom: 6px; }
 .tagline { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .tag { font-size: 11.5px; padding: 0 6px; border-radius: 3px; background: var(--raised); border: 1px solid var(--line); }
+.dup-table td:not(.path) { white-space: nowrap; }

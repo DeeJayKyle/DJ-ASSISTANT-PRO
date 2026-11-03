@@ -42,15 +42,22 @@ export default function App() {
 
   // Initial load
   useEffect(() => {
+    // Ignore a late response from a superseded run (React StrictMode runs
+    // effects twice in development) so it cannot overwrite newer state.
+    let stale = false;
     Promise.all([api.getSettings(), api.appInfo(), api.ruleFields(), api.scanStatus()])
       .then(([s, i, f, sc]) => {
+        if (stale) return;
         setSettings(s);
         setInfo(i);
         setFields(f);
         setScan(sc);
         setChat(s.chat_open ? "open" : "hidden");
       })
-      .catch((e) => setFatal(String(e.message ?? e)));
+      .catch((e) => !stale && setFatal(String(e.message ?? e)));
+    return () => {
+      stale = true;
+    };
   }, []);
 
   useEffect(() => {

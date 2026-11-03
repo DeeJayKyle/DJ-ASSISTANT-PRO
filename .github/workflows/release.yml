@@ -39,6 +39,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test -p dj-core --locked
       - run: python scripts/check-licenses.py
+      - run: ./scripts/check-read-only.sh
+        shell: bash
       - name: Check version matches tag
         shell: pwsh
         run: |

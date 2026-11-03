@@ -79,6 +79,7 @@ const expect = (cond, msg) => {
 
 const browser = await chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: Number(process.env.E2E_DPR ?? 1) });
+page.on("framenavigated", (f) => f === page.mainFrame() && console.log("    [navigated]", f.url()));
 const external = [];
 page.on("request", (r) => {
   const u = new URL(r.url());

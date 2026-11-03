@@ -46,6 +46,9 @@ jobs:
         run: cargo test -p dj-core --locked
       - name: Licence check
         run: python scripts/check-licenses.py
+      - name: Read-only guard (no file-modifying APIs in shipped code)
+        shell: bash
+        run: ./scripts/check-read-only.sh
       - name: Build Windows installer (NSIS, unsigned)
         run: npx tauri build --ci
       - name: SHA-256 checksums
