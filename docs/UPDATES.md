@@ -27,3 +27,7 @@ With those set, the **Release** workflow signs the installer and publishes `late
 
 1. Bump the version in `Cargo.toml` (workspace), `package.json` and `src-tauri/tauri.conf.json`; update `docs/RELEASE_NOTES.md`.
 2. Run the **Release** workflow with the new tag (e.g. `v1.0.1`).
+
+## Signing outside CI
+
+If the signing secrets are not set, the Release workflow still publishes the installer. Sign it locally with `npx tauri signer sign -f <key> -p <password> DJ-Assistant_x.y.z_x64-setup.exe`, build `latest.json` (version, notes, pub_date, and `platforms.windows-x86_64` with the signature and the release download URL), and run the **Attach updater manifest** workflow with the base64-encoded `latest.json`. This is how v1.0.0's `latest.json` was published.
