@@ -8,5 +8,6 @@ publish = false
 
 [dependencies]
 dj-core = { path = "../dj-core" }
+dj-online = { path = "../dj-online" }
 serde_json.workspace = true
 tiny_http = "0.12"

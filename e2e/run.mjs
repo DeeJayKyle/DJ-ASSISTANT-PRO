@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { createServer } from "node:http";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const data = path.join(root, "e2e/.data");
@@ -16,6 +17,17 @@ rmSync(data, { recursive: true, force: true });
 mkdirSync(shots, { recursive: true });
 mkdirSync(usb, { recursive: true });
 cpSync(path.join(root, "crates/dj-core/tests/fixtures/library"), music, { recursive: true });
+// Quick Prep: a separate folder of badly named downloads (copies of fixtures).
+const messy = path.join(data, "Messy Downloads");
+const exportsDir = path.join(data, "Exports");
+mkdirSync(messy, { recursive: true });
+mkdirSync(path.join(exportsDir, "playlists"), { recursive: true });
+const fx = (p) => path.join(root, "crates/dj-core/tests/fixtures/library", p);
+cpSync(fx("Lossless/untagged recording.wav"), path.join(messy, "01_-_dj_kozi-sunset_drive_(original_mix)_[FREE DL]_www.promo.net.wav"));
+cpSync(fx("Lossless/untagged recording.wav"), path.join(messy, "deep_house_groove__clean_.wav"));
+cpSync(fx("Lossless/untagged recording.wav"), path.join(messy, "track02 final FINAL v3.wav"));
+cpSync(fx("House/Old School/Basement Hours.mp3"), path.join(messy, "basement-hours_FINAL.mp3"));
+
 
 const snapshot = (dir) => {
   const out = {};
@@ -31,6 +43,7 @@ const snapshot = (dir) => {
   return out;
 };
 const before = snapshot(music);
+const messyBefore = snapshot(messy);
 
 console.log("building dev bridge…");
 execSync("cargo build -q -p dj-devbridge", { cwd: root, stdio: "inherit" });
@@ -44,7 +57,7 @@ const start = (cmd, args, env = {}) => {
 };
 const cleanup = () => procs.forEach((p) => p.kill());
 process.on("exit", cleanup);
-start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878"]);
+start(bridgeBin, ["--data", path.join(data, "app"), "--port", "7878", "--online"]);
 start("npx", ["vite", "--port", "5174", "--strictPort"], { VITE_DEV_BRIDGE: "1" });
 const waitFor = async (url, ms = 40000) => {
   const t0 = Date.now();
@@ -85,8 +98,37 @@ let restarting = false;
 page.on("console", (m) => m.type() === "error" && !restarting && consoleErrors.push(m.text()));
 page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
+
+// A stand-in for an OpenAI-compatible AI service on Ollama's local address (AI help is optional).
+const aiCalls = [];
+const aiServer = createServer((req, res) => {
+  let body = "";
+  req.on("data", (c) => (body += c));
+  req.on("end", () => {
+    const { messages = [] } = JSON.parse(body || "{}");
+    const sys = messages[0]?.content ?? "";
+    const user = messages.at(-1)?.content ?? "";
+    aiCalls.push({ sys: sys.slice(0, 40), user });
+    let content = '{"ok":true}';
+    if (/tidy their music library/.test(sys)) content = JSON.stringify({ tracks: JSON.parse(user).map((t) => (/deep_house/.test(t.file) ? { id: t.id, artist: "Groove Unit", title: "Deep House Groove", mix: "Clean", genre: "deep house" } : { id: t.id, ...t.suggestion })) });
+    else if (/planning a set/.test(sys)) content = JSON.stringify({ order: JSON.parse(user.split("Tracks: ")[1]).map((t) => t.id).reverse(), note: "Reversed by the test AI." });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+  });
+});
+await new Promise((r) => aiServer.listen(11434, "127.0.0.1", r));
+const bridge = (cmd, args = {}) => fetch("http://127.0.0.1:7878", { method: "POST", body: JSON.stringify({ cmd, args }) }).then((r) => r.json());
+
 console.log("running e2e steps…");
 await page.goto("http://127.0.0.1:5174");
+
+await step("first run asks for a local account name (no sign-in)", async () => {
+  await page.getByRole("heading", { name: "Welcome" }).waitFor();
+  await page.screenshot({ path: path.join(shots, "00-account.png") });
+  await page.getByLabel("Account name").fill("Herbie");
+  await page.getByRole("button", { name: /Create account/ }).click();
+  await page.getByRole("button", { name: /Herbie/ }).first().waitFor();
+});
 
 await step("first run shows the safety notice and it can be acknowledged", async () => {
   await page.getByRole("dialog", { name: "Before you start" }).waitFor();
@@ -358,11 +400,161 @@ await step("premium UI switch repaints with the Midnight Pro palette and back", 
   expect((await page.evaluate(() => document.documentElement.dataset.palette)) === undefined, "palette not removed");
 });
 
+
+// ---------------------------------------------------------------- Quick Prep
+const listFiles = (dir) => { const out = []; const walk = (d, rel) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p, `${rel}${n}/`); else out.push(`${rel}${n}`); } }; walk(dir, ""); return out.sort(); };
+const exportVia = async (mode, dest) => {
+  if (mode) await page.getByText(mode).click();
+  await page.getByLabel("Destination").fill(dest);
+  if (mode === "Playlists only") {
+    await page.getByRole("button", { name: "Save playlists" }).click();
+  } else {
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await page.getByRole("button", { name: "Copy and verify" }).click();
+  }
+  await page.getByRole("heading", { name: "Export finished" }).waitFor({ timeout: 30000 });
+};
+
+await step("Quick Prep: a new folder is added read-only, scanned and analysed", async () => {
+  await nav("Quick Prep").click();
+  await page.screenshot({ path: path.join(shots, "20-quick-start.png") });
+  await page.getByLabel("Folder path").fill(messy);
+  await page.getByRole("button", { name: "Use folder" }).click();
+  await page.getByRole("heading", { name: "Tracks ready." }).waitFor({ timeout: 60000 });
+  await page.screenshot({ path: path.join(shots, "21-quick-analysed.png") });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("heading", { name: "What do you want to do?" }).waitFor();
+});
+
+await step("Quick Prep: clean names strip junk, keep real tags, and edits follow the format", async () => {
+  await page.getByRole("button", { name: /Clean names/ }).click();
+  const names = await page.locator(".qp-name").evaluateAll((els) => els.map((e) => e.value));
+  for (const n of ["DJ Kozi - Sunset Drive (Original Mix)", "Deep House Groove (Clean)", "Track 02", "Deep Tenant - Basement Hours"]) expect(names.includes(n), `missing “${n}” in ${JSON.stringify(names)}`);
+  const edit = page.getByLabel("Clean name for track02 final FINAL v3.wav");
+  await edit.fill("Mara Vey - Last Train");
+  await edit.press("Enter");
+  await page.getByRole("button", { name: "Title – Artist" }).click();
+  expect((await edit.inputValue()) === "Last Train - Mara Vey", `format switch: ${await edit.inputValue()}`);
+  await page.getByRole("button", { name: "Artist – Title" }).click();
+  await page.screenshot({ path: path.join(shots, "22-quick-clean.png") });
+  await page.getByRole("button", { name: "Save names to catalogue" }).click();
+  await page.getByText(/Saved clean names for \d+ tracks? to your catalogue/).waitFor();
+});
+
+await step("Quick Prep: clean export = verified copies with clean names, tags in the MP3, a playlist", async () => {
+  await page.getByRole("button", { name: "Export clean tracks" }).click();
+  await exportVia(null, exportsDir);
+  const files = listFiles(path.join(exportsDir, "Clean tracks"));
+  for (const f of ["DJ Kozi - Sunset Drive (Original Mix).wav", "Mara Vey - Last Train.wav", "Deep Tenant - Basement Hours.mp3", "All tracks.m3u8", "manifest.json"]) expect(files.includes(f), `missing ${f} in ${files}`);
+  const manifest = JSON.parse(readFileSync(path.join(exportsDir, "Clean tracks", "manifest.json"), "utf8"));
+  expect(manifest.tagged === 1 && manifest.files.every((f) => f.verified), `manifest: tagged=${manifest.tagged}`);
+  await page.getByRole("button", { name: "Done" }).click();
+});
+
+await step("Quick Prep: playlist sorts by BPM and exports as one ZIP with numbered files", async () => {
+  await page.getByRole("button", { name: "All paths" }).click();
+  await page.getByRole("button", { name: /Build a playlist/ }).click();
+  await page.getByRole("button", { name: "Ascending BPM" }).click();
+  await page.getByLabel("Describe how to order the playlist").fill("warm up to the peak");
+  await page.getByRole("button", { name: "Sort", exact: true }).click();
+  await page.getByRole("button", { name: "Warm-up → peak", pressed: true }).waitFor();
+  await page.getByLabel("Playlist name").fill("Friday Set");
+  await page.screenshot({ path: path.join(shots, "23-quick-playlist.png") });
+  await page.getByRole("button", { name: "Export playlist" }).click();
+  await exportVia("One ZIP file", exportsDir);
+  const zip = path.join(exportsDir, "Friday Set.zip");
+  const names = execSync(`python3 -c "import zipfile,sys; print('\\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))" "${zip}"`).toString().split("\n");
+  expect(names.includes("Friday Set/Friday Set.m3u8") && names.filter((n) => /^Friday Set\/0[1-4] /.test(n)).length === 4, `zip: ${names}`);
+  await page.getByRole("button", { name: "Done" }).click();
+});
+
+await step("Quick Prep: folders are set up, sorted with number keys, and exported", async () => {
+  await page.getByRole("button", { name: "All paths" }).click();
+  await page.getByRole("button", { name: /Organise folders/ }).click();
+  await page.getByText("2 main · 6 sub").waitFor();
+  await page.getByRole("button", { name: "Start sorting" }).click();
+  await page.locator(".qp-strack").first().click();
+  await page.keyboard.press("1");
+  await page.keyboard.press("3");
+  await page.getByText(/^2 of 4 sorted/).waitFor();
+  await page.screenshot({ path: path.join(shots, "24-quick-folders.png") });
+  await page.getByRole("button", { name: "Export folders" }).click();
+  await exportVia(null, exportsDir);
+  const files = listFiles(path.join(exportsDir, "Messy Downloads – organised"));
+  expect(files.some((f) => f.startsWith("Friday Night/Warm Up/")) && files.some((f) => f.startsWith("Friday Night/Peak Time/")) && files.filter((f) => f.startsWith("Unsorted/")).length === 2, `folders: ${files}`);
+  expect(files.filter((f) => f.startsWith("Playlists/")).length === 3, `playlists: ${files}`);
+  await page.getByRole("button", { name: "Done" }).click();
+});
+
+await step("Quick Prep: genres group into families, save as crates, and export playlists only", async () => {
+  await page.getByRole("button", { name: "All paths" }).click();
+  await page.getByRole("button", { name: /Split by genre/ }).click();
+  await page.getByText("Group into families").click();
+  await page.screenshot({ path: path.join(shots, "25-quick-genres.png") });
+  await page.getByRole("button", { name: "Save as crates" }).click();
+  await page.getByText(/genre crates? under “Quick Prep · Messy Downloads”/).waitFor();
+  await page.getByRole("button", { name: "Export by genre" }).click();
+  await exportVia("Playlists only", path.join(exportsDir, "playlists"));
+  const lists = readdirSync(path.join(exportsDir, "playlists"));
+  expect(lists.length >= 1 && lists.every((l) => l.endsWith(".m3u8")), `playlists: ${lists}`);
+  expect(readFileSync(path.join(exportsDir, "playlists", lists[0]), "utf8").includes(messy), "links-only playlists point at the originals");
+  await page.getByRole("button", { name: "Done" }).click();
+});
+
+await step("Quick Prep never changed the source files", async () => expect(JSON.stringify(messyBefore) === JSON.stringify(snapshot(messy)), "messy folder changed!"));
+
+
+await step("Quick Prep: previews stream catalogued tracks only (range requests)", async () => {
+  const row = (await bridge("search", { query: { text: "basement hours" } })).ok.rows[0];
+  const r = await fetch(`http://127.0.0.1:7878/track/${row.id}`, { headers: { Range: "bytes=0-99" } });
+  expect(r.status === 206 && (await r.arrayBuffer()).byteLength === 100, `status ${r.status}`);
+  expect((await fetch("http://127.0.0.1:7878/track/999999")).status === 404, "unknown ids must not resolve");
+});
+
+await step("AI help (optional): set up in Settings, then improves names and orders a set", async () => {
+  await nav("Settings").click();
+  const row = page.locator(".list-row", { hasText: "AI help" });
+  await row.getByLabel("AI service").selectOption("ollama");
+  await row.getByRole("button", { name: "Save and test" }).click();
+  await page.getByText("AI help is working.").waitFor();
+  await nav("Quick Prep").click();
+  await page.getByRole("button", { name: "All paths" }).click();
+  await page.getByRole("button", { name: /Clean names/ }).click();
+  await page.getByRole("button", { name: "Improve with AI" }).click();
+  await page.getByText(/AI suggested names for/).waitFor();
+  const names = await page.locator(".qp-name").evaluateAll((els) => els.map((e) => e.value));
+  expect(names.includes("Groove Unit - Deep House Groove (Clean)"), `AI name missing: ${names}`);
+  expect(names.includes("Mara Vey - Last Train"), "your own edit must be kept");
+  expect(!aiCalls.some((c) => c.user.includes(messy)), "file paths were sent to the AI");
+  await page.getByRole("button", { name: "All paths" }).click();
+  await page.getByRole("button", { name: /Build a playlist/ }).click();
+  await page.getByLabel("Describe how to order the playlist").fill("something dreamy that slowly opens up");
+  await page.getByRole("button", { name: "Sort", exact: true }).click();
+  await page.getByText("Reversed by the test AI.").waitFor();
+});
+
+// ---------------------------------------------------------------- local accounts
+await step("a second local account has its own empty library, and switching back restores yours", async () => {
+  await page.getByRole("button", { name: /Herbie/ }).first().click();
+  await page.getByRole("menuitem", { name: "Manage accounts…" }).click();
+  await page.getByLabel("New account name").fill("Guest DJ");
+  await page.getByRole("button", { name: "Add account" }).click();
+  await page.getByRole("dialog", { name: "Before you start" }).waitFor();
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByRole("heading", { name: "Welcome, Guest DJ" }).waitFor();
+  await page.screenshot({ path: path.join(shots, "26-second-account.png") });
+  await page.getByRole("button", { name: /Guest DJ/ }).first().click();
+  await page.getByRole("menuitemradio", { name: /Herbie/ }).click();
+  await nav("Library").click();
+  await page.getByRole("heading", { name: "Music Library" }).waitFor();
+  await nav("Wedding").waitFor();
+});
+
 await step("data, crates and sets persist after restarting the backend", async () => {
   restarting = true;
   procs[0].kill();
   await new Promise((r) => setTimeout(r, 500));
-  procs[0] = start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878"]);
+  procs[0] = start(bridgeBin, ["--data", path.join(data, "app"), "--port", "7878", "--online"]);
   await waitFor("http://127.0.0.1:7878");
   await page.reload();
   restarting = false;
@@ -377,6 +569,7 @@ await step("no console errors", async () => expect(consoleErrors.length === 0, c
 await browser.close();
 const after = snapshot(music);
 await step("source files unchanged after the whole session (size, mtime, SHA-256)", async () => expect(JSON.stringify(before) === JSON.stringify(after), "fixture files changed!"));
+aiServer.close();
 cleanup();
 console.log(failures ? `\n${failures} e2e step(s) FAILED` : "\nall e2e steps passed");
 process.exit(failures ? 1 : 0);

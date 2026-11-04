@@ -19,7 +19,7 @@ export function EnergyCurve({ points, slots }: { points: number[]; slots?: SetSl
       <g className="grid">{[2, 4, 6, 8, 10].map((e) => <line key={e} x1={P} x2={W - P} y1={y(e)} y2={y(e)} />)}</g>
       <path className="area" d={`${line} L${x(points.length - 1, points.length)},${H - P} L${P},${H - P} Z`} />
       <path className="line" d={line} />
-      {slots?.map((s, i) => s.energy != null && <circle key={s.track_id} cx={x(i, slots.length)} cy={y(s.energy)} r={3.5} />)}
+      {slots?.map((s, i) => s.energy != null && <circle key={`${s.track_id}-${i}`} cx={x(i, slots.length)} cy={y(s.energy)} r={3.5} />)}
     </svg>
   );
 }

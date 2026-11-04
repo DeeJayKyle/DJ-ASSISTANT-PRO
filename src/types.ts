@@ -471,6 +471,8 @@ export interface PackFile {
   title: string | null;
   source: string;
   dest_name: string;
+  rel_path: string;
+  duration_s: number | null;
   size: number;
   available: boolean;
   problem: string | null;
@@ -484,6 +486,38 @@ export interface PackPlan {
   fits: boolean;
   missing: number;
   warnings: string[];
+  zip: boolean;
+  write_tags: boolean;
+  playlists: { name: string; path: string; track_ids: number[] }[];
+}
+
+export interface PackOptions {
+  items?: { track_id: number; folder: string; name?: string }[];
+  playlists?: { name: string; path: string; track_ids: number[] }[];
+  zip?: boolean;
+  write_tags?: boolean;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  color: string;
+  created_at: number;
+}
+
+export interface AccountList {
+  accounts: Account[];
+  current: string | null;
+}
+
+export interface AiPreset { id: string; label: string; base_url: string; model: string; key_url: string; note: string }
+export interface AiSettings {
+  enabled: boolean;
+  preset: string | null;
+  base_url: string | null;
+  model: string | null;
+  has_key: boolean;
+  presets: AiPreset[];
 }
 
 export interface PlannedChange {

@@ -104,6 +104,27 @@ impl App {
             .unwrap_or_default()
     }
 
+    /// A scan, hash or other background job is still running.
+    pub fn busy(&self) -> bool {
+        lock(&self.scan).running() || lock(&self.hash).running() || self.jobs.any_running()
+    }
+
+    /// The file behind a catalogued, present track (for playback). Only
+    /// catalogued files can be resolved, so this can't be used to read
+    /// arbitrary paths.
+    pub fn playable_path(&self, id: i64) -> Option<PathBuf> {
+        let conn = lock(&self.conn);
+        let p: String = conn
+            .query_row(
+                "SELECT path FROM tracks WHERE id=?1 AND presence='present' AND read_status='ok'",
+                [id],
+                |r| r.get(0),
+            )
+            .ok()?;
+        let p = PathBuf::from(p);
+        p.is_file().then_some(p)
+    }
+
     pub fn jobs(&self) -> &crate::jobs::Jobs {
         &self.jobs
     }

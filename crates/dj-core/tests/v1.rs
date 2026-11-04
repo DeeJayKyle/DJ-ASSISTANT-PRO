@@ -79,6 +79,44 @@ impl Online for FakeOnline {
             url: None,
         }])
     }
+    fn ai_chat(
+        &self,
+        base_url: &str,
+        key: Option<&str>,
+        model: &str,
+        messages: &[(String, String)],
+    ) -> Result<String, String> {
+        assert_eq!(
+            (base_url, key, model),
+            (
+                "https://api.groq.com/openai/v1",
+                Some("gsk_test"),
+                "openai/gpt-oss-120b"
+            )
+        );
+        let (sys, user) = (&messages[0].1, &messages.last().unwrap().1);
+        let tmp = std::env::temp_dir();
+        assert!(
+            !user.contains(tmp.to_str().unwrap()) && !user.contains("Afrobeats/"),
+            "file paths are never sent: {user}"
+        );
+        if sys.contains("tidy their music library") {
+            let items: Vec<Value> = serde_json::from_str(user).unwrap();
+            let out: Vec<Value> = items.iter().map(|t| json!({"id": t["id"], "artist": "Lagos Lights", "title": "Sunrise Groove", "mix": "Radio Edit", "genre": "afrobeats"})).collect();
+            Ok(json!({"tracks": out}).to_string())
+        } else if sys.contains("planning a set") {
+            let list: Vec<Value> =
+                serde_json::from_str(user.split("Tracks: ").nth(1).unwrap()).unwrap();
+            let mut ids: Vec<Value> = list.iter().map(|t| t["id"].clone()).collect();
+            ids.reverse();
+            Ok(format!(
+                "Sure! {}",
+                json!({"order": ids, "note": "Reversed."})
+            ))
+        } else {
+            Ok("{\"ok\":true}".into())
+        }
+    }
 }
 
 /// Write a 16-bit mono WAV with a few tones (long enough to fingerprint).
@@ -1448,4 +1486,240 @@ fn corrupt_video_headers_are_rejected_without_panicking() {
             "{name} should be rejected"
         );
     }
+}
+
+#[test]
+fn quick_prep_exports_layouts_zip_and_tagged_copies() {
+    let e = env();
+    let before = snapshot(&e.music);
+    let app = e.app();
+    add_and_scan(&app, &e.music);
+    let usb = e.data.parent().unwrap().join("USB");
+    std::fs::create_dir_all(&usb).unwrap();
+    let mp3 = id_of(&app, "Lagos Lights - Sunrise Groove.mp3");
+    let flac = id_of(&app, "Low Tide.flac");
+    let ogg = id_of(&app, "Mirrorball.ogg");
+    // Clean names and values live in the catalogue; copies carry them.
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": [mp3], "patch": {"title": "Sunrise Groove", "artist": "Lagos Lights", "version_label": "Club Mix", "genre": "Afro House", "bpm": 122.4, "key": "8A"}}),
+    );
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": [flac], "patch": {"title": "Low Tide", "artist": "Shore Unit", "genre": "Deep House"}}),
+    );
+    let options = json!({
+        "items": [
+            {"track_id": mp3, "folder": "Friday Night/Warm Up", "name": "Lagos Lights - Sunrise Groove (Club Mix)"},
+            {"track_id": flac, "folder": "Friday Night/Peak Time", "name": "Shore Unit - Low Tide"},
+            {"track_id": ogg, "folder": "../Unsorted", "name": "CON"}
+        ],
+        "playlists": [
+            {"name": "Friday Night - Warm Up", "path": "Playlists/Friday Night - Warm Up.m3u8", "track_ids": [mp3]},
+            {"name": "Everything", "path": "Playlists/Everything.m3u8", "track_ids": [flac, mp3, ogg]}
+        ],
+        "write_tags": true
+    });
+    let p = call(
+        &app,
+        "gigpack_preview",
+        json!({"dest": usb.to_str().unwrap(), "name": "Organised folders", "options": options}),
+    );
+    let files = p["plan"]["files"].as_array().unwrap();
+    assert_eq!(
+        files[0]["rel_path"],
+        "Friday Night/Warm Up/Lagos Lights - Sunrise Groove (Club Mix).mp3"
+    );
+    assert_eq!(
+        files[2]["rel_path"], "Unsorted/CON_.ogg",
+        "unsafe names are made safe"
+    );
+    call(&app, "gigpack_start", json!({"token": p["token"]}));
+    let st = wait_job(&app, "gigpack");
+    assert_eq!(st["state"], "completed", "{st}");
+    let pack = Path::new(p["plan"]["pack_dir"].as_str().unwrap());
+    let copy = pack.join("Friday Night/Warm Up/Lagos Lights - Sunrise Groove (Club Mix).mp3");
+    let tags = lofty::read_from_path(&copy).unwrap();
+    let t = lofty::file::TaggedFileExt::primary_tag(&tags).unwrap();
+    use lofty::prelude::Accessor;
+    assert_eq!(t.title().as_deref(), Some("Sunrise Groove (Club Mix)"));
+    assert_eq!(t.artist().as_deref(), Some("Lagos Lights"));
+    assert_eq!(t.genre().as_deref(), Some("Afro House"));
+    assert_eq!(t.get_string(lofty::tag::ItemKey::IntegerBpm), Some("122"));
+    assert_eq!(t.get_string(lofty::tag::ItemKey::InitialKey), Some("8A"));
+    let flac_tags =
+        lofty::read_from_path(pack.join("Friday Night/Peak Time/Shore Unit - Low Tide.flac"))
+            .unwrap();
+    assert_eq!(
+        lofty::file::TaggedFileExt::primary_tag(&flac_tags)
+            .unwrap()
+            .artist()
+            .as_deref(),
+        Some("Shore Unit")
+    );
+    // The untaggable Ogg is a byte-identical copy.
+    assert_eq!(
+        std::fs::read(pack.join("Unsorted/CON_.ogg")).unwrap(),
+        std::fs::read(e.music.join("House/Mirrorball.ogg")).unwrap()
+    );
+    let pl = std::fs::read_to_string(pack.join("Playlists/Everything.m3u8")).unwrap();
+    assert!(
+        pl.starts_with("#EXTM3U\r\n#PLAYLIST:Everything\r\n"),
+        "{pl}"
+    );
+    let sep = std::path::MAIN_SEPARATOR;
+    assert!(
+        pl.contains(&format!(
+            "..{sep}Friday Night{sep}Peak Time{sep}Shore Unit - Low Tide.flac"
+        )),
+        "{pl}"
+    );
+    let manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(pack.join("manifest.json")).unwrap())
+            .unwrap();
+    assert_eq!(manifest["tagged"], 2);
+
+    // The same as one ZIP, with the musical key notation.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "key_notation", "value": "musical"}),
+    );
+    let p = call(
+        &app,
+        "gigpack_preview",
+        json!({"dest": usb.to_str().unwrap(), "name": "My Set", "options": {
+            "items": [{"track_id": mp3, "folder": "My Set", "name": "01 Lagos Lights - Sunrise Groove"}, {"track_id": ogg, "folder": "My Set", "name": "02 Mirrorball"}],
+            "playlists": [{"name": "My Set", "path": "My Set/My Set.m3u8", "track_ids": [mp3, ogg]}],
+            "zip": true, "write_tags": true
+        }}),
+    );
+    assert!(p["plan"]["pack_dir"]
+        .as_str()
+        .unwrap()
+        .ends_with("My Set.zip"));
+    call(&app, "gigpack_start", json!({"token": p["token"]}));
+    assert_eq!(wait_job(&app, "gigpack")["state"], "completed");
+    let zip_path = usb.join("My Set.zip");
+    let mut z = zip::ZipArchive::new(std::fs::File::open(&zip_path).unwrap()).unwrap();
+    let names: Vec<String> = (0..z.len())
+        .map(|i| z.by_index(i).unwrap().name().to_string())
+        .collect();
+    assert!(
+        names.contains(&"My Set/01 Lagos Lights - Sunrise Groove.mp3".to_string()),
+        "{names:?}"
+    );
+    assert!(names.contains(&"My Set/My Set.m3u8".to_string()));
+    assert!(
+        !usb.join("My Set.zip.part").exists() && !usb.join("My Set.zip.tmp").exists(),
+        "temporary files are cleaned up"
+    );
+    let mut entry = z
+        .by_name("My Set/01 Lagos Lights - Sunrise Groove.mp3")
+        .unwrap();
+    let mut bytes = vec![];
+    std::io::Read::read_to_end(&mut entry, &mut bytes).unwrap();
+    drop(entry);
+    let tmp = e.data.join("from-zip.mp3");
+    std::fs::write(&tmp, &bytes).unwrap();
+    let tags = lofty::read_from_path(&tmp).unwrap();
+    assert_eq!(
+        lofty::file::TaggedFileExt::primary_tag(&tags)
+            .unwrap()
+            .get_string(lofty::tag::ItemKey::InitialKey),
+        Some("Am")
+    );
+    let mut pl = String::new();
+    std::io::Read::read_to_string(&mut z.by_name("My Set/My Set.m3u8").unwrap(), &mut pl).unwrap();
+    assert!(
+        pl.contains("01 Lagos Lights - Sunrise Groove.mp3\r\n") && !pl.contains(".."),
+        "{pl}"
+    );
+    // A second ZIP with the same name is refused.
+    let p2 = call(
+        &app,
+        "gigpack_preview",
+        json!({"dest": usb.to_str().unwrap(), "name": "My Set", "options": {"items": [{"track_id": mp3, "folder": ""}], "zip": true}}),
+    );
+    assert!(app
+        .dispatch("gigpack_start", json!({"token": p2["token"]}))
+        .is_err());
+
+    drop(app);
+    assert_eq!(
+        before,
+        snapshot(&e.music),
+        "Quick Prep export modified a source file"
+    );
+}
+
+#[test]
+fn quick_prep_ai_is_opt_in_and_sends_no_paths() {
+    let e = env();
+    let app = app_with_fake(&e);
+    add_and_scan(&app, &e.music);
+    let id = id_of(&app, "Lagos Lights - Sunrise Groove.mp3");
+    let other = id_of(&app, "Low Tide.flac");
+    assert!(
+        app.dispatch("ai_test", json!({})).is_err(),
+        "off until switched on"
+    );
+    assert!(app
+        .dispatch(
+            "ai_configure",
+            json!({"base_url": "http://example.com/v1", "model": "m"})
+        )
+        .is_err());
+    call(
+        &app,
+        "ai_configure",
+        json!({"preset": "groq", "base_url": "https://api.groq.com/openai/v1/", "model": "openai/gpt-oss-120b"}),
+    );
+    call(
+        &app,
+        "set_secret",
+        json!({"service": "ai", "value": "gsk_test"}),
+    );
+    let st = call(&app, "ai_settings", json!({}));
+    assert_eq!(
+        (
+            st["enabled"].as_bool(),
+            st["has_key"].as_bool(),
+            st["presets"].as_array().unwrap().len()
+        ),
+        (Some(true), Some(true), 4)
+    );
+    assert!(
+        st.to_string().find("gsk_test").is_none(),
+        "the key is never sent back"
+    );
+    assert_eq!(call(&app, "ai_test", json!({}))["ok"], true);
+    let r = call(
+        &app,
+        "ai_tidy",
+        json!({"tracks": [{"id": id, "current": {"artist": "", "title": "Sunrise Groove"}}], "genres": ["Afrobeats", "Deep House"]}),
+    );
+    assert_eq!(
+        r,
+        json!([{"id": id, "artist": "Lagos Lights", "title": "Sunrise Groove", "mix": "Radio Edit", "genre": "Afrobeats"}])
+    );
+    let o = call(
+        &app,
+        "ai_order",
+        json!({"request": "slow build", "ids": [id, other]}),
+    );
+    assert_eq!(o, json!({"order": [other, id], "note": "Reversed."}));
+    // Suggestions only: nothing was saved to the catalogue.
+    let row = &search(&app, json!({"text": "sunrise groove"}))["rows"][0];
+    assert!(row["version"].as_str() != Some("Radio Edit"), "{row}");
+    call(
+        &app,
+        "set_service",
+        json!({"service": "ai", "enabled": false}),
+    );
+    assert!(app
+        .dispatch("ai_order", json!({"request": "x", "ids": [id, other]}))
+        .is_err());
 }

@@ -41,6 +41,13 @@ pub fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Jobs {
+    /// Whether any background job is still running.
+    pub fn any_running(&self) -> bool {
+        lock(&self.inner)
+            .values()
+            .any(|e| e.handle.as_ref().map(|h| !h.is_finished()).unwrap_or(false))
+    }
+
     pub fn running(&self, kind: &str) -> bool {
         lock(&self.inner)
             .get(kind)

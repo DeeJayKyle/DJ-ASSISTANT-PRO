@@ -5,6 +5,7 @@
 //! module that can change a music file is `safe_write` (opt-in, previewed,
 //! backed up, verified and reversible).
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub mod accounts;
 pub mod analysis;
 pub mod analysis_store;
 pub mod api;
@@ -22,10 +23,12 @@ pub mod gigpack;
 pub mod health;
 pub mod jobs;
 pub mod library;
+pub mod media;
 pub mod metadata;
 pub mod online;
 pub mod paths;
 pub mod profile;
+pub mod quick;
 pub mod rules;
 pub mod safe_write;
 pub mod scanner;

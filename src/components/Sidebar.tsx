@@ -4,7 +4,7 @@ import { Icon } from "./Icon";
 import { ColorDot } from "./ui";
 
 export type View =
-  | "library" | "crates" | "duplicates" | "health" | "activity" | "suggestions" | "discovery" | "set-studio" | "gig" | "gig-pack"
+  | "library" | "quick" | "crates" | "duplicates" | "health" | "activity" | "suggestions" | "discovery" | "set-studio" | "gig" | "gig-pack"
   | "files" | "settings" | `crate:${number}` | `root:${number}`;
 
 function CrateTree({ crates, parent, depth, view, setView }: { crates: Crate[]; parent: number | null; depth: number; view: View; setView: (v: View) => void }) {
@@ -54,6 +54,7 @@ export function Sidebar({ view, setView, crates, roots, stats, pending, onNewCra
   return (
     <nav className="sidebar" aria-label="Main">
       <div className="nav">
+        {item("quick", "zap", "Quick Prep")}
         {item("library", "library", "Library", stats?.tracks.toLocaleString())}
         {item("crates", "crate", "Virtual Crates", crates.length || undefined)}
         {item("duplicates", "dup", "Duplicate Review")}

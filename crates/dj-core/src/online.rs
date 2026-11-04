@@ -67,6 +67,18 @@ pub trait Online: Send + Sync {
         artist: &str,
         title: &str,
     ) -> Result<Vec<SimilarItem>, String>;
+    /// One chat completion from an OpenAI-compatible service (Quick Prep's
+    /// optional AI help). `messages` are (role, content) pairs; returns the
+    /// reply text.
+    fn ai_chat(
+        &self,
+        _base_url: &str,
+        _api_key: Option<&str>,
+        _model: &str,
+        _messages: &[(String, String)],
+    ) -> Result<String, String> {
+        Err("online services are not available in this build".into())
+    }
 }
 
 /// Used when no online implementation is installed.
@@ -134,6 +146,12 @@ pub const SERVICES: &[(&str, &str, &str, &str)] = &[
         "Last.fm",
         "Similar artists and tracks for discovery.",
         "Artist and track names from the crate or tracks you choose. Needs your Last.fm API key.",
+    ),
+    (
+        "ai",
+        "AI help",
+        "Sharper clean names and genres in Quick Prep, and set orders from a request you type.",
+        "File names, tag text and the BPM, key and energy of the tracks you choose, to the AI service you pick (with your own key, or Ollama on this computer). Never audio, file paths or listening history.",
     ),
     (
         "updates",

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { isDesktop } from "../api";
 import { Icon, Logo } from "./Icon";
+import { AccountMenu } from "./Accounts";
 
 /** Custom window title bar (the window has no native decorations). */
-export function TitleBar({ gig, premium, onPremium }: { gig: boolean; premium: boolean; onPremium: (v: boolean) => void }) {
+export function TitleBar({ gig, premium, onPremium, toast }: { gig: boolean; premium: boolean; onPremium: (v: boolean) => void; toast?: (m: string, err?: boolean) => void }) {
   const [max, setMax] = useState(false);
   const win = async () => (await import("@tauri-apps/api/window")).getCurrentWindow();
   useEffect(() => {
@@ -14,10 +15,9 @@ export function TitleBar({ gig, premium, onPremium }: { gig: boolean; premium: b
     <header className="titlebar" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region>
         <Logo />
-        <span data-tauri-drag-region>
-          DJ Assistant <span className="dot">·</span> Herbie
-        </span>
+        <span data-tauri-drag-region>DJ Assistant</span>
       </div>
+      <AccountMenu toast={toast} />
       <div className="drag" data-tauri-drag-region onDoubleClick={() => isDesktop() && win().then((w) => w.toggleMaximize().then(() => w.isMaximized().then(setMax)))} />
       <button type="button" className={`premium-toggle${premium ? " on" : ""}`} role="switch" aria-checked={premium} title="Premium UI: the Midnight Pro look. Only changes how the app looks." onClick={() => onPremium(!premium)}>
         <Icon name="sparkles" size={14} />

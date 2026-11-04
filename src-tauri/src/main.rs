@@ -1,8 +1,8 @@
 // Prevents an extra console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use dj_core::accounts::Session;
 use dj_core::online::Secrets;
-use dj_core::App;
 use serde_json::Value;
 use std::io::Write;
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 struct State {
-    app: Arc<App>,
+    session: Arc<Session>,
     log_path: Option<PathBuf>,
     log_lock: Mutex<()>,
 }
@@ -61,10 +61,10 @@ impl Secrets for CredentialStore {
 #[tauri::command]
 async fn api(state: tauri::State<'_, State>, cmd: String, args: Value) -> Result<Value, String> {
     let st = state.inner();
-    let app = st.app.clone();
+    let session = st.session.clone();
     let c = cmd.clone();
     // Run on a blocking worker so the UI thread never waits on the database.
-    let res = tauri::async_runtime::spawn_blocking(move || app.dispatch(&c, args))
+    let res = tauri::async_runtime::spawn_blocking(move || session.dispatch(&c, args))
         .await
         .map_err(|e| format!("internal error: {e}"))?;
     res.map_err(|e| {
@@ -98,21 +98,53 @@ fn main() {
                     .ok()
                     .map(|_| d.join("dj-assistant.log"))
             });
-            let db_path = data_dir.join("catalogue.sqlite3");
-            let core = App::open_with(
-                &db_path,
+            // Local accounts, each with its own catalogue; no sign-in.
+            let session = Session::open(
+                &data_dir,
                 Arc::new(dj_online::Http::new()),
                 Arc::new(CredentialStore),
             )
-            .map_err(|e| format!("could not open catalogue at {}: {e}", db_path.display()))?;
+            .map_err(|e| {
+                format!(
+                    "could not open the catalogue in {}: {e}",
+                    data_dir.display()
+                )
+            })?;
             let state = State {
-                app: Arc::new(core),
+                session: Arc::new(session),
                 log_path,
                 log_lock: Mutex::new(()),
             };
             state.log(&format!("started v{}", dj_core::api::APP_VERSION));
             app.manage(state);
             Ok(())
+        })
+        // Previews: `track://localhost/<id>` streams a catalogued track (read-only,
+        // range requests). Only tracks in the open account's catalogue resolve.
+        .register_asynchronous_uri_scheme_protocol("track", |ctx, req, responder| {
+            let session = ctx.app_handle().state::<State>().session.clone();
+            let id: Option<i64> = req.uri().path().trim_matches('/').parse().ok();
+            let range = req
+                .headers()
+                .get("range")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+            std::thread::spawn(move || {
+                let path = id.and_then(|id| session.app()?.playable_path(id));
+                let resp = match path.map(|p| dj_core::media::serve(&p, range.as_deref())) {
+                    Some(Ok(piece)) => {
+                        let mut b = tauri::http::Response::builder().status(piece.status);
+                        for (k, v) in piece.headers {
+                            b = b.header(k, v);
+                        }
+                        b.body(piece.body)
+                    }
+                    _ => tauri::http::Response::builder()
+                        .status(404)
+                        .body(Vec::new()),
+                };
+                responder.respond(resp.unwrap_or_else(|_| tauri::http::Response::new(Vec::new())));
+            });
         })
         .invoke_handler(tauri::generate_handler![api, reveal])
         .run(tauri::generate_context!())

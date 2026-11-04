@@ -7,6 +7,8 @@
 //! * AcoustID: user-supplied application key; ~3 requests/second max; the
 //!   compressed fingerprint and duration are sent, never audio.
 //! * Last.fm: user-supplied API key; results credited to Last.fm in the UI.
+//! * AI help: an OpenAI-compatible chat service the DJ chooses, with their own
+//!   key (or Ollama on this computer); names, tags and numbers only.
 use dj_core::online::{AcoustidMatch, MbRecording, Online, ReleaseItem, SimilarItem};
 use serde_json::Value;
 use std::sync::Mutex;
@@ -265,7 +267,84 @@ fn days_ago(days: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+impl Http {
+    fn chat(
+        &self,
+        base_url: &str,
+        key: Option<&str>,
+        model: &str,
+        messages: &[(String, String)],
+        json_mode: bool,
+    ) -> Result<(u16, Value), String> {
+        let msgs: Vec<Value> = messages
+            .iter()
+            .map(|(r, c)| serde_json::json!({"role": r, "content": c}))
+            .collect();
+        let mut body = serde_json::json!({"model": model, "messages": msgs, "temperature": 0.2});
+        if json_mode {
+            body["response_format"] = serde_json::json!({"type": "json_object"});
+        }
+        let mut req = self
+            .agent
+            .post(format!(
+                "{}/chat/completions",
+                base_url.trim_end_matches('/')
+            ))
+            .header("Accept", "application/json");
+        if let Some(k) = key {
+            req = req.header("Authorization", format!("Bearer {k}"));
+        }
+        let mut res = req.send_json(&body).map_err(|e| {
+            if base_url.starts_with("http://") {
+                format!("couldn't reach the AI service on this computer — is it running? ({e})")
+            } else {
+                format!("network error: {e}")
+            }
+        })?;
+        let status = res.status().as_u16();
+        let v: Value = res.body_mut().read_json().unwrap_or(Value::Null);
+        Ok((status, v))
+    }
+}
+
+/// The reply text, or a short reason the call failed.
+pub fn parse_chat(status: u16, v: &Value) -> Result<String, String> {
+    match status {
+        200..=299 => v
+            .pointer("/choices/0/message/content")
+            .and_then(|c| c.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "the AI service sent an empty answer".to_string()),
+        401 | 403 => Err("the AI service refused the key; check it in Settings".into()),
+        429 => Err("the AI service is busy (free plan limit); try again in a minute".into()),
+        _ => Err(format!(
+            "AI service error {status}: {}",
+            v.pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("request failed")
+                .chars()
+                .take(200)
+                .collect::<String>()
+        )),
+    }
+}
+
 impl Online for Http {
+    fn ai_chat(
+        &self,
+        base_url: &str,
+        api_key: Option<&str>,
+        model: &str,
+        messages: &[(String, String)],
+    ) -> Result<String, String> {
+        let (mut status, mut v) = self.chat(base_url, api_key, model, messages, true)?;
+        // Some services don't take JSON mode; ask again without it.
+        if status == 400 {
+            (status, v) = self.chat(base_url, api_key, model, messages, false)?;
+        }
+        parse_chat(status, &v)
+    }
+
     fn musicbrainz_recordings(
         &self,
         artist: &str,
@@ -396,6 +475,21 @@ impl Online for Http {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn parses_ai_replies() {
+        let ok = serde_json::json!({"choices": [{"message": {"content": "{\"ok\":true}"}}]});
+        assert_eq!(parse_chat(200, &ok).unwrap(), "{\"ok\":true}");
+        assert!(parse_chat(401, &Value::Null)
+            .unwrap_err()
+            .contains("refused the key"));
+        assert!(parse_chat(429, &Value::Null).unwrap_err().contains("busy"));
+        let err = serde_json::json!({"error": {"message": "model not found"}});
+        assert!(parse_chat(404, &err)
+            .unwrap_err()
+            .contains("model not found"));
+        assert!(parse_chat(200, &serde_json::json!({})).is_err());
+    }
 
     #[test]
     fn parses_musicbrainz() {

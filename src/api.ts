@@ -5,6 +5,7 @@ import type {
   FixList,
   ChangeLogEntry, CrateGaps, CrateTemplate, DiscoveryItem, DocHit, DocsReport, Gig, GigRecap, JobState, Labels, Overplayed, PackPlan,
   PlannedChange, Preferences, Recommendation, SavedSet, Service, SetParams, SetPlan, Suggestion, TracklistMatch, WatchItem,
+  AccountList, AiSettings, PackOptions,
   AssistantReply, Crate, DupGroup, FieldInfo, HashProgress, Health, Root, RuleSet,
   ScanProgress, Settings, Stats, TrackDetail, TrackPage, TrackQuery,
 } from "./types";
@@ -185,7 +186,7 @@ export const api = {
   gigs: () => call<{ id: number; name: string; started_at: number; ended_at: number | null; played: number }[]>("gigs"),
   gigRecap: (id: number) => call<GigRecap>("gig_recap", { id }),
   exportRecap: (id: number, path: string) => call("export_recap", { id, path, overwrite: true }),
-  gigpackPreview: (sel: Selection, dest: string, name: string) => call<{ token: string; plan: PackPlan }>("gigpack_preview", { ...sel, dest, name }),
+  gigpackPreview: (sel: Selection, dest: string, name: string, options?: PackOptions) => call<{ token: string; plan: PackPlan }>("gigpack_preview", { ...sel, dest, name, options: options ?? null }),
   gigpackStart: (token: string) => call("gigpack_start", { token }),
   writePreview: (sel: Selection, values: Record<string, string | null>) => call<{ token: string; plan: PlannedChange[] }>("write_preview", { ...sel, values }),
   writeApply: (token: string) => call<{ track_id: number; status: string; message?: string }[]>("write_apply", { token, approved: true }),
@@ -204,6 +205,27 @@ export const api = {
   docsClear: () => call("docs_clear"),
   watchStatus: () => call<{ enabled: boolean; active: boolean; roots: string[]; pending: WatchItem[] }>("watch_status"),
   watchClear: () => call("watch_clear", { root_id: null }),
+
+  // ---- local accounts (no sign-in) ----
+  accounts: () => call<AccountList>("accounts"),
+  accountCreate: (name: string) => call<AccountList>("account_create", { name }),
+  accountSwitch: (id: string) => call<AccountList>("account_switch", { id }),
+  accountRename: (id: string, name: string) => call<AccountList>("account_rename", { id, name }),
+  accountDelete: (id: string) => call<AccountList & { kept_backups: string | null }>("account_delete", { id }),
+
+  // ---- Quick Prep: optional AI help ----
+  aiSettings: () => call<AiSettings>("ai_settings"),
+  aiConfigure: (preset: string, base_url: string, model: string) => call("ai_configure", { preset, base_url, model }),
+  aiTest: () => call<{ ok: boolean }>("ai_test"),
+  aiTidy: (tracks: { id: number; current: Record<string, string> }[], genres: string[]) => call<{ id: number; artist: string; title: string; mix: string; genre: string | null }[]>("ai_tidy", { tracks, genres }),
+  aiOrder: (request: string, ids: number[]) => call<{ order: number[]; note: string }>("ai_order", { request, ids }),
 };
+
+/** A URL the audio player can stream a catalogued track from (read-only, by id). */
+export function trackUrl(id: number): string {
+  // The bridge branch is compiled in only for development/e2e builds.
+  if (BRIDGE && !isDesktop()) return `${BRIDGE_URL}/track/${id}`;
+  return navigator.userAgent.includes("Windows") ? `http://track.localhost/${id}` : `track://localhost/${id}`;
+}
 
 export type Selection = { ids?: number[]; crate_id?: number; set_id?: number; query?: TrackQuery };

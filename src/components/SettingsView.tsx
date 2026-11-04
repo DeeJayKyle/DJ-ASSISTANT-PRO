@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, isDesktop, pickFile, pickFolder } from "../api";
-import type { ChangeLogEntry, Labels, Service, Settings } from "../types";
+import { api, isDesktop, openUrl, pickFile, pickFolder } from "../api";
+import type { AiSettings, ChangeLogEntry, Labels, Service, Settings } from "../types";
 import { checkForUpdate, type UpdateInfo } from "../lib/updater";
 import { dateTime } from "../lib/format";
 import { Dialog } from "./ui";
@@ -12,7 +12,7 @@ export const SAFETY_POINTS = [
   "Serato's databases, crates, cues, beatgrids, history and settings are never written. Serato crates and history can be imported read-only.",
   "Your ratings, energy, tags, crates, sets and notes stay in DJ Assistant's own catalogue on this computer.",
   "Only folders you choose are scanned. Personal files are a separate, opt-in module.",
-  "Core features work offline with no account and no telemetry. Online services are off until you turn each one on, and each says exactly what it sends.",
+  "Core features work offline with no sign-in and no telemetry; accounts live only on this computer. Online services are off until you turn each one on, and each says exactly what it sends.",
 ];
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -128,6 +128,7 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
               <div style={{ flex: 1 }}>
                 <strong>{s.name}</strong> <span className="small muted">— {s.provides}</span>
                 <div className="small"><span className="muted">Sends:</span> {s.sends}</div>
+                {s.id === "ai" && <AiSetup toast={toast} onChange={load} />}
                 {s.needs_key && (
                   <form className="row" style={{ marginTop: 6 }} onSubmit={(e) => { e.preventDefault(); api.setSecret(s.id, keys[s.id] ?? "").then(() => { toast("Key saved to Credential Manager."); setKeys({ ...keys, [s.id]: "" }); load(); }).catch((er) => toast(er.message, true)); }}>
                     <input className="input" type="password" autoComplete="off" style={{ width: 280 }} aria-label={`${s.name} API key`} placeholder={s.has_key ? "Key saved — enter a new one to replace" : "Paste your API key"} value={keys[s.id] ?? ""} onChange={(e) => setKeys({ ...keys, [s.id]: e.target.value })} />
@@ -189,6 +190,42 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
           <p className="muted">Please try it on copies of a few files first, and keep your own backups. Close Serato before writing tags.</p>
         </Dialog>
       )}
+    </div>
+  );
+}
+
+/** Quick Prep's optional AI help: which OpenAI-compatible service and model. The key is saved below like the others. */
+function AiSetup({ toast, onChange }: { toast: (m: string, e?: boolean) => void; onChange: () => void }) {
+  const [st, setSt] = useState<AiSettings | null>(null);
+  const [preset, setPreset] = useState("");
+  const [model, setModel] = useState("");
+  const [testing, setTesting] = useState(false);
+  useEffect(() => { api.aiSettings().then((s) => { setSt(s); setPreset(s.preset ?? ""); setModel(s.model ?? ""); }).catch(() => {}); }, []);
+  if (!st) return null;
+  const p = st.presets.find((x) => x.id === preset);
+  const save = async () => {
+    if (!p) return;
+    setTesting(true);
+    try {
+      await api.aiConfigure(p.id, p.base_url, model.trim() || p.model);
+      onChange();
+      const r = await api.aiTest();
+      toast(r.ok ? "AI help is working." : "The AI answered, but not as expected — try another model.", !r.ok);
+    } catch (e) {
+      toast((e as Error).message, true);
+    } finally {
+      setTesting(false);
+    }
+  };
+  return (
+    <div className="row wrap" style={{ marginTop: 6 }}>
+      <select className="select" aria-label="AI service" value={preset} onChange={(e) => { setPreset(e.target.value); setModel(st.presets.find((x) => x.id === e.target.value)?.model ?? ""); }}>
+        <option value="">Choose a service…</option>
+        {st.presets.map((x) => <option key={x.id} value={x.id}>{x.label} — {x.note}</option>)}
+      </select>
+      <input className="input mono" style={{ width: 200 }} aria-label="AI model" value={model} placeholder={p?.model ?? "model"} onChange={(e) => setModel(e.target.value)} />
+      <button className="btn small" disabled={!p || testing} onClick={save}>{testing ? "Testing…" : "Save and test"}</button>
+      {p && <button className="btn small ghost" onClick={() => openUrl(p.key_url)}><Icon name="external" size={14} /> {p.id === "ollama" ? "Get Ollama" : "Get a free key"}</button>}
     </div>
   );
 }

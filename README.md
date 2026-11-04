@@ -4,7 +4,17 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ![Music Library](docs/screenshots/library.png)
 
-## What it does (v1.1)
+## What it does (v1.2)
+
+**Quick Prep (new in 1.2)** — a fast lane for a folder of fresh downloads. Pick a folder (it's added read-only and analysed on this computer, with a small mini-game while you wait), then one of four paths:
+- **Clean names:** strips `[FREE DL]`, `www.site.net`, `320kbps`, `final FINAL v3`, track numbers and underscores; fixes capitals; keeps the mix name; *Artist – Title* or *Title – Artist*; edit any name inline; genre per track. Saved to the catalogue only.
+- **Build a playlist:** drag to reorder or one-click *Warm-up → peak* (harmonic, smooth tempo steps), *Ascending BPM*, *Harmonic*, *Group by genre*, *Cool down*, or type what you want ("fastest first"). A flow score shows how well it mixes.
+- **Organise folders:** set up gig folders with *Warm Up / Groove / Peak Time* sub-folders, listen on the waveform, and press **1–9** to sort each track (or drag it). *Auto-sort by energy* does it for you.
+- **Split by genre:** groups by genre, or by families (Tech House + Deep House → House).
+
+Every path exports as a **verified copy in a new folder**, **one ZIP**, or **playlists only** (pointing at your originals), with an `.m3u8` per folder and — optionally — clean title, artist, genre, BPM and key written into the **copies** (MP3, FLAC, M4A; never the originals). Folders and genres can also be saved as crates.
+
+**Local accounts (new in 1.2)** — no sign-in. Create one account or several (a second DJ, a separate library) from the title bar; each keeps its own folders, crates, sets, analysis and settings in its own catalogue on this computer. An existing catalogue becomes the first account automatically.
 
 **Library** — choose music folders and drives; read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; fast accent-insensitive search; Genre / Decade / Format / Quality filters plus a full rule builder; offline drives kept, never treated as deleted; folder watcher that notices new music.
 
@@ -32,6 +42,8 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 **Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
 
+**AI help (optional, off by default)** — sharper clean names and genres, and set orders from any request, using your own free key with Groq, Google Gemini or OpenRouter, or Ollama running on this computer. Only file names, tag text and BPM/key/energy are sent — never audio or file paths. AI answers are suggestions; your edits win.
+
 **Assistant** — a local, rule-based helper (not an AI model) in a sidebar you can hide (Ctrl+J) or expand. “afrobeats 2010s energy 6-8 no live”, “low bitrate”, “plan a 2 hour wedding set”, “gig pack”… It says exactly what it understood and can only search, filter and open views.
 
 **Key notation** — show keys as Camelot (8A) or musical names (Am); search, filters and the Assistant accept either, including Open Key (1m).
@@ -42,15 +54,15 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ## Safety
 
-- Music files are only read, except by the opt-in tag writer (above). CI fails the build if any other module gains a file-writing API (`scripts/check-read-only.sh`).
+- Music files are only read, except by the opt-in tag writer (above). Quick Prep writes tags only into new copies it has just made and verified. CI fails the build if any other module gains a file-writing API (`scripts/check-read-only.sh`).
 - Serato’s databases, crates, cues, beatgrids, history and settings are never written.
 - Nothing is ever deleted or merged; duplicate decisions are notes.
 - Scans and analysis commit in short transactions; cancelled or crashed runs leave the catalogue consistent.
 
 ## Privacy
 
-- No account, no telemetry. The core library has no network code; CI traces system calls during scanning, analysis, Set Studio, gig packs, tag writing and personal-file indexing to prove no internet sockets are opened.
-- Online services (MusicBrainz, AcoustID, Last.fm, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
+- No online account and no telemetry; accounts are local to this computer. The core library has no network code; CI traces system calls during scanning, analysis, Set Studio, gig packs, tag writing and personal-file indexing to prove no internet sockets are opened.
+- Online services (MusicBrainz, AcoustID, Last.fm, AI help, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
 - Logs record command names and errors only.
 
 ## Install (Windows 10/11, 64-bit)
@@ -84,7 +96,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTING
 - Video: WMV, FLV, MPEG, MTS/M2TS, 3GP and VOB are listed as unsupported. Opus audio (common in WebM) and AVI audio can't be analysed yet. Videos are never written to.
 - Analysis is estimation: half/double tempo and relative/modal key confusion happen; energy is relative to your own library.
 - Online services were verified with recorded responses and fakes in tests; live calls could not be made from the build environment.
-- Stem separation and cloud AI are not included. Physical file moves/renames are deliberately not offered (they break Serato links).
+- Stem separation is not included. AI help is optional and uses a service you choose with your own key. Physical file moves/renames are deliberately not offered (they break Serato links).
 - Serato crate parsing follows the community-documented format; it is read-only and may need updates if Serato changes it.
 
 ## Licence

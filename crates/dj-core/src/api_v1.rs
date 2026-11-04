@@ -7,8 +7,8 @@ use crate::error::{invalid, Error, Result};
 use crate::library::TrackQuery;
 use crate::online::SERVICES;
 use crate::{
-    analysis_store, discovery, docs, export, gig, gigpack, safe_write, serato, sets, suggest,
-    templates, watcher,
+    analysis_store, discovery, docs, export, gig, gigpack, quick, safe_write, serato, sets,
+    suggest, templates, watcher,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -196,7 +196,7 @@ impl App {
                     } else {
                         suggest::service_enabled(&conn, id)?
                     };
-                    let needs_key = ["acoustid", "lastfm"].contains(id);
+                    let needs_key = ["acoustid", "lastfm", "ai"].contains(id);
                     out.push(json!({"id": id, "name": name, "provides": provides, "sends": sends, "enabled": enabled, "needs_key": needs_key, "has_key": needs_key && self.secrets.get(id).is_some()}));
                 }
                 json!(out)
@@ -218,7 +218,7 @@ impl App {
             "set_secret" => {
                 let svc: String = arg(a, "service")?;
                 let v: String = arg(a, "value")?;
-                if !["acoustid", "lastfm"].contains(&svc.as_str()) {
+                if !["acoustid", "lastfm", "ai"].contains(&svc.as_str()) {
                     return invalid("unknown service");
                 }
                 let v = v.trim();
@@ -444,14 +444,126 @@ impl App {
                 json!({"ok": true})
             }
 
+            // ---------- Quick Prep: optional AI help ----------
+            "ai_settings" => {
+                let conn = lock(&self.conn);
+                let cfg = quick::config(&conn)?;
+                json!({
+                    "enabled": suggest::service_enabled(&conn, "ai")?,
+                    "preset": cfg.as_ref().map(|c| c.preset.clone()),
+                    "base_url": cfg.as_ref().map(|c| c.base_url.clone()),
+                    "model": cfg.as_ref().map(|c| c.model.clone()),
+                    "has_key": self.secrets.get("ai").is_some(),
+                    "presets": quick::PRESETS.iter().map(|p| json!({"id": p.id, "label": p.label, "base_url": p.base_url, "model": p.model, "key_url": p.key_url, "note": p.note})).collect::<Vec<_>>(),
+                })
+            }
+            "ai_configure" => {
+                let base = quick::check_base_url(&arg::<String>(a, "base_url")?)?;
+                let model: String = arg(a, "model")?;
+                let model = model.trim();
+                if model.is_empty()
+                    || model.len() > 120
+                    || model.chars().any(|c| c.is_whitespace() || c.is_control())
+                {
+                    return invalid("enter the model name, e.g. openai/gpt-oss-120b");
+                }
+                let conn = lock(&self.conn);
+                db::set_setting(&conn, "ai_base_url", &base)?;
+                db::set_setting(&conn, "ai_model", model)?;
+                db::set_setting(
+                    &conn,
+                    "ai_preset",
+                    &arg::<Option<String>>(a, "preset")?.unwrap_or_default(),
+                )?;
+                db::set_setting(&conn, "svc_ai", "1")?;
+                json!({"ok": true})
+            }
+            "ai_test" | "ai_tidy" | "ai_order" => {
+                let (cfg, msgs, ids, genres) = {
+                    let conn = lock(&self.conn);
+                    suggest::require_service(&conn, "ai")?;
+                    let cfg = quick::config(&conn)?.ok_or_else(|| {
+                        Error::Invalid("choose an AI service in Settings first".into())
+                    })?;
+                    match cmd {
+                        "ai_test" => (
+                            cfg,
+                            vec![(
+                                "user".to_string(),
+                                "Reply with JSON {\"ok\":true}".to_string(),
+                            )],
+                            vec![],
+                            vec![],
+                        ),
+                        "ai_tidy" => {
+                            let tracks: Vec<quick::TidyInput> = arg(a, "tracks")?;
+                            if tracks.is_empty() || tracks.len() > 25 {
+                                return invalid("send between 1 and 25 tracks at a time");
+                            }
+                            let genres: Vec<String> = arg::<Option<Vec<String>>>(a, "genres")?
+                                .unwrap_or_default()
+                                .into_iter()
+                                .take(300)
+                                .collect();
+                            let msgs = quick::tidy_prompt(&conn, &tracks, &genres)?;
+                            (cfg, msgs, tracks.iter().map(|t| t.id).collect(), genres)
+                        }
+                        _ => {
+                            let ids: Vec<i64> = arg(a, "ids")?;
+                            if ids.len() < 2 || ids.len() > 300 {
+                                return invalid("an AI order needs between 2 and 300 tracks");
+                            }
+                            let request: String = arg(a, "request")?;
+                            if request.trim().is_empty() {
+                                return invalid("say how you'd like the tracks ordered");
+                            }
+                            (
+                                cfg,
+                                quick::order_prompt(&conn, &request, &ids)?,
+                                ids,
+                                vec![],
+                            )
+                        }
+                    }
+                };
+                // The network call happens without holding the catalogue lock.
+                let key = self.secrets.get("ai");
+                let reply = self
+                    .online
+                    .ai_chat(&cfg.base_url, key.as_deref(), &cfg.model, &msgs)
+                    .map_err(Error::Invalid)?;
+                match cmd {
+                    "ai_test" => json!({"ok": reply.contains("ok")}),
+                    "ai_tidy" => json!(quick::parse_tidy(
+                        &reply,
+                        &ids.iter().copied().collect(),
+                        &genres
+                    )),
+                    _ => match quick::parse_order(&reply, &ids) {
+                        Some((order, note)) => json!({"order": order, "note": note}),
+                        None => {
+                            return invalid("the AI didn't return a usable order; try rephrasing")
+                        }
+                    },
+                }
+            }
+
             // ---------- gig packs ----------
             "gigpack_preview" => {
-                let ids = self.resolve_ids(a)?;
-                let plan = gigpack::preview(
+                // Quick Prep sends a layout (folders, clean names, playlists,
+                // ZIP, tagged copies); a plain gig pack sends only the tracks.
+                let opts = arg::<Option<gigpack::PackOptions>>(a, "options")?.unwrap_or_default();
+                let ids = if opts.items.is_some() {
+                    vec![]
+                } else {
+                    self.resolve_ids(a)?
+                };
+                let plan = gigpack::preview_with(
                     &lock(&self.conn),
                     &ids,
                     &PathBuf::from(arg::<String>(a, "dest")?),
                     &arg::<String>(a, "name")?,
+                    &opts,
                 )?;
                 let t = token();
                 lock(&self.pack_previews).insert(t.clone(), plan.clone());

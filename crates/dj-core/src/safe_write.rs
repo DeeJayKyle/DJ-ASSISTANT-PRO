@@ -560,6 +560,27 @@ fn write_tags(
     Ok(())
 }
 
+/// Writes clean tags into a file a gig pack has just created (never an
+/// original): the copy's audio data must hash the same afterwards. Returns
+/// false for formats without tag support here (they stay byte-identical).
+pub fn tag_new_copy(copy: &Path, fields: &BTreeMap<String, Option<String>>) -> Result<bool> {
+    let Some(kind) = kind_of(copy) else {
+        return Ok(false);
+    };
+    let before = audio_hash(copy, kind)?;
+    let changes: BTreeMap<String, (Option<String>, Option<String>)> = fields
+        .iter()
+        .filter(|(k, _)| WRITABLE.contains(&k.as_str()))
+        .map(|(k, v)| (k.clone(), (None, v.clone())))
+        .collect();
+    write_tags(copy, kind, &changes)
+        .map_err(|e| Error::Invalid(format!("could not tag the copy: {e}")))?;
+    if audio_hash(copy, kind)? != before {
+        return invalid("writing tags changed the audio data of the copy");
+    }
+    Ok(true)
+}
+
 fn backup_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("backups")
 }

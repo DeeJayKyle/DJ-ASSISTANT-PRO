@@ -1,3 +1,19 @@
+DJ Assistant 1.2.0
+
+**New in 1.2**
+- **Quick Prep:** choose a folder of fresh downloads and get it gig-ready. It's added read-only and analysed (with a little mini-game while you wait), then pick a path:
+  - **Clean names** — junk like "[FREE DL]", "320kbps", "final FINAL v3", track numbers and underscores removed, capitals fixed, mix names kept; edit inline; Artist – Title or Title – Artist.
+  - **Build a playlist** — Warm-up → peak (harmonic, smooth tempo), by BPM, by key, by genre, cool down, or type what you want; drag to reorder; flow score.
+  - **Organise folders** — gig folders with Warm Up / Groove / Peak Time; listen and press 1–9 to sort; auto-sort by energy.
+  - **Split by genre** — by genre or by families.
+  Export as a verified copy in a new folder, one ZIP, or playlists only, with a playlist per folder and (optionally) clean tags written into the copies. Your originals are never changed. Folders and genres can be saved as crates.
+- **Local accounts:** no sign-in. Add accounts from the title bar — each has its own folders, crates, sets, analysis and settings. Your existing catalogue becomes the first account.
+- **AI help (optional, off):** better names and genres and set orders from any request, with your own free Groq, Gemini or OpenRouter key, or Ollama on this computer. Only names, tags and BPM/key/energy are sent.
+
+**Safety:** music files are still only read. The only new writing is into new folders or ZIPs you choose (never over existing files) and tags inside those new copies.
+
+---
+
 DJ Assistant 1.1.0
 
 **New in 1.1**

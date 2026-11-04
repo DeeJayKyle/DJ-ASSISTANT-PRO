@@ -16,6 +16,7 @@ import { GigView } from "./components/GigView";
 import { GigPackView } from "./components/GigPackView";
 import { FilesView } from "./components/FilesView";
 import { SettingsView, SAFETY_POINTS } from "./components/SettingsView";
+import { QuickPrepView } from "./components/quick/QuickPrepView";
 import { ChatPanel } from "./components/ChatPanel";
 import { StatusBar } from "./components/StatusBar";
 import { CrateDialog } from "./components/CrateDialog";
@@ -23,6 +24,7 @@ import { Dialog } from "./components/ui";
 import { Icon } from "./components/Icon";
 import { emptyRuleSet } from "./lib/rules";
 import { checkForUpdate, type UpdateInfo } from "./lib/updater";
+import { useAccount } from "./components/Accounts";
 
 type ChatMode = "open" | "full" | "hidden";
 
@@ -49,6 +51,7 @@ export default function App() {
   const [update, setUpdate] = useState<{ info: UpdateInfo; pct: number | null; installing: boolean } | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const account = useAccount();
 
   const toast = useCallback((m: string, err = false) => {
     const k = Date.now();
@@ -184,7 +187,7 @@ export default function App() {
     main = noLibrary ? (
       <div className="page"><div className="empty" style={{ flex: 1, justifyContent: "center" }}>
         <div className="art"><Icon name="music" size={30} /></div>
-        <h2>Welcome, Herbie</h2>
+        <h2>Welcome, {account?.current.name ?? "DJ"}</h2>
         <p style={{ maxWidth: 520 }}>Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never writes to Serato.</p>
         <button className="btn primary big" onClick={() => setView("activity")}><Icon name="folder" size={18} /> Add music folders</button>
       </div></div>
@@ -208,7 +211,8 @@ export default function App() {
         scanning={scanning}
       />
     );
-  } else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} /></div>;
+  } else if (view === "quick") main = <QuickPrepView crates={crates} roots={roots} toast={toast} bump={bump} />;
+  else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} /></div>;
   else if (view === "duplicates") main = <div className="page"><DuplicatesView version={version} toast={toast} /></div>;
   else if (view === "activity") main = <ActivityView scan={scan} version={version} bump={bump} toast={toast} health={health} />;
   else if (view === "crates") main = <CratesView crates={crates} version={version} bump={bump} toast={toast} setView={setView} onNewCrate={() => setCrateDialog({ crate: null })} />;
@@ -223,7 +227,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <TitleBar gig={settings.gig_mode} premium={settings.premium_ui} onPremium={(v) => { setSettings({ ...settings, premium_ui: v }); api.setSetting("premium_ui", v).catch(() => {}); }} />
+      <TitleBar toast={toast} gig={settings.gig_mode} premium={settings.premium_ui} onPremium={(v) => { setSettings({ ...settings, premium_ui: v }); api.setSetting("premium_ui", v).catch(() => {}); }} />
       <div className={`workspace${chat === "full" ? " chat-full" : chat === "hidden" ? " no-chat" : ""}`}>
         <Sidebar view={view} setView={setView} crates={crates} roots={roots} stats={stats} pending={pending} onNewCrate={() => setCrateDialog({ crate: null })} docsEnabled={settings.docs_enabled} />
         <main>{main}</main>

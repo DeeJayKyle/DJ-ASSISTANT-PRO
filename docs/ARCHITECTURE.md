@@ -37,10 +37,14 @@ crates/dj-core/        core library (no network, no Tauri)
   src/safe_write.rs    the only module that edits music files (opt-in, backed up, reversible)
   src/serato.rs        read-only Serato crate + history CSV import
   src/docs.rs          personal files index; src/watcher.rs folder watcher; src/jobs.rs job manager
+  src/accounts.rs      local accounts (no sign-in): accounts.json + one catalogue per account; Session dispatcher
+  src/media.rs         read-only range streaming of catalogued tracks for previews
+  src/quick.rs         Quick Prep's optional AI help: prompts, defensive parsing, URL checks
 crates/dj-online/      the only networked crate: MusicBrainz, AcoustID, Last.fm (ureq + rustls)
 crates/dj-devbridge/   DEV ONLY loopback HTTP bridge for browser e2e tests
 src-tauri/             desktop shell: one `api` command → App::dispatch
-src/                   React UI
+src/                   React UI (src/lib/quick: name cleanup, genres, set ordering, export layouts;
+                       src/components/quick: the Quick Prep screens)
 e2e/run.mjs            Playwright end-to-end test
 scripts/               fixture generator, read-only guard, no-network check, licence check
 ```
@@ -52,6 +56,14 @@ scripts/               fixture generator, read-only guard, no-network check, lic
 - `track_user` — **values you choose**, stored only here (energy, rating, colour, mood, notes, overrides). Displayed values are `COALESCE(yours, file)`; both are visible in track detail.
 - `tags`, `track_tags`, `crates`, `crate_tracks` (include/exclude), `duplicate_reviews`, `scans`, `scan_errors`, `settings`.
 - Suggestions from analysis/online sources (the third category in the brief) will get their own table in Phase 2 so they never mix with file or user values.
+
+## Accounts
+
+`accounts::Session` sits in front of `App`. `accounts.json` in the app data folder lists the accounts and the last one used; each account's catalogue is its own SQLite file (`accounts/<id>/catalogue.sqlite3`, or the original `catalogue.sqlite3` for an account migrated from before 1.2). Switching closes one `App` and opens another; it's refused while a scan or job runs. The UI remounts on a switch. API keys in Credential Manager are shared by the accounts on the computer.
+
+## Quick Prep export
+
+The UI builds a layout (folder and file name per track, playlists) and sends it to `gigpack_preview` as `options`. The gig pack copier sanitises every path segment, never overwrites, verifies each copy by BLAKE3, and for ZIPs streams stored entries into `<name>.zip.part` before renaming. With tags on, `safe_write::tag_new_copy` writes catalogue values into the **new copy** and checks its audio data hash is unchanged.
 
 ## Scanning
 

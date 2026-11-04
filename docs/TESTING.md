@@ -82,6 +82,14 @@ These need a real Windows 10/11 PC. Please record date, Windows version and resu
 | M17 | Install v1.0.0, publish a v1.0.1 (after hosting is public and signing secrets are set) | App offers the update, installs and restarts with data kept |
 | M18 | Custom title bar: drag, double-click maximise, snap, minimise/close | Behaves like a normal window |
 
+## Manual tests for 1.2 (Quick Prep and accounts) — NOT yet performed
+
+1. On Windows, open Quick Prep, choose a folder of real downloads, and check the names, BPM and key it shows.
+2. Press play on a few tracks (MP3, FLAC, WAV, M4A) and click the waveform to jump — this exercises the desktop `track:` protocol, which automated tests cover only through the dev bridge.
+3. Export each path to a USB stick as a folder and as a ZIP; import the `.m3u8` files into Serato and check names, BPM, key and any cue points in the tagged copies.
+4. Turn on AI help with a real free key (Groq, Gemini or OpenRouter) and with Ollama; try *Improve with AI* and a typed playlist request.
+5. Create a second account, add a different folder, switch back and forth, rename and remove an account; restart the app and check it reopens the last account.
+
 ## Serato
 
 v0.1 does not read or write any Serato data, so there is no Serato integration to test. Before any future integration, tests must be run against a **disposable copy** of a Serato library.

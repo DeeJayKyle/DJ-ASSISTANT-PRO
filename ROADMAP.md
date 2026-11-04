@@ -3,7 +3,19 @@
 **Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
-## v1.1 (this release)
+## v1.2 (this release)
+
+| Area | Feature | Status |
+|---|---|---|
+| Quick Prep | Add a folder → read-only scan → analysis → four paths (clean names, playlist, folders, genres) | Tested (e2e) |
+| Quick Prep | Name cleanup rules, name format, inline edits, genre families, set ordering, plain-word sort requests | Tested (unit + e2e) |
+| Quick Prep | Export as verified folder copy, ZIP, or playlists only; layouts with sub-folders and a playlist per folder | Tested (Rust integration + e2e) |
+| Quick Prep | Clean tags written into new copies only (MP3, FLAC, M4A), audio data verified unchanged | Tested (MP3, FLAC) |
+| Quick Prep | Track previews (read-only `track:` protocol with range requests, catalogued tracks only) and waveform | Tested (bridge); desktop protocol needs a manual check on Windows |
+| Quick Prep | Optional AI help (OpenAI-compatible: Groq, Gemini, OpenRouter, Ollama), off by default | Tested with fakes and a local stand-in; live services not verified |
+| Accounts | Several local accounts, no sign-in; separate catalogues; rename/remove; existing catalogue migrates | Tested (Rust + e2e) |
+
+## v1.1
 
 | Area | Feature | Status |
 |---|---|---|
@@ -12,7 +24,6 @@ Every item still needs **manual testing on a real Windows PC with a real library
 | Video | MP4/M4V/MOV/MKV/WebM/AVI header parsing (resolution, codec, fps, duration, tags); media/resolution filters; never written | Tested |
 | Video | Audio analysis of MP4/MOV/MKV/WebM where the codec is supported | Tested (AAC, Vorbis) |
 | UI | Premium UI switch (Midnight Pro look from RxPOS) | Tested (e2e) |
-| quickiemusic.com features | Blocked: the build environment cannot reach quickiemusic.com, so its features could not be reviewed | Planned |
 
 ## v1.0
 
