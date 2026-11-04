@@ -32,8 +32,10 @@ pub fn start(conn: &Connection, name: &str, set_plan_id: Option<i64>) -> Result<
         "INSERT INTO gigs(name, set_plan_id, started_at) VALUES (?1,?2,?3)",
         params![name, set_plan_id, now_ms()],
     )?;
+    // Read the new gig's id before anything else inserts a row.
+    let id = conn.last_insert_rowid();
     db::set_setting(conn, "gig_mode", "1")?;
-    Ok(conn.last_insert_rowid())
+    Ok(id)
 }
 
 pub fn end(conn: &Connection) -> Result<Option<i64>> {

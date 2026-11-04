@@ -158,6 +158,8 @@ impl App {
         }
         let db_path = self.db_path.clone();
         let c2 = ctl.clone();
+        let jobs = self.jobs.clone();
+        let online = self.online.clone();
         let handle = std::thread::Builder::new()
             .name("dj-scan".into())
             .spawn(move || {
@@ -165,7 +167,23 @@ impl App {
                     let mut p = lock(&progress);
                     p.state = "failed".into();
                     p.message = Some(e.to_string());
+                    return;
                 }
+                if c2.cancel.load(Ordering::Relaxed) {
+                    return;
+                }
+                // Auto-prep the library (analysis, suggestions, recommended fixes).
+                let Ok(conn) = crate::db::open(&db_path) else {
+                    return;
+                };
+                if !crate::autoprep::enabled(&conn).unwrap_or(false) {
+                    return;
+                }
+                let gig = crate::gig::active(&conn).unwrap_or(false);
+                drop(conn);
+                let _ = jobs.start("auto_prep", gig, move |ctl, p| {
+                    crate::autoprep::run(&db_path, online.as_ref(), ctl, p)
+                });
             })?;
         job.ctl = ctl;
         job.handle = Some(handle);
@@ -375,6 +393,8 @@ impl App {
                     "key_notation": db::get_setting(&conn, "key_notation")?.unwrap_or_else(|| "camelot".into()),
                     "scan_video": db::get_setting(&conn, "scan_video")?.map(|v| v == "1").unwrap_or(true),
                     "premium_ui": db::get_setting(&conn, "premium_ui")?.map(|v| v == "1").unwrap_or(false),
+                    "auto_prep": crate::autoprep::enabled(&conn)?,
+                    "auto_fix_min": crate::autoprep::min_confidence(&conn)?,
                     "ai_provider": db::get_setting(&conn, "ai_provider")?.unwrap_or_else(|| "off".into()),
                 })
             }
@@ -412,6 +432,15 @@ impl App {
                             return invalid("unknown motion setting");
                         }
                         db::set_setting(&conn, &key, v)?;
+                    }
+                    "auto_fix_min" => {
+                        let v = value
+                            .as_f64()
+                            .filter(|v| (0.5..=1.0).contains(v))
+                            .ok_or_else(|| {
+                                Error::Invalid("confidence must be between 0.5 and 1.0".into())
+                            })?;
+                        db::set_setting(&conn, &key, &v.to_string())?;
                     }
                     "ai_provider" => {
                         let v = value.as_str().unwrap_or("");
@@ -471,6 +500,7 @@ impl App {
                     | "auto_update"
                     | "scan_video"
                     | "premium_ui"
+                    | "auto_prep"
                     | "watch_enabled" => {
                         db::set_setting(
                             &conn,

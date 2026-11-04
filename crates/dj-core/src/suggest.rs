@@ -719,6 +719,69 @@ pub fn acoustid_lookup(
     Ok(())
 }
 
+/// Accept the best pending suggestion per track and field at or above `min` confidence.
+pub fn accept_bulk(conn: &Connection, min: f64, source: Option<&str>) -> Result<usize> {
+    let list = list(conn, Some("pending"), None, 50_000)?;
+    let mut n = 0;
+    for s in list.iter().filter(|s| {
+        s.confidence.unwrap_or(0.0) >= min && source.map(|x| x == s.source).unwrap_or(true)
+    }) {
+        let still: bool = conn.query_row(
+            "SELECT status='pending' FROM suggestions WHERE id=?1",
+            params![s.id],
+            |r| r.get(0),
+        )?;
+        if still && accept(conn, s.id, None).is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// The fields auto-prep may fill in the catalogue.
+const AUTO_FIELDS: &[&str] = &[
+    "title",
+    "artist",
+    "album",
+    "genre",
+    "year",
+    "original_year",
+    "record_label",
+    "version_label",
+];
+
+/// Recommended fixes: fill empty fields from the best suggestion at or above
+/// `min_fill`; replace an existing value only at or above `min_replace`.
+/// Suggestions are taken best-first, so only the strongest one per track and
+/// field is applied (the others are marked superseded by `accept`).
+pub fn accept_recommended(conn: &Connection, min_fill: f64, min_replace: f64) -> Result<usize> {
+    let list = list(conn, Some("pending"), None, 50_000)?;
+    let mut n = 0;
+    for s in list
+        .iter()
+        .filter(|s| AUTO_FIELDS.contains(&s.field.as_str()))
+    {
+        let c = s.confidence.unwrap_or(0.0);
+        let empty = s
+            .current_value
+            .as_deref()
+            .map(|v| v.trim().is_empty())
+            .unwrap_or(true);
+        if c < if empty { min_fill } else { min_replace } {
+            continue;
+        }
+        let still: bool = conn.query_row(
+            "SELECT status='pending' FROM suggestions WHERE id=?1",
+            params![s.id],
+            |r| r.get(0),
+        )?;
+        if still && accept(conn, s.id, None).is_ok() {
+            n += 1;
+        }
+    }
+    Ok(n)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

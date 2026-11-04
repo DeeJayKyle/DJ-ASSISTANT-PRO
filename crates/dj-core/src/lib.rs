@@ -12,6 +12,7 @@ pub mod analysis_store;
 pub mod api;
 pub mod api_v1;
 pub mod assistant;
+pub mod autoprep;
 pub mod crates;
 pub mod db;
 pub mod discovery;

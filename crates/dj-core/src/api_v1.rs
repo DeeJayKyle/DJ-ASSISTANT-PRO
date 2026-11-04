@@ -139,24 +139,7 @@ impl App {
             "accept_suggestions_bulk" => {
                 let min: f64 = arg::<Option<f64>>(a, "min_confidence")?.unwrap_or(0.8);
                 let source: Option<String> = arg(a, "source")?;
-                let conn = lock(&self.conn);
-                let list = suggest::list(&conn, Some("pending"), None, 5000)?;
-                let mut n = 0;
-                for s in list.iter().filter(|s| {
-                    s.confidence.unwrap_or(0.0) >= min
-                        && source.as_ref().map(|x| *x == s.source).unwrap_or(true)
-                }) {
-                    // accept only the best pending suggestion per track+field
-                    let still: bool = conn.query_row(
-                        "SELECT status='pending' FROM suggestions WHERE id=?1",
-                        rusqlite::params![s.id],
-                        |r| r.get(0),
-                    )?;
-                    if still && suggest::accept(&conn, s.id, None).is_ok() {
-                        n += 1;
-                    }
-                }
-                json!({"accepted": n})
+                json!({"accepted": suggest::accept_bulk(&lock(&self.conn), min, source.as_deref())?})
             }
             "lookup_musicbrainz" => {
                 let ids = self.resolve_ids(a)?;

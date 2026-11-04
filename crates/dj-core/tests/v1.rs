@@ -184,7 +184,10 @@ fn write_wav(path: &Path, secs: u32) {
 
 fn app_with_fake(e: &Env) -> App {
     let s = Arc::new(MemorySecrets::default());
-    App::open_with(&e.db(), Arc::new(FakeOnline), s).unwrap()
+    let app = App::open_with(&e.db(), Arc::new(FakeOnline), s).unwrap();
+    app.dispatch("set_setting", json!({"key": "auto_prep", "value": false}))
+        .unwrap();
+    app
 }
 
 fn wait_job(app: &App, kind: &str) -> Value {
@@ -1990,4 +1993,60 @@ fn local_model_is_only_ready_when_set_up() {
     call(&app, "ai_local_pull", json!({"model": "qwen2.5:3b"}));
     let j = wait_job(&app, "ai_model");
     assert_eq!(j["state"], "failed", "{j}");
+}
+
+#[test]
+fn auto_prep_analyses_and_applies_recommended_fixes_after_a_scan() {
+    let e = env();
+    let app = app_with_fake(&e);
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "auto_prep", "value": true}),
+    );
+    assert_eq!(call(&app, "get_settings", json!({}))["auto_prep"], true);
+    let before_files = snapshot(&e.music);
+    add_and_scan(&app, &e.music);
+    let j = wait_job(&app, "auto_prep");
+    assert_eq!(j["state"], "completed", "{j}");
+    let r = &j["result"];
+    println!("{r}");
+
+    assert!(r["analysed"].as_i64().unwrap() >= 10, "{r}");
+    assert!(r["fixes_applied"].as_i64().unwrap() >= 1, "{r}");
+    // Analysis filled keys for tracks whose tags had none (the fixtures are
+    // beatless sine tones, so no tempo can be detected for them).
+    let after = &r["missing_after"];
+    let before = &r["missing_before"];
+    assert!(
+        after["missing_key"].as_i64() < before["missing_key"].as_i64(),
+        "{r}"
+    );
+    // A gap was filled: "untagged recording.wav" gets its title from the file name.
+    // (It still counts as "missing title or artist": its artist is genuinely unknown.)
+    // And a genre from a genre-named folder ("House/Roller Rink.opus").
+    assert!(
+        after["missing_genre"].as_i64() < before["missing_genre"].as_i64(),
+        "{r}"
+    );
+    assert_eq!(
+        find(&search(&app, json!({"limit": 200})), "Roller Rink.opus")["genre"],
+        "House"
+    );
+    let page = search(&app, json!({"limit": 200}));
+    assert_eq!(
+        find(&page, "untagged recording.wav")["title"],
+        "untagged recording"
+    );
+    // Only the catalogue changed; the music files did not.
+    assert_eq!(before_files, snapshot(&e.music));
+    // Off means off.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "auto_fix_min", "value": 0.9}),
+    );
+    assert!(app
+        .dispatch("set_setting", json!({"key": "auto_fix_min", "value": 2}))
+        .is_err());
 }

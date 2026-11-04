@@ -46,7 +46,12 @@ impl Env {
         self.data.join("catalogue.sqlite3")
     }
     pub fn app(&self) -> App {
-        App::open(&self.db()).unwrap()
+        let app = App::open(&self.db()).unwrap();
+        // Tests check exact counts, so the automatic post-scan prep stays off
+        // unless a test turns it on.
+        app.dispatch("set_setting", json!({"key": "auto_prep", "value": false}))
+            .unwrap();
+        app
     }
 }
 
