@@ -3,7 +3,18 @@
 **Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
-## v1.0 (this release)
+## v1.1 (this release)
+
+| Area | Feature | Status |
+|---|---|---|
+| Keys | Camelot / musical display setting; either notation in search, rules and Assistant (incl. Open Key) | Tested |
+| Library health | Fix list for missing title/artist, genre, year, album, BPM, key: hints with evidence, bulk set, catalogue-only save | Tested |
+| Video | MP4/M4V/MOV/MKV/WebM/AVI header parsing (resolution, codec, fps, duration, tags); media/resolution filters; never written | Tested |
+| Video | Audio analysis of MP4/MOV/MKV/WebM where the codec is supported | Tested (AAC, Vorbis) |
+| UI | Premium UI switch (Midnight Pro look from RxPOS) | Tested (e2e) |
+| quickiemusic.com features | Blocked: the build environment cannot reach quickiemusic.com, so its features could not be reviewed | Planned |
+
+## v1.0
 
 | Area | Feature | Status |
 |---|---|---|

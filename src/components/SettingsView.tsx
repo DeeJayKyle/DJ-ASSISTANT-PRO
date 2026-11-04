@@ -73,6 +73,7 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
             <div className="col" style={{ gap: 6 }}><span className="small muted">Theme</span><div className="seg">{(["dark", "light"] as const).map((t) => <button key={t} aria-pressed={settings.theme === t} onClick={() => set("theme", t)}>{t === "dark" ? "Dark" : "Light"}</button>)}</div></div>
             <div className="col" style={{ gap: 6 }}><span className="small muted">Surfaces</span><div className="seg">{(["glass", "solid"] as const).map((t) => <button key={t} aria-pressed={settings.surface === t} onClick={() => set("surface", t)}>{t === "glass" ? "Glass" : "Solid"}</button>)}</div></div>
             <div className="col" style={{ gap: 6 }}><span className="small muted">Motion</span><div className="seg">{(["full", "reduced"] as const).map((t) => <button key={t} aria-pressed={settings.motion === t} onClick={() => set("motion", t)}>{t === "full" ? "Full" : "Reduced"}</button>)}</div></div>
+            <div className="col" style={{ gap: 6 }}><span className="small muted">Premium UI (Midnight Pro)</span><div className="row" style={{ height: 36 }}><Toggle label="Premium UI" checked={settings.premium_ui} onChange={(v) => set("premium_ui", v)} /></div></div>
           </div>
         </section>
 

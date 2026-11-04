@@ -76,7 +76,7 @@ pub fn categories(low: u32) -> Vec<(String, String, String, RuleSet, bool)> {
             all(vec![cond("quality", "equals", json!("unknown")), cond("status", "equals", json!("ok"))]), false),
         ("read_errors".into(), "Unreadable or corrupt".into(), "Files that could not be opened or parsed. They were not modified.".into(),
             all(vec![cond("status", "equals", json!("error"))]), false),
-        ("unsupported".into(), "Unsupported formats".into(), "Music files in formats this version cannot read (for example WMA).".into(),
+        ("unsupported".into(), "Unsupported formats".into(), "Music or video files in formats this version cannot read (for example WMA or WMV).".into(),
             all(vec![cond("status", "equals", json!("unsupported"))]), false),
         ("offline".into(), "On offline drives".into(), "Tracks in folders that were not available at the last scan. They are kept, not deleted.".into(),
             all(vec![cond("status", "equals", json!("offline"))]), false),

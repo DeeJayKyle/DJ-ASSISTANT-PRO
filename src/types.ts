@@ -238,6 +238,7 @@ export interface Settings {
   motion: "full" | "reduced";
   key_notation: "camelot" | "musical";
   scan_video: boolean;
+  premium_ui: boolean;
 }
 
 export interface FieldInfo {

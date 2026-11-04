@@ -351,6 +351,7 @@ impl App {
                     "motion": db::get_setting(&conn, "motion")?.unwrap_or_else(|| "full".into()),
                     "key_notation": db::get_setting(&conn, "key_notation")?.unwrap_or_else(|| "camelot".into()),
                     "scan_video": db::get_setting(&conn, "scan_video")?.map(|v| v == "1").unwrap_or(true),
+                    "premium_ui": db::get_setting(&conn, "premium_ui")?.map(|v| v == "1").unwrap_or(false),
                 })
             }
             "set_setting" => {
@@ -402,6 +403,7 @@ impl App {
                     | "learning_enabled"
                     | "auto_update"
                     | "scan_video"
+                    | "premium_ui"
                     | "watch_enabled" => {
                         db::set_setting(
                             &conn,

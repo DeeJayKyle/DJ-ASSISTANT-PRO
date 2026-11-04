@@ -3,7 +3,7 @@ import { isDesktop } from "../api";
 import { Icon, Logo } from "./Icon";
 
 /** Custom window title bar (the window has no native decorations). */
-export function TitleBar({ gig }: { gig: boolean }) {
+export function TitleBar({ gig, premium, onPremium }: { gig: boolean; premium: boolean; onPremium: (v: boolean) => void }) {
   const [max, setMax] = useState(false);
   const win = async () => (await import("@tauri-apps/api/window")).getCurrentWindow();
   useEffect(() => {
@@ -19,6 +19,11 @@ export function TitleBar({ gig }: { gig: boolean }) {
         </span>
       </div>
       <div className="drag" data-tauri-drag-region onDoubleClick={() => isDesktop() && win().then((w) => w.toggleMaximize().then(() => w.isMaximized().then(setMax)))} />
+      <button type="button" className={`premium-toggle${premium ? " on" : ""}`} role="switch" aria-checked={premium} title="Premium UI: the Midnight Pro look. Only changes how the app looks." onClick={() => onPremium(!premium)}>
+        <Icon name="sparkles" size={14} />
+        <span>Premium UI</span>
+        <span className="premium-knob" aria-hidden />
+      </button>
       {gig && (
         <span className="badge kind-possible gig-flag" title="Gig mode is on: background work is paused">
           <Icon name="gig" size={13} /> Gig mode

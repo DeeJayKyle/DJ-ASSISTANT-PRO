@@ -324,6 +324,40 @@ await step("settings: updates, online services (off), threshold and light theme"
   await page.getByRole("button", { name: "Dark" }).click();
 });
 
+await step("library health: Fix fills a missing genre from a folder hint (catalogue only)", async () => {
+  await nav("Library Health").click();
+  await page.getByRole("button", { name: /^Fix missing genre/ }).click();
+  await page.getByRole("heading", { name: "Fix: Missing genre" }).waitFor();
+  const row = page.locator(".fix-row", { hasText: "Roller Rink" });
+  await row.getByRole("button", { name: /^House/ }).click();
+  expect((await row.getByLabel(/Genre for/).inputValue()) === "House", "hint did not fill the input");
+  await row.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText(/Saved 1 track to your catalogue/).waitFor();
+  await page.locator(".fix-row", { hasText: "Roller Rink" }).waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Back to Library health" }).click();
+});
+
+await step("key notation: switching to musical names changes the table", async () => {
+  await nav("Settings").click();
+  await page.getByRole("button", { name: /^Musical/ }).click();
+  await nav("Library").click();
+  await page.getByRole("row").nth(2).waitFor();
+  const keys = await page.getByRole("row").evaluateAll((rows) => rows.map((r) => r.textContent ?? ""));
+  expect(keys.length > 0, "no rows");
+  expect(!keys.some((k) => /(^|[^\w])(1[0-2]|[1-9])[AB]([^\w]|$)/.test(k)), `Camelot codes still shown: ${keys.find((k) => /(1[0-2]|[1-9])[AB]/.test(k))}`);
+  await nav("Settings").click();
+  await page.getByRole("button", { name: /^Camelot/ }).click();
+});
+
+await step("premium UI switch repaints with the Midnight Pro palette and back", async () => {
+  const sw = page.getByRole("switch", { name: /Premium UI/ });
+  await sw.click();
+  expect((await page.evaluate(() => document.documentElement.dataset.palette)) === "midnight-pro", "palette not applied");
+  await page.screenshot({ path: path.join(shots, "09-premium-ui.png") });
+  await sw.click();
+  expect((await page.evaluate(() => document.documentElement.dataset.palette)) === undefined, "palette not removed");
+});
+
 await step("data, crates and sets persist after restarting the backend", async () => {
   restarting = true;
   procs[0].kill();

@@ -88,6 +88,9 @@ export default function App() {
     r.dataset.theme = settings.theme;
     r.dataset.surface = settings.surface;
     r.dataset.motion = settings.motion;
+    // Premium UI only repaints: the Midnight Pro palette over the current view.
+    if (settings.premium_ui) r.dataset.palette = "midnight-pro";
+    else delete r.dataset.palette;
   }, [settings]);
   // Applied during render so every view formats keys with the current choice.
   if (settings) setKeyNotation(settings.key_notation);
@@ -220,7 +223,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <TitleBar gig={settings.gig_mode} />
+      <TitleBar gig={settings.gig_mode} premium={settings.premium_ui} onPremium={(v) => { setSettings({ ...settings, premium_ui: v }); api.setSetting("premium_ui", v).catch(() => {}); }} />
       <div className={`workspace${chat === "full" ? " chat-full" : chat === "hidden" ? " no-chat" : ""}`}>
         <Sidebar view={view} setView={setView} crates={crates} roots={roots} stats={stats} pending={pending} onNewCrate={() => setCrateDialog({ crate: null })} docsEnabled={settings.docs_enabled} />
         <main>{main}</main>

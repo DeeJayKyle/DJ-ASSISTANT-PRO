@@ -1,3 +1,15 @@
+DJ Assistant 1.1.0
+
+**New in 1.1**
+- **Key notation:** choose Camelot (8A) or musical names (Am) in Settings. Search, filters and the Assistant accept either form ("key Am", "A minor", "8A", Open Key "1m").
+- **Fix missing details from Library Health:** missing title/artist, genre, year, album, BPM and key cards now have a Fix button. You get a list of the affected tracks with inline inputs, suggestions with evidence (file and folder names, same album, same artist, stored suggestions), bulk set for selected tracks, and shortcuts to analysis and MusicBrainz. Saving changes DJ Assistant's catalogue only, never the files.
+- **Video files:** music videos and visuals in MP4, M4V, MOV, MKV, WebM and AVI are catalogued with resolution, codec and frame rate. Only file headers are read; videos are never written to. There are media and resolution filters, a Video badge, and the Assistant understands "music videos", "house videos" and "1080p videos". Audio inside MP4/MOV/WebM/MKV can be analysed where the codec is supported (not Opus or AVI). WMV, FLV, MPEG and similar formats are listed as unsupported. You can turn video scanning off in Settings.
+- **Premium UI (from RxPOS):** a switch in the title bar for the Midnight Pro look, with a translucent sidebar, a cyan glow on the current page, glass cards, mono figures, light beams around key figures and flagged problems, and 120 ms ease-out motion. It only changes how the app looks.
+
+**Safety:** unchanged. Music and video files are only read unless you turn on tag writing, which never applies to videos. Serato data is never written.
+
+---
+
 DJ Assistant 1.0.0 — the full first release.
 
 **New in 1.0**

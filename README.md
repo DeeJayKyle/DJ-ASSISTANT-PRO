@@ -4,9 +4,11 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ![Music Library](docs/screenshots/library.png)
 
-## What it does (v1.0)
+## What it does (v1.1)
 
 **Library** — choose music folders and drives; read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; fast accent-insensitive search; Genre / Decade / Format / Quality filters plus a full rule builder; offline drives kept, never treated as deleted; folder watcher that notices new music.
+
+**Video files** — music videos and visuals (MP4, M4V, MOV, MKV, WebM, AVI) are catalogued next to your audio with resolution, codec and frame rate, so you can search, rate, tag and crate them. Only file headers are read and videos are never written to. Media and resolution filters, a Video badge, and an option to turn video scanning off.
 
 **Your catalogue** — energy (1–10 LED meter), star ratings, colour, mood, tags, notes and overrides for title, artist, genre, year, BPM, key and more. Stored in DJ Assistant only; the file’s own tags stay visible separately.
 
@@ -16,7 +18,7 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 **Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz and AcoustID. Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
 
-**Duplicates & health** — exact (full-file hash) vs possible vs alternate versions, with reasons and review notes; library health for missing metadata, unreadable/unsupported files, low bitrate (configurable, default 128 kbps, never applied to lossless or unknown), offline drives and missing files.
+**Duplicates & health** — exact (full-file hash) vs possible vs alternate versions, with reasons and review notes; library health for missing metadata (with a **Fix** list that offers evidence-based suggestions and bulk editing, saved to the catalogue only), unreadable/unsupported files, low bitrate (configurable, default 128 kbps, never applied to lossless or unknown), offline drives and missing files.
 
 **Discovery** — tracks that fit a crate (with reasons), gaps, alternatives to overplayed tracks, version-aware tracklist matching (owned / possibly owned / missing / unknown), Last.fm similar artists and tracks (opt-in), new releases from artists you follow (MusicBrainz, opt-in), store search links (Beatport, Bandcamp, Traxsource, Juno, Apple, Amazon, YouTube preview). “What I’ve learned” can be inspected, switched off and reset.
 
@@ -31,6 +33,10 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 **Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
 
 **Assistant** — a local, rule-based helper (not an AI model) in a sidebar you can hide (Ctrl+J) or expand. “afrobeats 2010s energy 6-8 no live”, “low bitrate”, “plan a 2 hour wedding set”, “gig pack”… It says exactly what it understood and can only search, filter and open views.
+
+**Key notation** — show keys as Camelot (8A) or musical names (Am); search, filters and the Assistant accept either, including Open Key (1m).
+
+**Premium UI** — a title-bar switch for the Midnight Pro look from RxPOS, with a translucent sidebar, a glowing current page, glass cards, mono figures and light beams. It only repaints.
 
 **Auto-update** — signed updates install in place from GitHub releases (see [docs/UPDATES.md](docs/UPDATES.md)). Can be turned off in Settings.
 
@@ -75,6 +81,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTING
 
 - **Not yet hand-tested on a real Windows PC, a real library or alongside Serato** — automated tests run on Windows CI. Please work through the manual checklist in docs/TESTING.md, starting with copies of your music.
 - Installer unsigned (SmartScreen warning).
+- Video: WMV, FLV, MPEG, MTS/M2TS, 3GP and VOB are listed as unsupported. Opus audio (common in WebM) and AVI audio can't be analysed yet. Videos are never written to.
 - Analysis is estimation: half/double tempo and relative/modal key confusion happen; energy is relative to your own library.
 - Online services were verified with recorded responses and fakes in tests; live calls could not be made from the build environment.
 - Stem separation and cloud AI are not included. Physical file moves/renames are deliberately not offered (they break Serato links).
