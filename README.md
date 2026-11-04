@@ -6,11 +6,11 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ## What it does (v1.3)
 
-**Studio (new in 1.5)** — under *Create* in the sidebar:
+**Studio (new in 1.5, extended in 1.6)** — under *Create* in the sidebar:
 - **Stems:** vocals, drums, bass and melodies from any track, with key, tempo, live chords, WAV stems and a MIDI file.
-- **Remix:** tracks and stems on a beat grid; move, trim and loop clips; every clip is auto-synced to the remix's tempo and key.
-- **DJ Decks:** two decks with Sync, key matching, live stem toggles and a crossfader.
-- **Synth Lab** and **Drum Lab:** describe a sound or a kit in words, play it from the keyboard or a MIDI controller, and save it as WAV plus SFZ.
+- **Remix:** tracks and stems on a beat grid; move, trim, loop, duplicate and delete clips, with undo and redo; every clip is auto-synced to the remix's tempo and key.
+- **DJ Decks:** two decks with Sync, key matching, live stem toggles, 3-band EQ, a filter, hot cues, beat loops and a crossfader.
+- **Synth Lab** and **Drum Lab:** describe a sound or a kit in words, play it from the keyboard or a MIDI controller, and save it as WAV plus SFZ. Drum Lab also has a 16-step sequencer with swing that exports loops as WAV or MIDI.
 
 It all runs on this computer. Stems use signal processing rather than an AI model, so they're private but less clean than AI separators.
 

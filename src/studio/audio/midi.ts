@@ -8,7 +8,8 @@ export interface MidiTrack { name: string; channel: number; notes: Note[]; progr
 /** YIN fundamental frequency per frame. Returns f0 (0 = unvoiced) and confidence. */
 export function yin(mono: Float32Array, sampleRate: number, opts: { minHz?: number; maxHz?: number; hop?: number } = {}) {
   const minHz = opts.minHz ?? 40, maxHz = opts.maxHz ?? 1500;
-  const factor = Math.max(1, Math.floor(sampleRate / Math.max(8000, maxHz * 4)));
+  // Work at ~8× the highest pitch: plenty for YIN, and far fewer lags than full rate.
+  const factor = Math.max(1, Math.floor(sampleRate / Math.min(16000, Math.max(2400, maxHz * 8))));
   const x = downsample(mono, factor);
   const sr = sampleRate / factor;
   const hop = Math.max(64, Math.round((opts.hop ?? 0.01) * sr));

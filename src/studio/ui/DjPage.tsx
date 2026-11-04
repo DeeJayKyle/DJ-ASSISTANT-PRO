@@ -9,8 +9,13 @@ interface DeckState {
   song: SongRef | null; loaded: Loaded | null; peaks: Float32Array | null; time: number; playing: boolean;
   tempo: number; // fader, 1 = original
   semis: number; stems: boolean; gains: Record<StemName, number>; volume: number; busy: string | null; progress: number;
+  eq: { low: number; mid: number; high: number }; // dB
+  filter: number; // −1 low-pass … 0 off … +1 high-pass
+  cues: (number | null)[]; // four hot cues (seconds)
+  loopBeats: number | null;
 }
-const fresh = (): DeckState => ({ song: null, loaded: null, peaks: null, time: 0, playing: false, tempo: 1, semis: 0, stems: false, gains: { vocals: 1, drums: 1, bass: 1, melodies: 1 }, volume: 0.9, busy: null, progress: 0 });
+const fresh = (): DeckState => ({ song: null, loaded: null, peaks: null, time: 0, playing: false, tempo: 1, semis: 0, stems: false, gains: { vocals: 1, drums: 1, bass: 1, melodies: 1 }, volume: 0.9, busy: null, progress: 0, eq: { low: 0, mid: 0, high: 0 }, filter: 0, cues: [null, null, null, null], loopBeats: null });
+type Chain = { node: AudioWorkletNode; gain: GainNode; low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode; filt: BiquadFilterNode };
 
 /** Two decks with automatic beat matching, key changes and stem toggles; a crossfader in between. */
 export function DjPage({ incoming }: { incoming?: SongRef | null }) {
@@ -18,18 +23,24 @@ export function DjPage({ incoming }: { incoming?: SongRef | null }) {
   const [decks, setDecks] = useState<DeckState[]>([fresh(), fresh()]);
   const [xfade, setXfade] = useState(0.5);
   const [picking, setPicking] = useState<0 | 1 | null>(null);
-  const nodes = useRef<{ node: AudioWorkletNode; gain: GainNode }[]>([]);
+  const nodes = useRef<Chain[]>([]);
   const ref = useRef(decks);
   ref.current = decks;
 
   const set = (i: number, patch: Partial<DeckState>) => setDecks((d) => d.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const deckNode = async (i: number) => {
     if (!nodes.current[i]) {
+      const ctx = engine.ctx;
       const node = await engine.deckNode();
-      const gain = engine.ctx.createGain();
-      node.connect(gain).connect(engine.ctx.destination);
+      // deck → 3-band EQ → filter sweep → channel gain (crossfader) → out
+      const low = ctx.createBiquadFilter(); low.type = 'lowshelf'; low.frequency.value = 220;
+      const mid = ctx.createBiquadFilter(); mid.type = 'peaking'; mid.frequency.value = 1000; mid.Q.value = 0.8;
+      const high = ctx.createBiquadFilter(); high.type = 'highshelf'; high.frequency.value = 3800;
+      const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 22000; filt.Q.value = 0.9;
+      const gain = ctx.createGain();
+      node.connect(low).connect(mid).connect(high).connect(filt).connect(gain).connect(ctx.destination);
       node.port.onmessage = (e) => { if (e.data.type === 'time') set(i, { time: e.data.sec, playing: e.data.playing && !e.data.ended }); };
-      nodes.current[i] = { node, gain };
+      nodes.current[i] = { node, gain, low, mid, high, filt };
     }
     return nodes.current[i];
   };
@@ -108,6 +119,39 @@ export function DjPage({ incoming }: { incoming?: SongRef | null }) {
     update(i, { semis: keyShift(me.key, target) });
   };
 
+  // EQ and filter
+  useEffect(() => {
+    const t = engine.ctx.currentTime;
+    nodes.current.forEach((n, i) => {
+      if (!n) return;
+      const d = decks[i];
+      n.low.gain.setTargetAtTime(d.eq.low, t, 0.02);
+      n.mid.gain.setTargetAtTime(d.eq.mid, t, 0.02);
+      n.high.gain.setTargetAtTime(d.eq.high, t, 0.02);
+      const f = d.filter;
+      if (Math.abs(f) < 0.02) { n.filt.type = 'lowpass'; n.filt.frequency.setTargetAtTime(22000, t, 0.02); }
+      else if (f < 0) { n.filt.type = 'lowpass'; n.filt.frequency.setTargetAtTime(20000 * 2 ** (f * 10), t, 0.02); }
+      else { n.filt.type = 'highpass'; n.filt.frequency.setTargetAtTime(20 * 2 ** (f * 10), t, 0.02); }
+    });
+  }, [decks, engine]);
+
+  // Beat loops from the beat at or before the playhead; hot cues jump or set.
+  const setLoop = (i: number, beats: number | null) => {
+    const d = ref.current[i], a = d.loaded?.analysis;
+    if (!a || beats === null || d.loopBeats === beats) { post(i, { type: 'loop', start: null }); set(i, { loopBeats: null }); return; }
+    const period = 60 / a.bpm;
+    const start = a.firstBeat + Math.floor((d.time - a.firstBeat) / period) * period;
+    post(i, { type: 'loop', start: Math.max(0, start), end: Math.max(0, start) + beats * period });
+    set(i, { loopBeats: beats });
+  };
+  const cueAt = (i: number, n: number, clear = false) => {
+    const d = ref.current[i];
+    const cues = [...d.cues];
+    if (clear) { cues[n] = null; set(i, { cues }); return; }
+    if (cues[n] == null) { cues[n] = d.time; set(i, { cues }); }
+    else post(i, { type: 'seek', sec: cues[n]! });
+  };
+
   // crossfader + volumes (equal power)
   useEffect(() => {
     nodes.current.forEach((n, i) => {
@@ -125,7 +169,8 @@ export function DjPage({ incoming }: { incoming?: SongRef | null }) {
         {decks.map((d, i) => (
           <DeckView key={i} i={i} d={d} other={decks[1 - i]} onPick={() => setPicking(i as 0 | 1)} onPlay={() => playPause(i)} onCue={() => cue(i)} onSync={() => sync(i)} onMatchKey={() => matchKey(i)}
             onSeek={(f) => d.loaded && post(i, { type: 'seek', sec: f * (d.loaded.mix[0].length / d.loaded.sampleRate) })}
-            onTempo={(t) => update(i, { tempo: t })} onSemis={(s) => update(i, { semis: s })} onStems={() => toggleStems(i)} onGain={(s, g) => update(i, { gains: { ...d.gains, [s]: g } })} onVolume={(v) => set(i, { volume: v })} bpm={bpmOf(d)} />
+            onTempo={(t) => update(i, { tempo: t })} onSemis={(s) => update(i, { semis: s })} onStems={() => toggleStems(i)} onGain={(s, g) => update(i, { gains: { ...d.gains, [s]: g } })} onVolume={(v) => set(i, { volume: v })} bpm={bpmOf(d)}
+            onEq={(band, v) => set(i, { eq: { ...d.eq, [band]: v } })} onFilter={(v) => set(i, { filter: v })} onLoop={(b) => setLoop(i, b)} onHotCue={(n, clear) => cueAt(i, n, clear)} />
         ))}
       </div>
       <div className="st-panel st-mixer">
@@ -145,10 +190,12 @@ export function DjPage({ incoming }: { incoming?: SongRef | null }) {
   );
 }
 
-function DeckView({ i, d, other, bpm, onPick, onPlay, onCue, onSync, onMatchKey, onSeek, onTempo, onSemis, onStems, onGain, onVolume }: {
+function DeckView({ i, d, other, bpm, onPick, onPlay, onCue, onSync, onMatchKey, onSeek, onTempo, onSemis, onStems, onGain, onVolume, onEq, onFilter, onLoop, onHotCue }: {
   i: number; d: DeckState; other: DeckState; bpm: number; onPick: () => void; onPlay: () => void; onCue: () => void; onSync: () => void; onMatchKey: () => void;
   onSeek: (f: number) => void; onTempo: (t: number) => void; onSemis: (s: number) => void; onStems: () => void; onGain: (s: StemName, g: number) => void; onVolume: (v: number) => void;
+  onEq: (band: 'low' | 'mid' | 'high', v: number) => void; onFilter: (v: number) => void; onLoop: (beats: number | null) => void; onHotCue: (n: number, clear?: boolean) => void;
 }) {
+  const letter = i === 0 ? 'A' : 'B';
   const dur = d.loaded ? d.loaded.mix[0].length / d.loaded.sampleRate : 0;
   const a = d.loaded?.analysis;
   const keyNow = a ? shiftedKey(a.key.tonic, a.key.mode, d.semis) : '—';
@@ -184,6 +231,28 @@ function DeckView({ i, d, other, bpm, onPick, onPlay, onCue, onSync, onMatchKey,
               </div>
             </div>
             <label className="st-field">Volume<input type="range" min={0} max={1.2} step={0.01} value={d.volume} onChange={(e) => onVolume(Number(e.target.value))} aria-label={`Volume deck ${i === 0 ? 'A' : 'B'}`} /></label>
+          </div>
+          <div className="st-row st-wrap">
+            <span className="st-small st-muted">Hot cues</span>
+            {d.cues.map((c, n) => (
+              <span key={n} className="st-cue">
+                <button className={`st-chip small${c != null ? ' on' : ''}`} onClick={() => onHotCue(n)} aria-label={`${c != null ? 'Jump to' : 'Set'} hot cue ${n + 1} on deck ${letter}`} title={c != null ? `Jump to ${fmtTime(c)}` : 'Set a cue here'}>{n + 1}</button>
+                {c != null && <button className="st-x small" onClick={() => onHotCue(n, true)} aria-label={`Clear hot cue ${n + 1} on deck ${letter}`}>×</button>}
+              </span>
+            ))}
+            <span className="st-grow" />
+            <span className="st-small st-muted">Loop</span>
+            {[1, 2, 4, 8].map((b) => <button key={b} className={`st-chip small${d.loopBeats === b ? ' on' : ''}`} aria-pressed={d.loopBeats === b} onClick={() => onLoop(b)} aria-label={`Loop ${b} beat${b > 1 ? 's' : ''} on deck ${letter}`}>{b}</button>)}
+          </div>
+          <div className="st-row st-wrap st-eq">
+            {(['low', 'mid', 'high'] as const).map((band) => (
+              <label key={band} className="st-field">{band[0].toUpperCase() + band.slice(1)} {d.eq[band] > 0 ? '+' : ''}{d.eq[band].toFixed(0)} dB
+                <input type="range" min={-24} max={6} step={0.5} value={d.eq[band]} onChange={(e) => onEq(band, Number(e.target.value))} onDoubleClick={() => onEq(band, 0)} aria-label={`${band} EQ deck ${letter}`} />
+              </label>
+            ))}
+            <label className="st-field grow">Filter {d.filter < -0.02 ? 'low-pass' : d.filter > 0.02 ? 'high-pass' : 'off'}
+              <input type="range" min={-1} max={1} step={0.01} value={d.filter} onChange={(e) => onFilter(Number(e.target.value))} onDoubleClick={() => onFilter(0)} aria-label={`Filter deck ${letter}`} />
+            </label>
           </div>
           <div className="st-row st-wrap">
             <button className={`st-chip${d.stems ? ' on' : ''}`} aria-pressed={d.stems} onClick={onStems} disabled={!!d.busy}>Stems</button>

@@ -1,3 +1,19 @@
+DJ Assistant 1.6.0
+
+**The Studio, faster and deeper**
+- **Faster stems:** splitting a track takes about a third of the time it did, and the MIDI bass line is found many times faster. Results are the same.
+- **DJ Decks:** each deck now has a 3-band EQ (low, mid, high), a filter knob (left for low-pass, right for high-pass), 4 hot cues and beat loops of 1, 2, 4 or 8 beats. Double-click a knob to reset it.
+- **Remix:** undo and redo (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y). Click a clip to select it, then duplicate it (Ctrl+D) or delete it (Delete).
+- **Drum Lab sequencer:** a 16-step pattern for your kit with tempo and swing. It loops while you edit, and every change is heard straight away. Export the loop as a 4-bar WAV, or the pattern as MIDI.
+- **Lighter on memory:** the Studio keeps only the 8 most recent songs loaded.
+
+**Fixes**
+- The Remix timeline's ruler no longer blocks clicks on the first track's clips.
+- The Drum Lab pads fit their panel at every window size.
+- Studio saves are written to a temporary file and then renamed, so a half-written file is never left behind.
+
+---
+
 DJ Assistant 1.5.0
 
 **New in 1.5: the Studio** (sidebar → Create)

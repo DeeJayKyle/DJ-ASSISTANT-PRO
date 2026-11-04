@@ -97,6 +97,8 @@ export class Deck {
   pitch = 1;
   pos = 0; // source position in samples
   playing = false;
+  /** Active loop in source samples (end > start), or null. */
+  loop: { start: number; end: number } | null = null;
   private ring: Float32Array[] = [new Float32Array(FRAME * 2), new Float32Array(FRAME * 2)];
   private ringNorm = new Float32Array(FRAME * 2);
   private outPos = 0; // samples emitted since the last grain
@@ -153,6 +155,12 @@ export class Deck {
     }
     this.lastSrc = src;
     this.pos += HOP * this.rate;
+    // Beat loops: jump back by the loop length, keeping the phase so the loop stays on the beat.
+    if (this.loop && this.loop.end > this.loop.start && this.pos >= this.loop.end) {
+      const len = this.loop.end - this.loop.start;
+      this.pos = this.loop.start + ((this.pos - this.loop.start) % len);
+      this.lastSrc = this.pos - HOP * this.pitch;
+    }
   }
 
   /** Fills `out` (two channels) with the next block. */

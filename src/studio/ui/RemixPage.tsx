@@ -11,7 +11,7 @@ const LAYERS: { id: Layer; label: string }[] = [
 const COLORS: Record<Layer, string> = { mix: '#7aa2ff', vocals: '#ff7aa8', drums: '#ffb547', bass: '#b38cff', melodies: '#3ee6c4' };
 
 /** Remix: clips from songs and stems on a beat grid; one tempo and key; Fadr-style auto-sync, made here. */
-export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
+export function RemixPage({ incoming, active = true }: { incoming?: SongRef | null; active?: boolean }) {
   const { host, engine, markSplit } = useStudio();
   const [project, setProject] = useState<Project>({ name: 'My Remix', bpm: 120, key: { tonic: 9, mode: 'minor' }, tracks: [] });
   const [sources, setSources] = useState<Map<string, Source>>(new Map());
@@ -21,6 +21,12 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
   const [playing, setPlaying] = useState(false);
   const [head, setHead] = useState(0); // beats
   const node = useRef<{ src: AudioBufferSourceNode; at: number; from: number } | null>(null);
+  const [selected2, setSel] = useState<string | null>(null); // selected clip id
+  const history = useRef<{ past: Project[]; future: Project[] }>({ past: [], future: [] });
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  /** Remember the arrangement before a change, for undo. */
+  const remember = () => { const h = history.current; h.past.push(projectRef.current); if (h.past.length > 60) h.past.shift(); h.future = []; };
 
   useEffect(() => { if (incoming) setSelected(incoming); }, [incoming]);
 
@@ -36,6 +42,7 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
         src = await engine.remixSource(l, !!l.stems);
         setSources((m) => new Map(m).set(song.id, src!));
       }
+      remember();
       setProject((p) => {
         const first = p.tracks.length === 0;
         const base: Project = first ? { ...p, bpm: Math.round(src!.bpm * 10) / 10, key: { tonic: src!.key.tonic, mode: src!.key.mode } } : p;
@@ -75,6 +82,25 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
   useEffect(() => () => stop(), []);
   // Any edit stops playback so what you hear matches the arrangement.
   const edit = (fn: (p: Project) => Project) => { if (playing) stop(); setProject(fn); };
+  /** A change that can be undone in one step. */
+  const change = (fn: (p: Project) => Project) => { remember(); edit(fn); };
+  const undo = () => { const h = history.current; const prev = h.past.pop(); if (!prev) return; h.future.push(projectRef.current); edit(() => prev); };
+  const redo = () => { const h = history.current; const next = h.future.pop(); if (!next) return; h.past.push(projectRef.current); edit(() => next); };
+  const removeClip = (id: string) => change((p) => ({ ...p, tracks: p.tracks.map((t) => ({ ...t, clips: t.clips.filter((c) => c.id !== id) })).filter((t) => t.clips.length > 0) }));
+  const duplicateClip = (id: string) => change((p) => ({ ...p, tracks: p.tracks.map((t) => { const c = t.clips.find((x) => x.id === id); if (!c) return t; const end = Math.max(...t.clips.map((x) => x.start + x.length * x.loops)); return { ...t, clips: [...t.clips, { ...c, id: uid('c'), start: end }] }; }) }));
+  useEffect(() => {
+    if (!active) return;
+    const k = (e: KeyboardEvent) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+      else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+      else if (mod && e.key.toLowerCase() === 'd' && selected2) { e.preventDefault(); duplicateClip(selected2); }
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && selected2) { e.preventDefault(); removeClip(selected2); setSel(null); }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  });
 
   const exportMix = async () => {
     try {
@@ -96,6 +122,8 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
   const width = beats * zoom;
   const drag = (e: React.PointerEvent, clip: Clip, trackId: string, mode: 'move' | 'left' | 'right' | 'loop') => {
     e.preventDefault(); e.stopPropagation();
+    remember();
+    setSel(clip.id);
     const x0 = e.clientX, start = { ...clip };
     const move = (ev: PointerEvent) => {
       const d = Math.round((ev.clientX - x0) / zoom);
@@ -111,7 +139,7 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   };
-  const upd = (id: string, patch: Partial<Project['tracks'][number]>) => edit((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
+  const upd = (id: string, patch: Partial<Project['tracks'][number]>) => change((p) => ({ ...p, tracks: p.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
 
   return (
     <div className="st-remix">
@@ -138,6 +166,9 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
             {NOTE_NAMES.flatMap((n, i) => [<option key={`${i}M`} value={`${i}:major`}>{n} major</option>, <option key={`${i}m`} value={`${i}:minor`}>{n} minor</option>])}
           </select></label>
           <label className="st-field">Zoom<input type="range" min={6} max={40} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="Zoom" /></label>
+          <button className="st-btn" onClick={undo} disabled={!history.current.past.length} aria-label="Undo" title="Undo (Ctrl+Z)">↶</button>
+          <button className="st-btn" onClick={redo} disabled={!history.current.future.length} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">↷</button>
+          {selected2 && <><button className="st-btn" onClick={() => duplicateClip(selected2)} title="Duplicate (Ctrl+D)">Duplicate clip</button><button className="st-btn" onClick={() => { removeClip(selected2); setSel(null); }} title="Delete">Delete clip</button></>}
           <span className="st-grow" />
           <button className="st-btn" onClick={exportTracks} disabled={!project.tracks.length || !!busy}>Export tracks</button>
           <button className="st-btn primary" onClick={exportMix} disabled={!project.tracks.length || !!busy}>Export remix (WAV)</button>
@@ -152,7 +183,7 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
             {project.tracks.map((t) => (
               <div key={t.id} className="st-trackrow" style={{ width: width + 220 }}>
                 <div className="st-trackhead" onClick={(e) => e.stopPropagation()}>
-                  <div className="st-row"><b className="st-ellipsis st-grow" title={t.name}>{t.name}</b><button className="st-x" aria-label={`Remove ${t.name}`} onClick={() => edit((p) => ({ ...p, tracks: p.tracks.filter((x) => x.id !== t.id) }))}>×</button></div>
+                  <div className="st-row"><b className="st-ellipsis st-grow" title={t.name}>{t.name}</b><button className="st-x" aria-label={`Remove ${t.name}`} onClick={() => change((p) => ({ ...p, tracks: p.tracks.filter((x) => x.id !== t.id) }))}>×</button></div>
                   <div className="st-row">
                     <button className={`st-chip small${t.mute ? ' on' : ''}`} aria-pressed={t.mute} onClick={() => upd(t.id, { mute: !t.mute })}>M</button>
                     <button className={`st-chip small${t.solo ? ' on' : ''}`} aria-pressed={t.solo} onClick={() => upd(t.id, { solo: !t.solo })}>S</button>
@@ -162,7 +193,7 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
                 </div>
                 <div className="st-lanes" style={{ width, ["--beat" as string]: `${zoom}px` }}>
                   {t.clips.map((c) => (
-                    <div key={c.id} className="st-clip" style={{ left: c.start * zoom, width: c.length * c.loops * zoom, background: COLORS[c.layer] }} onPointerDown={(e) => drag(e, c, t.id, 'move')} title={`${c.length} beats${c.loops > 1 ? ` × ${c.loops}` : ''} — drag to move, edges to trim, top-right to loop`} aria-label={`Clip ${t.name}`}>
+                    <div key={c.id} className={`st-clip${selected2 === c.id ? ' sel' : ''}`} style={{ left: c.start * zoom, width: c.length * c.loops * zoom, background: COLORS[c.layer] }} onPointerDown={(e) => drag(e, c, t.id, 'move')} title={`${c.length} beats${c.loops > 1 ? ` × ${c.loops}` : ''} — drag to move, edges to trim, top-right to loop`} aria-label={`Clip ${t.name}`}>
                       {Array.from({ length: c.loops - 1 }, (_, i) => <i key={i} className="st-loopmark" style={{ left: (i + 1) * c.length * zoom }} />)}
                       <span className="st-cliplabel">{c.length}b{c.loops > 1 ? ` ×${c.loops}` : ''}</span>
                       <b className="st-h left" onPointerDown={(e) => drag(e, c, t.id, 'left')} />
@@ -170,7 +201,7 @@ export function RemixPage({ incoming }: { incoming?: SongRef | null }) {
                       <b className="st-h loop" onPointerDown={(e) => drag(e, c, t.id, 'loop')} title="Drag to loop" />
                     </div>
                   ))}
-                  <button className="st-addclip" onClick={(e) => { e.stopPropagation(); const last = t.clips[t.clips.length - 1]; if (last) edit((p) => ({ ...p, tracks: p.tracks.map((x) => (x.id === t.id ? { ...x, clips: [...x.clips, { ...last, id: uid('c'), start: last.start + last.length * last.loops, loops: 1 }] } : x)) })); }} style={{ left: Math.max(0, ...t.clips.map((c) => (c.start + c.length * c.loops) * zoom)) + 6 }} aria-label={`Repeat the last clip of ${t.name}`}>+</button>
+                  <button className="st-addclip" onClick={(e) => { e.stopPropagation(); const last = t.clips[t.clips.length - 1]; if (last) change((p) => ({ ...p, tracks: p.tracks.map((x) => (x.id === t.id ? { ...x, clips: [...x.clips, { ...last, id: uid('c'), start: last.start + last.length * last.loops, loops: 1 }] } : x)) })); }} style={{ left: Math.max(0, ...t.clips.map((c) => (c.start + c.length * c.loops) * zoom)) + 6 }} aria-label={`Repeat the last clip of ${t.name}`}>+</button>
                 </div>
               </div>
             ))}

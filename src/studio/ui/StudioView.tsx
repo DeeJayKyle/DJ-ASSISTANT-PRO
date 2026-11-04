@@ -37,7 +37,7 @@ export function StudioView({ host, tab: controlled, onTab, showTabs = true }: { 
         )}
         {/* Pages stay mounted so playing decks and loaded remixes survive tab changes. */}
         <div hidden={current !== 'stems'}><StemsPage onSendToRemix={(s) => { setToRemix({ ...s }); setTab('remix'); }} onSendToDeck={(s) => { setToDeck({ ...s }); setTab('dj'); }} /></div>
-        <div hidden={current !== 'remix'}><RemixPage incoming={toRemix} /></div>
+        <div hidden={current !== 'remix'}><RemixPage incoming={toRemix} active={current === 'remix'} /></div>
         <div hidden={current !== 'dj'}><DjPage incoming={toDeck} /></div>
         <div hidden={current !== 'synth'}><SynthLab active={current === 'synth'} /></div>
         <div hidden={current !== 'drums'}><DrumLab active={current === 'drums'} /></div>

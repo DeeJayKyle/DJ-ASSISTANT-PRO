@@ -618,6 +618,19 @@ await step("Studio Remix: add stems and songs, auto-synced, export the remix", a
   await page.getByRole("button", { name: "+ Song" }).click();
   const t0 = Date.now(); while ((await page.locator(".st-trackrow").count()) < 2 && Date.now() - t0 < 60000) await page.waitForTimeout(200);
   expect((await page.locator(".st-trackrow").count()) === 2, "second track missing");
+  const clips = () => page.locator(".st-clip").count();
+  const n = await clips();
+  await page.locator(".st-clip").first().click();
+  await page.getByRole("button", { name: "Duplicate clip" }).click();
+  await page.waitForTimeout(200);
+  expect((await clips()) === n + 1, "clip not duplicated");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await page.waitForTimeout(200);
+  expect((await clips()) === n, "undo did not remove the duplicate");
+  await page.getByRole("button", { name: "Redo" }).click();
+  await page.waitForTimeout(200);
+  expect((await clips()) === n + 1, "redo did not restore it");
+  await page.getByRole("button", { name: "Undo" }).click();
   await page.screenshot({ path: path.join(shots, "31-studio-remix.png") });
   await page.getByRole("button", { name: "Export remix (WAV)" }).click();
   await waitFile(path.join(studioOut, "My Remix.wav"));
@@ -638,7 +651,15 @@ await step("Studio DJ: two decks, sync matches tempo, deck plays", async () => {
   expect(b[0] === b[2] && b[0] !== "—", `bpms ${b}`);
   const time = await page.locator(".st-deck").first().locator(".st-mono").first().innerText();
   expect(!time.startsWith("0:00 /"), `deck A not playing: ${time}`);
+  await page.getByRole("button", { name: "Loop 4 beats on deck A" }).click();
+  expect((await page.getByRole("button", { name: "Loop 4 beats on deck A" }).getAttribute("aria-pressed")) === "true", "loop not on");
+  await page.getByRole("button", { name: "Set hot cue 1 on deck A" }).click();
+  await page.getByRole("button", { name: "Jump to hot cue 1 on deck A" }).waitFor();
+  await page.getByLabel("low EQ deck A").fill("-24");
+  await page.getByLabel("Filter deck B").fill("-0.5");
+  await page.getByText("low-pass").waitFor();
   await page.screenshot({ path: path.join(shots, "32-studio-dj.png") });
+  await page.getByRole("button", { name: "Loop 4 beats on deck A" }).click();
   await page.getByRole("button", { name: "Pause deck A" }).click();
 });
 
@@ -659,7 +680,21 @@ await step("Studio Synth Lab and Drum Lab: sounds from words, played and saved",
   await page.getByRole("button", { name: "Download kit" }).click();
   await waitFile(path.join(studioOut, "Warm Disco House Kit", "Warm Disco House Kit.sfz"));
   expect(listDir(path.join(studioOut, "Warm Disco House Kit")).filter((f) => f.endsWith(".wav")).length === 16, "kit pads");
+  await page.getByRole("button", { name: "Play pattern" }).click();
+  await page.getByRole("gridcell").first().click();
+  const seen = new Set();
+  for (let t = 0; t < 8; t++) {
+    seen.add(await page.locator(".st-seq-row").first().locator(".st-step").evaluateAll((els) => els.findIndex((e) => e.classList.contains("now"))));
+    await page.waitForTimeout(150);
+  }
+  expect(seen.size >= 3 && !seen.has(-1), `playhead did not move: ${[...seen]}`);
   await page.screenshot({ path: path.join(shots, "34-studio-drums.png") });
+  await page.getByRole("button", { name: "Stop pattern" }).click();
+  await page.getByRole("button", { name: "Export loop (WAV)" }).click();
+  await waitFile(path.join(studioOut, "Warm Disco House Kit 124 bpm.wav"));
+  await page.getByRole("button", { name: "Export pattern (MIDI)" }).click();
+  await waitFile(path.join(studioOut, "Warm Disco House Kit 124 bpm.mid"));
+  expect(readFileSync(path.join(studioOut, "Warm Disco House Kit 124 bpm.mid")).subarray(0, 4).toString() === "MThd", "pattern MIDI");
 });
 
 // ---------------------------------------------------------------- local accounts

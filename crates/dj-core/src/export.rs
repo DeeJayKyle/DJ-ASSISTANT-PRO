@@ -129,12 +129,24 @@ fn studio_guard(path: &Path, overwrite: bool) -> Result<()> {
 }
 
 /// Writes one Studio file the DJ chose in a save dialog (it already asked about replacing).
+/// Writes beside the target and renames, so a half-written file is never left behind.
 pub fn write_bytes(path: &Path, bytes: &[u8], overwrite: bool) -> Result<()> {
     studio_guard(path, overwrite)?;
-    let mut f = std::fs::File::create(path)?;
-    f.write_all(bytes)?;
-    f.sync_all()?;
-    Ok(())
+    let mut part = path.as_os_str().to_owned();
+    part.push(".part");
+    let part = std::path::PathBuf::from(part);
+    let written = (|| -> Result<()> {
+        let mut f = std::fs::File::create(&part)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&part, path)?;
+        Ok(())
+    })();
+    if written.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    written
 }
 
 fn safe_segment(s: &str) -> String {
@@ -233,6 +245,12 @@ mod tests {
         );
         write_bytes(&d.path().join("song.mid"), b"MThd", false).unwrap();
         assert!(write_bytes(&d.path().join("song.mid"), b"MThd", false).is_err());
+        write_bytes(&d.path().join("song.mid"), b"MThd2", true).unwrap();
+        assert_eq!(std::fs::read(d.path().join("song.mid")).unwrap(), b"MThd2");
+        assert!(
+            !d.path().join("song.mid.part").exists() && !d.path().join("mix.wav.part").exists(),
+            "no temporary files are left behind"
+        );
     }
     #[test]
     fn refuses_audio_extensions_and_existing_files() {

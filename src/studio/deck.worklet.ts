@@ -25,6 +25,7 @@ class DeckProcessor extends AudioWorkletProcessor {
         if (m.type === 'rate') this.deck.rate = m.rate * (this.srcRate / sampleRate);
         if (m.type === 'pitch') this.deck.pitch = m.pitch * (this.srcRate / sampleRate);
         if (m.type === 'gains') this.deck.gains = m.gains;
+        if (m.type === 'loop') this.deck.loop = m.start == null ? null : { start: m.start * this.srcRate, end: m.end * this.srcRate };
       }
     };
   }
@@ -32,7 +33,7 @@ class DeckProcessor extends AudioWorkletProcessor {
     const out = outputs[0];
     if (!this.deck || out.length < 2) return true;
     this.deck.render(out, out[0].length);
-    if (++this.tick % 12 === 0) this.port.postMessage({ type: 'time', sec: this.deck.time(this.srcRate), playing: this.deck.playing, ended: this.deck.pos >= this.deck.length });
+    if (++this.tick % 12 === 0) this.port.postMessage({ type: 'time', sec: this.deck.time(this.srcRate), playing: this.deck.playing, ended: this.deck.pos >= this.deck.length, looping: !!this.deck.loop });
     return true;
   }
 }

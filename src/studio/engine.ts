@@ -44,6 +44,7 @@ export class StudioEngine {
   ctx: AudioContext;
   private pool: Pool;
   songs = new Map<string, Loaded>();
+  static KEEP = 8;
   private workletReady: Promise<void> | null = null;
 
   constructor() {
@@ -59,7 +60,8 @@ export class StudioEngine {
   /** Decodes a song from its URL (cached). */
   async load(song: SongRef, url: string): Promise<Loaded> {
     const hit = this.songs.get(song.id);
-    if (hit) return hit;
+    // most-recently used last, so the oldest is evicted first
+    if (hit) { this.songs.delete(song.id); this.songs.set(song.id, hit); return hit; }
     const res = await fetch(url);
     if (!res.ok) throw new Error('Could not read the file');
     const buf = await res.arrayBuffer();
@@ -69,6 +71,8 @@ export class StudioEngine {
     const mix = [audio.getChannelData(0).slice(), (audio.numberOfChannels > 1 ? audio.getChannelData(1) : audio.getChannelData(0)).slice()];
     const loaded: Loaded = { song, sampleRate: audio.sampleRate, mix };
     this.songs.set(song.id, loaded);
+    // decoded audio and stems are large: keep only the most recent songs in memory
+    while (this.songs.size > StudioEngine.KEEP) this.songs.delete(this.songs.keys().next().value as string);
     return loaded;
   }
 

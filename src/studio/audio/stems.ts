@@ -18,18 +18,6 @@ const N = 4096;
 const HOP = 1024;
 const MED = 17; // median window (frames for time, bins for frequency)
 
-function median(a: Float32Array, scratch: Float32Array) {
-  scratch.set(a);
-  // insertion sort: tiny arrays
-  for (let i = 1; i < scratch.length; i++) {
-    const x = scratch[i];
-    let j = i - 1;
-    while (j >= 0 && scratch[j] > x) { scratch[j + 1] = scratch[j]; j--; }
-    scratch[j + 1] = x;
-  }
-  return scratch[scratch.length >> 1];
-}
-
 const smooth = (x: number, a: number, b: number) => (x <= a ? 0 : x >= b ? 1 : ((x - a) / (b - a)) ** 2 * (3 - 2 * (x - a) / (b - a)));
 
 const WIN = (() => { const w = new Float32Array(N); for (let i = 0; i < N; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N); return w; })(); // periodic Hann
@@ -82,40 +70,60 @@ export function separatePart(channels: Float32Array[], inStart: number, len: num
   }
 
   type Frame = { lr: Float32Array; li: Float32Array; rr: Float32Array; ri: Float32Array; mag: Float32Array; start: number };
-  const ring: Frame[] = [];
-  const reL = new Float64Array(N), imL = new Float64Array(N), reR = new Float64Array(N), imR = new Float64Array(N);
-  const tScratch = new Float32Array(MED), tVals = new Float32Array(MED);
-  const fScratch = new Float32Array(MED), fVals = new Float32Array(MED);
+  // A fixed pool of frames, reused as a ring (no per-frame allocation).
+  const pool: Frame[] = Array.from({ length: MED }, () => ({ lr: new Float32Array(bins), li: new Float32Array(bins), rr: new Float32Array(bins), ri: new Float32Array(bins), mag: new Float32Array(bins), start: 0 }));
+  let ringStart = 0, ringLen = 0; // ring = pool[(ringStart + i) % MED] for i < ringLen
+  const zr = new Float64Array(N), zi = new Float64Array(N);
 
-  const analyse = (start: number): Frame => {
+  // Both channels in one forward FFT: z = l + i·r, then XL = (Z[k] + conj Z[N-k]) / 2, XR = (Z[k] − conj Z[N-k]) / 2i.
+  const analyse = (start: number, f: Frame) => {
     for (let i = 0; i < N; i++) {
       const j = start + i, q = j - inStart;
-      const w = win[i];
       const inside = j >= 0 && j < len && q >= 0 && q < L.length;
-      reL[i] = inside ? L[q] * w : 0; imL[i] = 0;
-      reR[i] = inside ? R[q] * w : 0; imR[i] = 0;
+      zr[i] = inside ? L[q] * win[i] : 0;
+      zi[i] = inside ? R[q] * win[i] : 0;
     }
-    fft(reL, imL); fft(reR, imR);
-    const f: Frame = { lr: new Float32Array(bins), li: new Float32Array(bins), rr: new Float32Array(bins), ri: new Float32Array(bins), mag: new Float32Array(bins), start };
+    fft(zr, zi);
     for (let k = 0; k < bins; k++) {
-      f.lr[k] = reL[k]; f.li[k] = imL[k]; f.rr[k] = reR[k]; f.ri[k] = imR[k];
-      f.mag[k] = (Math.hypot(reL[k], imL[k]) + Math.hypot(reR[k], imR[k])) / 2;
+      const m = k === 0 ? 0 : N - k;
+      const ar = zr[k], ai = zi[k], cr = zr[m], ci = zi[m];
+      const lr = (ar + cr) / 2, li = (ai - ci) / 2, rr = (ai + ci) / 2, ri = -(ar - cr) / 2;
+      f.lr[k] = lr; f.li[k] = li; f.rr[k] = rr; f.ri[k] = ri;
+      f.mag[k] = (Math.sqrt(lr * lr + li * li) + Math.sqrt(rr * rr + ri * ri)) / 2;
     }
-    return f;
+    f.start = start;
   };
+
+  // Per-bin sorted windows of the last MED magnitudes, updated as frames arrive (running time median).
+  const tWin = new Float32Array(bins * MED);
+  let tCount = 0;
+  const sortedInsert = (arr: Float32Array, off: number, n: number, v: number) => {
+    let i = off + n - 1;
+    while (i >= off && arr[i] > v) { arr[i + 1] = arr[i]; i--; }
+    arr[i + 1] = v;
+  };
+  const sortedRemove = (arr: Float32Array, off: number, n: number, v: number) => {
+    let i = off;
+    const end = off + n;
+    while (i < end && arr[i] !== v) i++;
+    for (; i < end - 1; i++) arr[i] = arr[i + 1];
+  };
+  const fSorted = new Float32Array(MED);
 
   const sre = new Float64Array(N), sim = new Float64Array(N);
   const masks = [new Float32Array(bins), new Float32Array(bins), new Float32Array(bins), new Float32Array(bins)];
   // Both channels in one inverse FFT: x = ifft(XL + i·XR) has xL as its real part and xR as its imaginary part.
   const synth = (f: Frame) => {
-    STEMS.forEach((stem, s) => {
+    // Melodies are what's left (the masks add up to one), so only three stems need an inverse FFT.
+    for (let s = 0; s < 3; s++) {
+      const stem = STEMS[s];
       const m = masks[s];
       for (let k = 0; k < bins; k++) {
-        const lr = f.lr[k] * m[k], li = f.li[k] * m[k], rr = f.rr[k] * m[k], ri = f.ri[k] * m[k];
-        sre[k] = lr - ri; sim[k] = li + rr;
-        if (k > 0 && k < N / 2) { sre[N - k] = lr + ri; sim[N - k] = -li + rr; }
+        const g = m[k];
+        const lr = f.lr[k] * g, li = f.li[k] * g, rr = f.rr[k] * g, ri = f.ri[k] * g;
+        sre[k] = lr - ri; sim[k] = -(li + rr);
+        if (k > 0 && k < N / 2) { sre[N - k] = lr + ri; sim[N - k] = li - rr; }
       }
-      for (let k = 0; k < N; k++) sim[k] = -sim[k];
       fft(sre, sim);
       const dl = out[stem][0], dr = out[stem][1];
       for (let i = 0; i < N; i++) {
@@ -124,29 +132,57 @@ export function separatePart(channels: Float32Array[], inStart: number, len: num
         const w = win[i] / N;
         dl[j] += sre[i] * w; dr[j] -= sim[i] * w;
       }
-    });
-    for (let i = 0; i < N; i++) { const j = f.start + i - spanStart; if (j >= 0 && j < span) norm[j] += win[i] * win[i]; }
+    }
+    const ml = out.melodies[0], mr = out.melodies[1];
+    for (let i = 0; i < N; i++) {
+      const j = f.start + i - spanStart;
+      if (j < 0 || j >= span) continue;
+      const w2 = win[i] * win[i];
+      norm[j] += w2;
+      const q = f.start + i - inStart;
+      if (q >= 0 && q < L.length && f.start + i < len) { ml[j] += L[q] * w2; mr[j] += R[q] * w2; }
+    }
   };
 
   const first = Math.max(0, f0 - HALF), last = Math.min(frames, f1 + HALF); // frames to analyse
   for (let t = first; t < last + HALF; t++) {
-    if (t < last) { ring.push(analyse(t * HOP - PAD)); if (ring.length > MED) ring.shift(); }
+    if (t < last) {
+      // reuse the oldest frame slot once the ring is full
+      let slot: Frame;
+      if (ringLen < MED) { slot = pool[(ringStart + ringLen) % MED]; ringLen++; }
+      else {
+        slot = pool[ringStart];
+        for (let k = 0; k < bins; k++) sortedRemove(tWin, k * MED, MED, slot.mag[k]);
+        tCount = MED - 1;
+        ringStart = (ringStart + 1) % MED;
+      }
+      analyse(t * HOP - PAD, slot);
+      for (let k = 0; k < bins; k++) sortedInsert(tWin, k * MED, tCount, slot.mag[k]);
+      tCount++;
+    }
     const centre = t - HALF;
     if (centre < f0 || centre >= f1) continue;
     const newest = Math.min(t, last - 1);
-    const f = ring[ring.length - 1 - (newest - centre)];
-    if (!f) continue;
-    const full = ring.length === MED;
+    const back = newest - centre;
+    if (back >= ringLen) continue;
+    const f = pool[(ringStart + ringLen - 1 - back) % MED];
+    const full = tCount === MED;
+    const mag = f.mag;
+    // running frequency median: start with the window around bin 0 (edges clamped)
+    let fn = 0;
+    for (let d = -HALF; d <= HALF; d++) sortedInsert(fSorted, 0, fn++, mag[Math.min(bins - 1, Math.max(0, d))]);
     for (let k = 0; k < bins; k++) {
-      let H = f.mag[k];
-      if (full) { for (let q = 0; q < MED; q++) tVals[q] = ring[q].mag[k]; H = median(tVals, tScratch); }
-      for (let d = -HALF; d <= HALF; d++) fVals[d + HALF] = f.mag[Math.min(bins - 1, Math.max(0, k + d))];
-      const P = median(fVals, fScratch);
+      if (k > 0) {
+        sortedRemove(fSorted, 0, MED, mag[Math.max(0, k - 1 - HALF)]);
+        sortedInsert(fSorted, 0, MED - 1, mag[Math.min(bins - 1, k + HALF)]);
+      }
+      const H = full ? tWin[k * MED + HALF] : mag[k];
+      const P = fSorted[HALF];
       const h = (H * H) / (H * H + P * P + 1e-12);
       const p = 1 - h;
-      const ml = Math.hypot(f.lr[k], f.li[k]), mr = Math.hypot(f.rr[k], f.ri[k]);
-      const dot = f.lr[k] * f.rr[k] + f.li[k] * f.ri[k];
-      const c = ml + mr > 1e-12 ? Math.max(0, (2 * dot) / (ml * ml + mr * mr + 1e-12)) : 0;
+      const lr = f.lr[k], li = f.li[k], rr = f.rr[k], ri = f.ri[k];
+      const e = lr * lr + li * li + rr * rr + ri * ri;
+      const c = e > 1e-24 ? Math.max(0, (2 * (lr * rr + li * ri)) / (e + 1e-12)) : 0;
       const centred = c * c * vocalBand[k];
       const v = h * centred;
       const b = h * bassBand[k] * (1 - centred);
@@ -158,6 +194,11 @@ export function separatePart(channels: Float32Array[], inStart: number, len: num
     }
     synth(f);
     if (onProgress && centre % 64 === 0) onProgress(Math.min(1, (centre - f0) / Math.max(1, f1 - f0)));
+  }
+  // melodies = (windowed mix) − vocals − drums − bass, all still un-normalised
+  for (let c = 0; c < 2; c++) {
+    const m = out.melodies[c], v = out.vocals[c], d = out.drums[c], b = out.bass[c];
+    for (let i = 0; i < span; i++) m[i] -= v[i] + d[i] + b[i];
   }
   onProgress?.(1);
   return { start: spanStart, stems: out, norm };

@@ -4,6 +4,8 @@ import { renderNote, type Patch } from '../sound/synth';
 import { renderPad, type Kit, type Pad } from '../sound/drums';
 import { patchFromPrompt, kitFromPrompt, patchFromAi, SYNTH_IDEAS, DRUM_IDEAS, AI_SYNTH_SYSTEM } from '../sound/prompt';
 import { instrumentFiles, kitFiles } from '../sound/export';
+import { defaultPattern, renderPattern, patternMidi, stepTimes, STEPS, type Pattern } from '../sound/sequence';
+import { encodeWav } from '../audio/wav';
 
 const shuffle = <T,>(a: T[], n: number) => [...a].sort(() => Math.random() - 0.5).slice(0, n);
 const typing = (e: KeyboardEvent) => ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName);
@@ -260,6 +262,88 @@ export function DrumLab({ active = true }: { active?: boolean }) {
           </div>
         </section>
       </div>
+      <Sequencer kit={kit} />
     </div>
+  );
+}
+
+/** A 16-step pattern for the kit: loops while you edit it, exports as WAV or MIDI. */
+function Sequencer({ kit }: { kit: Kit }) {
+  const { host, engine } = useStudio();
+  const [pat, setPat] = useState<Pattern>(() => defaultPattern(kit));
+  const [playing, setPlaying] = useState(false);
+  const [step, setStep] = useState(-1);
+  const src = useRef<{ node: AudioBufferSourceNode; started: number; len: number } | null>(null);
+  // a new kit with a different pad count gets a fresh groove
+  useEffect(() => { setPat((p) => (p.steps.length === kit.pads.length ? p : defaultPattern(kit, p.bpm))); }, [kit]);
+
+  const stop = useCallback(() => { try { src.current?.node.stop(); } catch { /* already stopped */ } src.current = null; setPlaying(false); setStep(-1); }, []);
+  const start = useCallback((p: Pattern) => {
+    const ctx = engine.ctx;
+    const [L, R] = renderPattern(kit, p, 1, ctx.sampleRate);
+    const buf = ctx.createBuffer(2, L.length, ctx.sampleRate);
+    buf.getChannelData(0).set(L); buf.getChannelData(1).set(R);
+    const node = ctx.createBufferSource();
+    node.buffer = buf; node.loop = true; node.connect(ctx.destination);
+    // keep the bar position when re-rendering mid-play, so edits don't jump
+    const old = src.current;
+    const offset = old ? ((ctx.currentTime - old.started) % old.len) * (buf.duration / old.len) : 0;
+    node.start(ctx.currentTime, offset);
+    if (old) { try { old.node.stop(); } catch { /* fine */ } }
+    src.current = { node, started: ctx.currentTime - offset, len: buf.duration };
+  }, [engine, kit]);
+
+  // re-render while playing whenever the pattern or kit changes
+  useEffect(() => { if (playing) start(pat); }, [pat, kit, playing, start]);
+  useEffect(() => () => stop(), [stop]);
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const times = stepTimes(pat);
+    const tick = () => {
+      const s = src.current;
+      if (s) { const t = (engine.ctx.currentTime - s.started) % s.len; let k = 0; while (k + 1 < STEPS && times[k + 1] <= t) k++; setStep(k); }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, pat, engine]);
+
+  const toggle = (row: number, s: number) => setPat((p) => ({ ...p, steps: p.steps.map((r, i) => (i === row ? r.map((on, j) => (j === s ? !on : on)) : r)) }));
+  const clear = () => setPat((p) => ({ ...p, steps: p.steps.map((r) => r.map(() => false)) }));
+  const save = async (kind: 'wav' | 'mid') => {
+    try {
+      const bytes = kind === 'wav' ? encodeWav(renderPattern(kit, pat, 4, 44100), 44100) : patternMidi(kit, pat, 4);
+      const where = await host.saveFile(`${kit.name} ${pat.bpm} bpm.${kind}`, bytes);
+      if (where) host.toast(kind === 'wav' ? 'Saved a 4-bar loop.' : 'Saved the pattern as MIDI.');
+    } catch (e) { host.toast(errText(e), true); }
+  };
+  const rows = kit.pads.map((p, i) => ({ p, i })).filter(({ i }) => i < 8 || pat.steps[i]?.some(Boolean));
+
+  return (
+    <section className="st-panel">
+      <div className="st-row st-wrap">
+        <h2 className="st-h2 st-grow">Pattern</h2>
+        <label className="st-field">Tempo <span className="st-mono">{pat.bpm} BPM</span><input type="range" min={60} max={180} step={1} value={pat.bpm} onChange={(e) => setPat({ ...pat, bpm: Number(e.target.value) })} aria-label="Pattern tempo" /></label>
+        <label className="st-field">Swing <span className="st-mono">{Math.round(pat.swing * 100)}%</span><input type="range" min={0} max={0.6} step={0.01} value={pat.swing} onChange={(e) => setPat({ ...pat, swing: Number(e.target.value) })} aria-label="Pattern swing" /></label>
+        <button className="st-btn primary" onClick={() => { void engine.resume(); if (playing) stop(); else setPlaying(true); }}>{playing ? 'Stop pattern' : 'Play pattern'}</button>
+        <button className="st-btn" onClick={clear}>Clear</button>
+        <button className="st-btn" onClick={() => setPat(defaultPattern(kit, pat.bpm))}>Reset groove</button>
+        <button className="st-btn" onClick={() => save('wav')}>Export loop (WAV)</button>
+        <button className="st-btn" onClick={() => save('mid')}>Export pattern (MIDI)</button>
+      </div>
+      <div className="st-seq" role="grid" aria-label="Drum pattern">
+        {rows.map(({ p, i }) => (
+          <div className="st-seq-row" role="row" key={i}>
+            <span className="st-seq-name">{p.name}</span>
+            {Array.from({ length: STEPS }, (_, s) => {
+              const on = !!pat.steps[i]?.[s];
+              return <button key={s} role="gridcell" aria-pressed={on} aria-label={`${p.name} step ${s + 1}`} className={`st-step${on ? ' on' : ''}${s === step ? ' now' : ''}${s % 4 === 0 ? ' beat' : ''}`} onClick={() => toggle(i, s)} />;
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="st-muted st-tiny">The first 8 pads are shown, plus any other pad with hits. Edits play straight away.</p>
+    </section>
   );
 }

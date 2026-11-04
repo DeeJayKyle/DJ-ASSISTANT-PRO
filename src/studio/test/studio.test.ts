@@ -10,6 +10,7 @@ import { renderNote } from '../sound/synth';
 import { renderPad } from '../sound/drums';
 import { patchFromPrompt, kitFromPrompt, patchFromAi } from '../sound/prompt';
 import { kitFiles, instrumentFiles } from '../sound/export';
+import { defaultPattern, renderPattern, patternMidi, stepTimes } from '../sound/sequence';
 import { renderProject, keyShift, type Project, type Source } from '../remix';
 
 const SR = 22050;
@@ -131,6 +132,22 @@ describe('tempo and key changes', () => {
     expect(Math.abs(zeroCrossHz(o2[0].subarray(3000), SR) - 440 * 2 ** (2 / 12))).toBeLessThan(15);
   });
 
+  it('loops a deck on the beat', () => {
+    const a = tone(220, 4);
+    const deck = new Deck([[a, a]]);
+    deck.seek(SR * 1);
+    deck.loop = { start: SR * 1, end: SR * 1.5 };
+    deck.playing = true;
+    const o = [new Float32Array(128), new Float32Array(128)];
+    let maxPos = 0;
+    for (let i = 0; i < (SR * 3) / 128; i++) { deck.render(o, 128); maxPos = Math.max(maxPos, deck.pos); }
+    expect(maxPos).toBeLessThan(SR * 1.5 + 1024);
+    expect(deck.pos).toBeGreaterThanOrEqual(SR * 1);
+    deck.loop = null;
+    for (let i = 0; i < (SR * 1) / 128; i++) deck.render(o, 128);
+    expect(deck.pos).toBeGreaterThan(SR * 1.6);
+  });
+
   it('moves keys the short way round', () => {
     expect(semitoneShift(9, 0)).toBe(3);
     expect(semitoneShift(0, 11)).toBe(-1);
@@ -212,4 +229,25 @@ describe('parallel separation', () => {
     for (const st of STEMS) for (let c = 0; c < 2; c++) for (let i = 0; i < L.length; i += 3) err = Math.max(err, Math.abs(got[st][c][i] - ref[st][c][i]));
     expect(err).toBeLessThan(1e-5);
   }, 60_000);
+});
+
+describe('drum sequencer', () => {
+  it('plays a pattern on the grid, with swing, as a seamless loop and as MIDI', () => {
+    const kit = kitFromPrompt('warm disco house kit');
+    const p = defaultPattern(kit, 120);
+    expect(p.steps[0].filter(Boolean)).toHaveLength(4); // four-on-the-floor
+    const loop = renderPattern(kit, p, 2, SR);
+    expect(loop[0].length).toBe(Math.round(4 * SR)); // 2 bars at 120 BPM = 4 s
+    expect(loop[0].every(Number.isFinite)).toBe(true);
+    // the first kick lands at 0, the second at one beat
+    const env = (t: number) => { let e = 0; const i = Math.round(t * SR); for (let j = i; j < i + 200; j++) e += loop[0][j] ** 2; return e; };
+    expect(env(0.5)).toBeGreaterThan(env(0.4) * 2);
+    const swung = stepTimes({ ...p, swing: 0.5 });
+    expect(swung[1] - stepTimes(p)[1]).toBeCloseTo((0.125 * 0.5) * 0.5, 5);
+    expect(swung[2]).toBeCloseTo(stepTimes(p)[2], 9);
+    const midi = readMidi(patternMidi(kit, p, 4));
+    const kicks = midi.tracks[1].notes.filter((n) => n.pitch === kit.pads[0].note);
+    expect(kicks).toHaveLength(16);
+    expect(kicks[1].tick).toBe(480);
+  });
 });
