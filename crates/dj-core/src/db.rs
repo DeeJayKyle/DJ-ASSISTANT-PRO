@@ -342,6 +342,17 @@ ALTER TABLE track_user ADD COLUMN record_label TEXT;
     r#"
 ALTER TABLE analysis ADD COLUMN energy_raw REAL;
 "#,
+    // 4: video files (music videos, visuals)
+    r#"
+ALTER TABLE tracks ADD COLUMN media_kind TEXT NOT NULL DEFAULT 'audio';
+ALTER TABLE tracks ADD COLUMN video_codec TEXT;
+ALTER TABLE tracks ADD COLUMN width INTEGER;
+ALTER TABLE tracks ADD COLUMN height INTEGER;
+ALTER TABLE tracks ADD COLUMN frame_rate REAL;
+CREATE INDEX idx_tracks_media ON tracks(media_kind);
+-- Re-read .mp4 files once so music videos are recognised as video.
+UPDATE tracks SET file_mtime = NULL WHERE extension = 'mp4';
+"#,
 ];
 
 pub fn now_ms() -> i64 {

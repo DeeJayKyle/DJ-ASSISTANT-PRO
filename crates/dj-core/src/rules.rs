@@ -114,10 +114,14 @@ fn field(id: &str, low_kbps: u32) -> Option<(String, FieldType)> {
         "file_size_mb" => (s("(t.file_size / 1048576.0)"), Number),
         "added" => (s("t.first_seen_at"), Number),
         "lossless" => (s("t.lossless"), Bool),
+        "media" => (s("t.media_kind"), Enum),
+        "video_codec" => (s("t.video_codec"), Text),
+        "video_height" => (s("t.height"), Number),
+        "frame_rate" => (s("t.frame_rate"), Number),
         "tag" => (s(""), Tag),
         "quality" => (
             format!(
-                "(CASE WHEN t.lossless=1 THEN 'lossless' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL AND t.bitrate_kbps < {low_kbps} THEN 'low_bitrate' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL THEN 'lossy' ELSE 'unknown' END)"
+                "(CASE WHEN t.media_kind='video' THEN 'video' WHEN t.lossless=1 THEN 'lossless' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL AND t.bitrate_kbps < {low_kbps} THEN 'low_bitrate' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL THEN 'lossy' ELSE 'unknown' END)"
             ),
             Enum,
         ),
@@ -259,6 +263,26 @@ pub const FIELD_LIST: &[FieldInfo] = &[
         id: "lossless",
         label: "Lossless",
         kind: "bool",
+    },
+    FieldInfo {
+        id: "media",
+        label: "Media (audio / video)",
+        kind: "enum",
+    },
+    FieldInfo {
+        id: "video_codec",
+        label: "Video codec",
+        kind: "text",
+    },
+    FieldInfo {
+        id: "video_height",
+        label: "Video height (e.g. 1080)",
+        kind: "number",
+    },
+    FieldInfo {
+        id: "frame_rate",
+        label: "Frame rate (fps)",
+        kind: "number",
     },
     FieldInfo {
         id: "duration",

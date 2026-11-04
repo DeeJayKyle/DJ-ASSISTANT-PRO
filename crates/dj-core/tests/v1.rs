@@ -1260,3 +1260,179 @@ fn health_fix_list_offers_local_hints_and_saves_to_catalogue() {
         .is_err());
     assert_eq!(before, snapshot(&e.music));
 }
+
+#[test]
+fn video_files_are_catalogued_read_only() {
+    let e = env();
+    let app = e.app();
+    let vids = e.music.join("Videos");
+    copy_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/video"),
+        &vids,
+    );
+    let before = snapshot(&vids);
+    add_and_scan(&app, &e.music);
+    let page = search(&app, json!({"limit": 500, "include_missing": true}));
+    let row = |f: &str| find(&page, f).clone();
+    for r in page["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["path"].as_str().unwrap().contains("Videos"))
+    {
+        println!(
+            "{} | {} {} {}x{} {}fps {} | {} - {} | {} {}",
+            r["file_name"],
+            r["media_kind"],
+            r["format"],
+            r["width"],
+            r["height"],
+            r["frame_rate"],
+            r["video_codec"],
+            r["artist"],
+            r["title"],
+            r["quality"],
+            r["status"]
+        );
+    }
+    let mp4 = row("Lagos Lights - Sunrise Groove (Video).mp4");
+    assert_eq!(mp4["media_kind"], "video");
+    assert_eq!(mp4["format"], "MP4");
+    assert_eq!(mp4["video_codec"], "H.264");
+    assert_eq!(
+        (mp4["width"].as_i64(), mp4["height"].as_i64()),
+        (Some(320), Some(180))
+    );
+    assert_eq!(mp4["frame_rate"].as_f64(), Some(25.0));
+    assert_eq!(mp4["artist"], "Lagos Lights");
+    assert_eq!(mp4["genre"], "Afrobeats");
+    assert_eq!(mp4["quality"], "video");
+    assert!((1900..=2100).contains(&mp4["duration_ms"].as_i64().unwrap()));
+    let mov = row("Mirrorball.mov");
+    assert_eq!(
+        (mov["media_kind"].as_str(), mov["format"].as_str()),
+        (Some("video"), Some("MOV"))
+    );
+    let mkv = row("Deep Tenant - Warehouse Visuals.mkv");
+    assert_eq!(
+        (mkv["format"].as_str(), mkv["video_codec"].as_str()),
+        (Some("MKV"), Some("VP9"))
+    );
+    assert_eq!(mkv["artist"], "Deep Tenant");
+    assert_eq!(mkv["genre"], "House");
+    assert_eq!(mkv["frame_rate"].as_f64(), Some(25.0));
+    let webm = row("Loop.webm");
+    assert_eq!(
+        (webm["format"].as_str(), webm["video_codec"].as_str()),
+        (Some("WebM"), Some("VP8"))
+    );
+    let avi = row("Old Visual.avi");
+    assert_eq!(
+        (avi["format"].as_str(), avi["video_codec"].as_str()),
+        (Some("AVI"), Some("MPEG-4 Part 2"))
+    );
+    assert_eq!(
+        (avi["width"].as_i64(), avi["frame_rate"].as_f64()),
+        (Some(320), Some(25.0))
+    );
+    assert_eq!(row("untitled clip.m4v")["media_kind"], "video");
+    // An .mp4 with only audio stays an audio track.
+    let a = row("Audio only.mp4");
+    assert_eq!(a["media_kind"], "audio");
+    assert_eq!(a["artist"], "Quiet Harbour");
+    assert_eq!(row("broken.mp4")["status"], "error");
+    assert_eq!(row("legacy.wmv")["status"], "unsupported");
+    assert_eq!(row("legacy.wmv")["media_kind"], "video");
+    // Filters: media + resolution; videos never count as low bitrate.
+    let q = |rules: Value| {
+        search(&app, json!({"filters": {"match": "all", "rules": rules}}))["total"]
+            .as_i64()
+            .unwrap()
+    };
+    assert_eq!(
+        q(json!([{"kind": "condition", "field": "media", "op": "equals", "value": "video"}])),
+        7
+    );
+    assert_eq!(
+        q(
+            json!([{"kind": "condition", "field": "video_height", "op": "gte", "value": 180}, {"kind": "condition", "field": "media", "op": "equals", "value": "video"}])
+        ),
+        6
+    );
+    assert_eq!(
+        q(
+            json!([{"kind": "condition", "field": "quality", "op": "equals", "value": "low_bitrate"}, {"kind": "condition", "field": "media", "op": "equals", "value": "video"}])
+        ),
+        0
+    );
+    // Turning video scanning off leaves video files out of new scans.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "scan_video", "value": false}),
+    );
+    assert_eq!(call(&app, "get_settings", json!({}))["scan_video"], false);
+    // Tag writing never touches video.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "allow_file_changes", "value": true}),
+    );
+    let plan = call(
+        &app,
+        "write_preview",
+        json!({"ids": [mp4["id"]], "values": {"genre": "X"}}),
+    );
+    println!("{plan}");
+    assert!(plan.to_string().contains("Video files are never written"));
+    assert_eq!(before, snapshot(&vids));
+}
+
+#[test]
+fn video_audio_is_analysed_where_decodable() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/video/Clips");
+    for (f, ok) in [
+        ("Lagos Lights - Sunrise Groove (Video).mp4", true),
+        ("Mirrorball.mov", true),
+        ("Loop.webm", true),
+    ] {
+        let r = dj_core::analysis::decode(&dir.join(f), 10.0);
+        assert_eq!(r.is_ok(), ok, "{f}: {:?}", r.as_ref().err());
+    }
+}
+
+#[test]
+fn corrupt_video_headers_are_rejected_without_panicking() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, bytes) in [
+        ("a.mp4", vec![0u8; 3]),
+        (
+            "b.mp4",
+            b"\x00\x00\x00\x10ftypisom\x00\x00\x00\x00".to_vec(),
+        ),
+        ("c.mp4", b"\xff\xff\xff\xffmoov".to_vec()),
+        (
+            "d.mkv",
+            vec![
+                0x1A, 0x45, 0xDF, 0xA3, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            ],
+        ),
+        ("e.webm", (0..255u8).collect()),
+        (
+            "f.avi",
+            b"RIFF\xff\xff\xff\xffAVI LIST\xff\xff\xff\x7fhdrl".to_vec(),
+        ),
+        (
+            "g.mov",
+            b"\x00\x00\x00\x01moov\x00\x00\x00\x00\x00\x00\x00\x02".to_vec(),
+        ),
+    ] {
+        let p = dir.path().join(name);
+        std::fs::write(&p, bytes).unwrap();
+        let ext = name.rsplit('.').next().unwrap();
+        assert!(
+            dj_core::video::probe(&p, ext).is_err(),
+            "{name} should be rejected"
+        );
+    }
+}

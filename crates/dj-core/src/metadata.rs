@@ -13,6 +13,13 @@ pub const SUPPORTED_EXTENSIONS: &[&str] = &[
     "mp3", "flac", "wav", "wave", "aif", "aiff", "aifc", "m4a", "mp4", "aac", "ogg", "oga", "opus",
     "ape", "wv", "mpc", "spx", "alac",
 ];
+/// Video containers DJs use for music videos and visuals. ".mp4" is listed
+/// with the audio formats above: its contents decide whether it is a video.
+pub const VIDEO_EXTENSIONS: &[&str] = &["m4v", "mov", "mkv", "webm", "avi"];
+/// Video formats we recognise but cannot read yet (listed as unsupported).
+pub const UNSUPPORTED_VIDEO_EXTENSIONS: &[&str] = &[
+    "wmv", "flv", "mpg", "mpeg", "m2ts", "mts", "vob", "3gp", "ogv",
+];
 /// Music-like extensions we recognise but cannot read reliably yet.
 /// They are listed in Library Health as unsupported rather than silently ignored.
 pub const UNSUPPORTED_MUSIC_EXTENSIONS: &[&str] = &[
@@ -23,6 +30,8 @@ pub const UNSUPPORTED_MUSIC_EXTENSIONS: &[&str] = &[
 pub enum ExtKind {
     Supported,
     UnsupportedMusic,
+    Video,
+    UnsupportedVideo,
     Other,
 }
 
@@ -32,6 +41,10 @@ pub fn classify_extension(ext: &str) -> ExtKind {
         ExtKind::Supported
     } else if UNSUPPORTED_MUSIC_EXTENSIONS.contains(&e.as_str()) {
         ExtKind::UnsupportedMusic
+    } else if VIDEO_EXTENSIONS.contains(&e.as_str()) {
+        ExtKind::Video
+    } else if UNSUPPORTED_VIDEO_EXTENSIONS.contains(&e.as_str()) {
+        ExtKind::UnsupportedVideo
     } else {
         ExtKind::Other
     }
@@ -66,6 +79,12 @@ pub struct AudioMeta {
     pub isrc: Option<String>,
     pub bpm: Option<f64>,
     pub key: Option<String>,
+    /// "video" when the file has a video track; None for audio.
+    pub media_kind: Option<String>,
+    pub video_codec: Option<String>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub frame_rate: Option<f64>,
 }
 
 fn clean(s: Option<&str>) -> Option<String> {
@@ -275,6 +294,75 @@ pub fn read_audio_meta(path: &Path) -> Result<AudioMeta, String> {
     if ft == FileType::Mp4 {
         if let Some(c) = &m.codec {
             m.format = Some(format!("M4A ({c})"));
+        }
+    }
+    Ok(m)
+}
+
+/// Read any supported media file: audio through lofty, video containers
+/// through the read-only probes in `video`. An .mp4 without a video track is
+/// treated as audio.
+pub fn read_media_meta(path: &Path) -> Result<AudioMeta, String> {
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    let is_container = ext == "mp4" || VIDEO_EXTENSIONS.contains(&ext.as_str());
+    if !is_container {
+        return read_audio_meta(path);
+    }
+    let v = match crate::video::probe(path, &ext) {
+        Ok(v) => v,
+        // A .mp4 that isn't ISO-BMFF may still be readable as audio by lofty.
+        Err(e) if ext == "mp4" => return read_audio_meta(path).map_err(|_| e),
+        Err(e) => return Err(e),
+    };
+    // Tags and audio properties from lofty where it understands the container.
+    let mut m = if matches!(ext.as_str(), "mp4" | "m4v" | "mov") {
+        read_audio_meta(path).unwrap_or_default()
+    } else {
+        AudioMeta::default()
+    };
+    if !v.has_video {
+        if ext == "mp4" || ext == "m4v" {
+            // Audio-only MP4: keep lofty's normal audio reading.
+            return read_audio_meta(path);
+        }
+        return Err("no video or audio track this version can read".into());
+    }
+    m.media_kind = Some("video".into());
+    m.format = Some(v.container.clone());
+    m.video_codec = v.video_codec;
+    m.width = v.width;
+    m.height = v.height;
+    m.frame_rate = v.frame_rate;
+    m.duration_ms = m.duration_ms.or(v.duration_ms);
+    if m.codec.is_none() || m.codec.as_deref() == Some("") {
+        m.codec = v.audio_codec.clone();
+    }
+    m.sample_rate = m.sample_rate.or(v.sample_rate);
+    m.channels = m.channels.or(v.channels);
+    m.lossless = match m.codec.as_deref().or(v.audio_codec.as_deref()) {
+        Some("PCM") | Some("FLAC") | Some("ALAC") | Some("PCM (float)") => Some(true),
+        Some(_) => Some(false),
+        None => None,
+    };
+    let fill = |dst: &mut Option<String>, src: Option<String>| {
+        if dst.is_none() {
+            *dst = src;
+        }
+    };
+    fill(&mut m.title, v.title);
+    fill(&mut m.artist, v.artist);
+    fill(&mut m.album, v.album);
+    fill(&mut m.genre, v.genre);
+    fill(&mut m.comment, v.comment);
+    if m.year.is_none() {
+        if let Some(d) = &v.date {
+            m.year = parse_year(d);
+            if m.date_text.is_none() {
+                m.date_text = Some(d.clone());
+            }
         }
     }
     Ok(m)

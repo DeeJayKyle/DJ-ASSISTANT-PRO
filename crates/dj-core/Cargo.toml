@@ -16,7 +16,7 @@ blake3 = "1.8"
 thiserror = "2"
 crossbeam-channel = "0.5"
 unicode-normalization = "0.1"
-symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "alac", "flac", "pcm", "vorbis", "isomp4", "ogg", "wav", "aiff"] }
+symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "alac", "flac", "pcm", "vorbis", "isomp4", "ogg", "wav", "aiff", "mkv"] }
 rustfft = "6"
 ebur128 = "0.1"
 rusty-chromaprint = "0.3"

@@ -169,11 +169,11 @@ pub fn preview(
     }
     let mut out = vec![];
     for id in ids {
-        let (path, presence): (String, String) = conn
+        let (path, presence, media): (String, String, String) = conn
             .query_row(
-                "SELECT path, presence FROM tracks WHERE id=?1",
+                "SELECT path, presence, media_kind FROM tracks WHERE id=?1",
                 params![id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?
             .ok_or_else(|| Error::NotFound("track".into()))?;
@@ -191,6 +191,12 @@ pub fn preview(
             warnings: vec![],
             blocked: None,
         };
+        if media == "video" {
+            pc.blocked =
+                Some("Video files are never written. Use catalogue values instead.".into());
+            out.push(pc);
+            continue;
+        }
         let Some(kind) = kind_of(p) else {
             pc.blocked =
                 Some("This format is not supported for writing (only MP3, FLAC and M4A).".into());

@@ -8,7 +8,7 @@ rm -rf "$OUT"; mkdir -p "$OUT/Afrobeats" "$OUT/House/Old School" "$OUT/Café Ün
 tone() { # dur freq
   echo "-f lavfi -i sine=frequency=$2:duration=$1:sample_rate=44100 -ac 1"
 }
-ff() { ffmpeg -hide_banner -loglevel error -y "$@"; }
+ff() { ffmpeg -nostdin -hide_banner -loglevel error -y "$@"; }
 meta() { # artist title genre year
   echo "-metadata artist=$1 -metadata title=$2 -metadata genre=$3 -metadata date=$4"
 }
@@ -58,3 +58,18 @@ head -c 2048 /dev/urandom > "$OUT/Broken/old format.wma"
 echo "not music" > "$OUT/Broken/notes.txt"
 : > "$OUT/Broken/empty.mp3"
 echo "Fixtures written to $OUT"; find "$OUT" -type f | sort
+
+# ---- Video fixtures (separate folder so audio tests keep their counts) ----
+VOUT="${2:-crates/dj-core/tests/fixtures/video}"
+rm -rf "$VOUT"; mkdir -p "$VOUT/Clips"
+vsrc="-f lavfi -i testsrc2=size=320x180:rate=25:duration=2 -f lavfi -i sine=frequency=440:duration=2:sample_rate=44100"
+ff $vsrc -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 96k -shortest -metadata artist="Lagos Lights" -metadata title="Sunrise Groove (Official Video)" -metadata genre="Afrobeats" -metadata date="2016" "$VOUT/Clips/Lagos Lights - Sunrise Groove (Video).mp4"
+ff $vsrc -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 96k -shortest -metadata artist="Velvet Arcade" -metadata title="Mirrorball (Video)" "$VOUT/Clips/Mirrorball.mov"
+ff $vsrc -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 96k -shortest "$VOUT/Clips/untitled clip.m4v"
+ff $vsrc -c:v libvpx-vp9 -b:v 200k -c:a libopus -b:a 64k -shortest -metadata ARTIST="Deep Tenant" -metadata TITLE="Warehouse Visuals" -metadata GENRE="House" "$VOUT/Clips/Deep Tenant - Warehouse Visuals.mkv"
+ff $vsrc -c:v libvpx -b:v 200k -c:a libvorbis -shortest "$VOUT/Clips/Loop.webm"
+ff $vsrc -c:v mpeg4 -q:v 8 -c:a libmp3lame -b:a 128k -shortest "$VOUT/Clips/Old Visual.avi"
+ff -f lavfi -i sine=frequency=440:duration=2 -c:a aac -b:a 128k -metadata artist="Quiet Harbour" -metadata title="Audio In MP4" "$VOUT/Clips/Audio only.mp4"
+head -c 4096 /dev/urandom > "$VOUT/Clips/legacy.wmv"
+head -c 4096 /dev/urandom > "$VOUT/Clips/broken.mp4"
+echo "Video fixtures written to $VOUT"; ls -la "$VOUT/Clips"

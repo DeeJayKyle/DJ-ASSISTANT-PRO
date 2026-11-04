@@ -135,6 +135,11 @@ pub struct TrackRow {
     pub energy_source: Option<String>,
     pub analysis: Option<String>,
     pub original_year: Option<i64>,
+    pub media_kind: String,
+    pub video_codec: Option<String>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub frame_rate: Option<f64>,
 }
 
 const ROW_COLS: &str = "t.id, t.uid, COALESCE(u.title, t.title), COALESCE(u.artist, t.artist), COALESCE(u.album, t.album), COALESCE(u.genre, t.genre), COALESCE(u.year, t.year),
@@ -145,13 +150,13 @@ const ROW_COLS: &str = "t.id, t.uid, COALESCE(u.title, t.title), COALESCE(u.arti
   CASE WHEN u.bpm IS NOT NULL THEN 'you' WHEN t.bpm_tag IS NOT NULL THEN 'tag' WHEN a.bpm IS NOT NULL THEN 'analysis' END,
   CASE WHEN u.musical_key IS NOT NULL THEN 'you' WHEN t.key_tag IS NOT NULL THEN 'tag' WHEN a.camelot IS NOT NULL THEN 'analysis' END,
   CASE WHEN u.energy IS NOT NULL THEN 'you' WHEN a.energy IS NOT NULL THEN 'analysis' END,
-  a.status, COALESCE(u.original_year, t.original_year)";
+  a.status, COALESCE(u.original_year, t.original_year), t.media_kind, t.video_codec, t.width, t.height, t.frame_rate";
 
 pub const FROM: &str = "FROM tracks t LEFT JOIN track_user u ON u.track_id = t.id LEFT JOIN library_roots r ON r.id = t.root_id LEFT JOIN analysis a ON a.track_id = t.id";
 
 fn row_cols(low: u32) -> String {
     let q = format!(
-        "(CASE WHEN t.lossless=1 THEN 'lossless' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL AND t.bitrate_kbps < {low} THEN 'low_bitrate' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL THEN 'lossy' ELSE 'unknown' END)"
+        "(CASE WHEN t.media_kind='video' THEN 'video' WHEN t.lossless=1 THEN 'lossless' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL AND t.bitrate_kbps < {low} THEN 'low_bitrate' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL THEN 'lossy' ELSE 'unknown' END)"
     );
     let s = "(CASE WHEN t.presence='missing' THEN 'missing' WHEN r.status='offline' THEN 'offline' WHEN t.read_status<>'ok' THEN t.read_status ELSE 'ok' END)";
     ROW_COLS
@@ -194,6 +199,11 @@ fn map_row(r: &Row) -> rusqlite::Result<TrackRow> {
         energy_source: r.get(27)?,
         analysis: r.get(28)?,
         original_year: r.get(29)?,
+        media_kind: r.get(30)?,
+        video_codec: r.get(31)?,
+        width: r.get(32)?,
+        height: r.get(33)?,
+        frame_rate: r.get(34)?,
     })
 }
 

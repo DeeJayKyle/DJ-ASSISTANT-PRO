@@ -34,6 +34,7 @@ pub mod sets;
 pub mod suggest;
 pub mod templates;
 pub mod text;
+pub mod video;
 pub mod watcher;
 
 pub use api::App;

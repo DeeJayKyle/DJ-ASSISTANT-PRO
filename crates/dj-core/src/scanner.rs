@@ -117,6 +117,7 @@ struct Ctx<'a> {
     scan_id: i64,
     ctl: &'a ScanControl,
     progress: &'a Mutex<ScanProgress>,
+    scan_video: bool,
 }
 
 impl Ctx<'_> {
@@ -171,11 +172,15 @@ pub fn run_scan_with_conn(
             ..Default::default()
         };
     }
+    let scan_video = db::get_setting(conn, "scan_video")?
+        .map(|v| v == "1")
+        .unwrap_or(true);
     let ctx = Ctx {
         conn,
         scan_id,
         ctl,
         progress,
+        scan_video,
     };
 
     let roots: Vec<(i64, String)> = {
@@ -330,7 +335,9 @@ fn scan_root(ctx: &Ctx, root_id: i64, root_path: &str) -> Result<()> {
             .map(|e| e.to_string_lossy().to_ascii_lowercase())
             .unwrap_or_default();
         let kind = metadata::classify_extension(&ext);
-        if kind == ExtKind::Other {
+        if kind == ExtKind::Other
+            || (!ctx.scan_video && matches!(kind, ExtKind::Video | ExtKind::UnsupportedVideo))
+        {
             continue;
         }
         let Some(path_str) = path.to_str().map(|s| s.to_string()) else {
@@ -381,7 +388,7 @@ fn scan_root(ctx: &Ctx, root_id: i64, root_path: &str) -> Result<()> {
             ext,
             size,
             mtime,
-            unsupported: kind == ExtKind::UnsupportedMusic,
+            unsupported: matches!(kind, ExtKind::UnsupportedMusic | ExtKind::UnsupportedVideo),
             existing_id: prev.map(|p| p.0),
         });
     }
@@ -427,7 +434,7 @@ fn scan_root(ctx: &Ctx, root_id: i64, root_path: &str) -> Result<()> {
                         ReadOutcome::Unsupported
                     } else {
                         // catch_unwind guards against a malformed file panicking a parser.
-                        match std::panic::catch_unwind(|| metadata::read_audio_meta(&path)) {
+                        match std::panic::catch_unwind(|| metadata::read_media_meta(&path)) {
                             Ok(Ok(m)) => ReadOutcome::Ok(Box::new(m)),
                             Ok(Err(e)) => ReadOutcome::Err(e),
                             Err(_) => ReadOutcome::Err(
@@ -538,6 +545,9 @@ fn write_batch(
               content_hash=CASE WHEN file_size=?8 AND file_mtime IS ?9 THEN content_hash ELSE NULL END
              WHERE id=?1 AND path_key=?4",
         )?;
+        let mut media_upd = tx.prepare_cached(
+            "UPDATE tracks SET media_kind=?1, video_codec=?2, width=?3, height=?4, frame_rate=?5 WHERE path_key=?6",
+        )?;
         for (idx, out) in batch.drain(..) {
             let c = &cands[idx];
             let (status, err, m) = match out {
@@ -640,6 +650,21 @@ fn write_batch(
                 now,
                 ctx.scan_id
             ];
+            let media = (
+                m.media_kind.as_deref().unwrap_or(
+                    if metadata::UNSUPPORTED_VIDEO_EXTENSIONS.contains(&c.ext.as_str())
+                        || metadata::VIDEO_EXTENSIONS.contains(&c.ext.as_str())
+                    {
+                        "video"
+                    } else {
+                        "audio"
+                    },
+                ),
+                &m.video_codec,
+                m.width,
+                m.height,
+                m.frame_rate,
+            );
             if c.existing_id.is_some() {
                 upd.execute(p_common)?;
                 updated += 1;
@@ -652,6 +677,7 @@ fn write_batch(
                 ins.execute(rusqlite::params_from_iter(vals.iter()))?;
                 added += 1;
             }
+            media_upd.execute(params![media.0, media.1, media.2, media.3, media.4, c.key])?;
         }
     }
     tx.commit()?;

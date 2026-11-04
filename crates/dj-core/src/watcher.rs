@@ -109,7 +109,7 @@ pub fn pending(conn: &Connection) -> Result<Vec<Value>> {
         .collect::<std::result::Result<_, _>>()?;
     let mut out = vec![];
     for (id, root_id, path, kind, at, root) in rows {
-        let meta = crate::metadata::read_audio_meta(Path::new(&path)).ok();
+        let meta = crate::metadata::read_media_meta(Path::new(&path)).ok();
         let suggestion = meta.as_ref().and_then(|m| {
             let genre = m.genre.clone().unwrap_or_else(|| "Unsorted".into());
             let artist = m.artist.clone()?;
