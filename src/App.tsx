@@ -20,6 +20,8 @@ import { GigPackView } from "./components/GigPackView";
 import { FilesView } from "./components/FilesView";
 import { SettingsView, SAFETY_POINTS } from "./components/SettingsView";
 import { QuickPrepView } from "./components/quick/QuickPrepView";
+import { StudioView, type StudioTab } from "./studio/ui/StudioView";
+import { makeStudioHost } from "./components/studioHost";
 import { ChatPanel, type UiAction } from "./components/ChatPanel";
 import { OrganizeView } from "./components/OrganizeView";
 import { StatusBar } from "./components/StatusBar";
@@ -72,6 +74,10 @@ export default function App() {
     setToastMsg({ m, err, k });
     window.setTimeout(() => setToastMsg((t) => (t?.k === k ? null : t)), err ? 6500 : 3400);
   }, []);
+  // Studio (stems, remix, DJ decks, sound labs): kept mounted once opened, so decks keep playing.
+  const [studioHost] = useState(() => makeStudioHost((m, err) => toast(m, err)));
+  const [studioOpened, setStudioOpened] = useState(false);
+  useEffect(() => { if (view.startsWith("studio:")) setStudioOpened(true); }, [view]);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
@@ -251,6 +257,7 @@ export default function App() {
       />
     );
   } else if (view === "organize") main = <OrganizeView settings={settings} crates={crates} toast={toast} bump={refreshAfterChat} onSettings={() => setView("settings")} onReview={() => setView("suggestions")} />;
+  else if (view.startsWith("studio:")) main = null;
   else if (view === "quick") main = <QuickPrepView crates={crates} roots={roots} toast={toast} bump={bump} />;
   else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} startFix={healthFix} /></div>;
   else if (view === "duplicates") main = <div className="page"><DuplicatesView version={version} toast={toast} /></div>;
@@ -270,7 +277,15 @@ export default function App() {
       <TitleBar toast={toast} gig={settings.gig_mode} premium={settings.premium_ui} onPremium={(v) => { setSettings({ ...settings, premium_ui: v }); api.setSetting("premium_ui", v).catch(() => {}); }} />
       <div className={`workspace${chat === "full" ? " chat-full" : chat === "hidden" ? " no-chat" : ""}`}>
         <Sidebar view={view} setView={setView} crates={crates} roots={roots} stats={stats} pending={pending} onNewCrate={() => setCrateDialog({ crate: null })} docsEnabled={settings.docs_enabled} />
-        <main>{main}</main>
+        <main>
+          {main}
+          {(studioOpened || view.startsWith("studio:")) && (
+            <div className="page" hidden={!view.startsWith("studio:")}>
+              <div className="view-head"><div className="grow"><h1>Studio</h1><div className="sub">Stems, remixes, two-deck DJing, and instruments and drum kits from words. Everything runs on this computer; your music files are only read.</div></div></div>
+              <div className="view-body"><StudioView host={studioHost} tab={(view.startsWith("studio:") ? view.slice(7) : "stems") as StudioTab} onTab={(t) => setView(`studio:${t}` as View)} /></div>
+            </div>
+          )}
+        </main>
         {chat !== "hidden" && <ChatPanel mode={chat} setMode={setChatMode} onApply={(r) => { applyAssistant(r); }} onNavigate={navigate} onUi={onAiUi} onOpenSettings={() => setView("settings")} onChanged={refreshAfterChat} toast={toast} />}
       </div>
       <StatusBar scan={scan} jobs={jobs} version={info?.version ?? ""} onlineOn={onlineOn} chatHidden={chat === "hidden"} onShowChat={() => setChatMode("open")} onOpen={(v) => setView(v as View)} />

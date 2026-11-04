@@ -53,7 +53,11 @@ fn main() {
     );
     let cors = [
         tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
-        tiny_http::Header::from_bytes("Access-Control-Allow-Headers", "content-type").unwrap(),
+        tiny_http::Header::from_bytes(
+            "Access-Control-Allow-Headers",
+            "content-type, x-mode, x-path, x-name, x-overwrite",
+        )
+        .unwrap(),
         tiny_http::Header::from_bytes("Content-Type", "application/json").unwrap(),
     ];
     for mut req in server.incoming_requests() {
@@ -93,6 +97,41 @@ fn main() {
                 None => tiny_http::Response::from_data(Vec::new()).with_status_code(404),
             };
             let _ = req.respond(resp);
+            continue;
+        }
+        // POST /studio-write: the same raw-bytes Studio save as the desktop app.
+        if req.method() == &tiny_http::Method::Post && req.url().starts_with("/studio-write") {
+            let hv = |k: &'static str| {
+                req.headers()
+                    .iter()
+                    .find(|h| h.field.equiv(k))
+                    .map(|h| percent_decode(h.value.as_str()))
+                    .unwrap_or_default()
+            };
+            let (mode, path, rel, overwrite) = (
+                hv("x-mode"),
+                hv("x-path"),
+                hv("x-name"),
+                hv("x-overwrite") == "1",
+            );
+            let mut bytes = Vec::new();
+            let _ = req.as_reader().take(1 << 30).read_to_end(&mut bytes);
+            let res = match session.app() {
+                Some(app) if mode == "into" => {
+                    app.studio_write_into(std::path::Path::new(&path), &rel, &bytes)
+                }
+                Some(app) => app.studio_write_file(std::path::Path::new(&path), &bytes, overwrite),
+                None => Err(dj_core::Error::Invalid("create an account first".into())),
+            };
+            let out = match res {
+                Ok(p) => json!({"ok": p}),
+                Err(e) => json!({"error": e.to_string()}),
+            };
+            let mut r = tiny_http::Response::from_string(out.to_string());
+            for h in &cors {
+                r.add_header(h.clone());
+            }
+            let _ = req.respond(r);
             continue;
         }
         let mut body = String::new();
@@ -250,4 +289,22 @@ impl dj_core::online::Online for DemoAi {
         };
         Ok(json!({"model": cfg.model, "stop_reason": stop, "content": content}))
     }
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }

@@ -527,6 +527,31 @@ impl App {
             }
 
             // ---------- Quick Prep: AI help with the assistant's model ----------
+            // ---------- Studio ----------
+            "studio_new_folder" => {
+                let dir = export::new_folder(
+                    &PathBuf::from(arg::<String>(a, "parent")?),
+                    &arg::<String>(a, "name")?,
+                )?;
+                lock(&self.studio_folders).insert(dir.clone());
+                json!({"path": dir.to_string_lossy()})
+            }
+            "ai_complete" => {
+                // One plain request to the assistant's model (Studio sound design); no tools.
+                let cfg = crate::agent::config(self)?;
+                if cfg.provider == "off" {
+                    return invalid(
+                        "turn on the AI assistant in Settings first (Claude or a local model)",
+                    );
+                }
+                let system: String = arg(a, "system")?;
+                let user: String = arg(a, "user")?;
+                let reply = self
+                    .online
+                    .llm_chat(&cfg, &system.chars().take(8000).collect::<String>(), &[], &[json!({"role": "user", "content": user.chars().take(8000).collect::<String>()})])
+                    .map_err(Error::Invalid)?;
+                json!({"text": quick::reply_text(&reply)})
+            }
             "ai_tidy" | "ai_order" => {
                 // Uses the AI model chosen for the assistant (Claude or a local
                 // model); one plain request, no tools. Results are suggestions.

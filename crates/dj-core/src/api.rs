@@ -52,6 +52,8 @@ pub struct App {
     pub(crate) write_previews:
         Mutex<std::collections::HashMap<String, Vec<crate::safe_write::PlannedChange>>>,
     pub(crate) pack_previews: Mutex<std::collections::HashMap<String, crate::gigpack::PackPlan>>,
+    /// Folders the Studio created this session; its multi-file saves may only write inside these.
+    pub(crate) studio_folders: Mutex<std::collections::HashSet<PathBuf>>,
     pub(crate) agent: Mutex<std::collections::HashMap<String, crate::agent::Conversation>>,
     /// Previewed organiser plans by token: (operations, duplicate merge (keep, others)).
     pub(crate) org_previews: Mutex<
@@ -96,6 +98,7 @@ impl App {
             watcher: Mutex::new(None),
             write_previews: Mutex::new(Default::default()),
             pack_previews: Mutex::new(Default::default()),
+            studio_folders: Mutex::new(Default::default()),
             agent: Mutex::new(Default::default()),
             org_previews: Mutex::new(Default::default()),
         };
@@ -130,6 +133,24 @@ impl App {
             .ok()?;
         let p = PathBuf::from(p);
         p.is_file().then_some(p)
+    }
+
+    /// Studio: writes one file the DJ chose in a save dialog (WAV, MIDI, SFZ or JSON).
+    pub fn studio_write_file(&self, path: &Path, bytes: &[u8], overwrite: bool) -> Result<String> {
+        crate::export::write_bytes(path, bytes, overwrite)?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    /// Studio: writes a new file inside a folder made by `studio_new_folder` this session.
+    pub fn studio_write_into(&self, folder: &Path, rel: &str, bytes: &[u8]) -> Result<String> {
+        if !lock(&self.studio_folders).contains(folder) {
+            return Err(Error::Invalid(
+                "that folder wasn't created by the Studio".into(),
+            ));
+        }
+        Ok(crate::export::write_into(folder, rel, bytes)?
+            .to_string_lossy()
+            .to_string())
     }
 
     pub fn jobs(&self) -> &crate::jobs::Jobs {

@@ -1,7 +1,7 @@
 // End-to-end test: real React UI + real dj-core backend (via the dev-only
 // loopback bridge) + real audio fixture files. Run: npm run e2e
 import { spawn, execSync } from "node:child_process";
-import { cpSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync, existsSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -557,6 +557,109 @@ await step("Quick Prep AI help uses the assistant's model: better names and a se
   await page.getByLabel("Describe how to order the playlist").fill("something dreamy that slowly opens up");
   await page.getByRole("button", { name: "Sort", exact: true }).click();
   await page.getByText("Reversed by the demo AI.").waitFor();
+});
+
+
+// ---------------------------------------------------------------- Studio
+const studioSongs = path.join(data, "Studio Songs");
+const studioOut = path.join(data, "Studio Out");
+mkdirSync(studioSongs, { recursive: true });
+mkdirSync(studioOut, { recursive: true });
+const groove = (bpm, seconds, rootHz) => {
+  const sr = 44100, n = sr * seconds, beat = (60 / bpm) * sr;
+  const L = new Float32Array(n), R = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, b = i % beat, tb = b / sr;
+    const kick = tb < 0.15 ? Math.sin(2 * Math.PI * (50 + 120 * Math.exp(-tb * 40)) * tb) * Math.exp(-tb * 18) * 0.7 : 0;
+    const bass = Math.sin(2 * Math.PI * rootHz * t) * 0.2;
+    const lead = Math.sin(2 * Math.PI * rootHz * 4 * t) * 0.08;
+    L[i] = kick + bass + lead; R[i] = kick + bass;
+  }
+  const buf = Buffer.alloc(44 + n * 4);
+  buf.write("RIFF", 0); buf.writeUInt32LE(36 + n * 4, 4); buf.write("WAVEfmt ", 8); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22);
+  buf.writeUInt32LE(sr, 24); buf.writeUInt32LE(sr * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34); buf.write("data", 36); buf.writeUInt32LE(n * 4, 40);
+  for (let i = 0; i < n; i++) { buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, L[i])) * 32000), 44 + i * 4); buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, R[i])) * 32000), 46 + i * 4); }
+  return buf;
+};
+writeFileSync(path.join(studioSongs, "Studio Groove.wav"), groove(124, 20, 55));
+writeFileSync(path.join(studioSongs, "Second Groove.wav"), groove(120, 20, 73.42));
+const listDir = (d) => (existsSync(d) ? readdirSync(d).sort() : []);
+const waitFile = async (p, ms = 60000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (existsSync(p)) return; await new Promise((r) => setTimeout(r, 200)); } throw new Error(`timed out waiting for ${p}`); };
+
+await step("Studio: songs are added and the save folder is set", async () => {
+  const root = (await bridge("add_root", { path: studioSongs })).ok;
+  await bridge("start_scan", { root_ids: [root.id] });
+  for (let i = 0; i < 100; i++) { const st = (await bridge("scan_status")).ok; if (st.state !== "running" && st.state !== "paused") break; await new Promise((r) => setTimeout(r, 200)); }
+  await page.evaluate((d) => { window.__studioSaveDir = d; }, studioOut);
+});
+
+await step("Studio Stems: split a song, see key/tempo/chords, save stems and MIDI", async () => {
+  await nav("Stems").click();
+  await page.getByRole("list", { name: "Song to split" }).getByRole("button", { name: /Studio Groove/ }).click();
+  await page.getByRole("button", { name: "Download stems (WAV)" }).waitFor({ timeout: 120000 });
+  const stats = await page.locator(".st-stats").first().innerText();
+  expect(/BPM/.test(stats), `stats: ${stats}`);
+  await page.screenshot({ path: path.join(shots, "30-studio-stems.png") });
+  await page.getByRole("button", { name: "Download stems (WAV)" }).click();
+  await waitFile(path.join(studioOut, "Studio Groove - Stems"));
+  await page.waitForTimeout(1500);
+  const files = listDir(path.join(studioOut, "Studio Groove - Stems"));
+  expect(files.length === 5 && files.some((f) => f.endsWith("Vocals.wav")) && files.some((f) => f.endsWith("Instrumental.wav")), `stems: ${files}`);
+  await page.getByRole("button", { name: "Download MIDI" }).click();
+  await waitFile(path.join(studioOut, "Studio Groove.mid"));
+  expect(readFileSync(path.join(studioOut, "Studio Groove.mid")).subarray(0, 4).toString() === "MThd", "not a MIDI file");
+});
+
+await step("Studio Remix: add stems and songs, auto-synced, export the remix", async () => {
+  await page.getByRole("button", { name: "Remix it →" }).click();
+  await page.getByRole("button", { name: "+ Drums" }).click();
+  await page.locator(".st-trackrow").first().waitFor({ timeout: 60000 });
+  await page.getByRole("list", { name: "Song to add" }).getByRole("button", { name: /Second Groove/ }).click();
+  await page.getByRole("button", { name: "+ Song" }).click();
+  const t0 = Date.now(); while ((await page.locator(".st-trackrow").count()) < 2 && Date.now() - t0 < 60000) await page.waitForTimeout(200);
+  expect((await page.locator(".st-trackrow").count()) === 2, "second track missing");
+  await page.screenshot({ path: path.join(shots, "31-studio-remix.png") });
+  await page.getByRole("button", { name: "Export remix (WAV)" }).click();
+  await waitFile(path.join(studioOut, "My Remix.wav"));
+});
+
+await step("Studio DJ: two decks, sync matches tempo, deck plays", async () => {
+  await nav("DJ Decks").click();
+  await page.getByRole("button", { name: "Load a song" }).first().click();
+  await page.getByRole("dialog", { name: "Load deck A" }).getByRole("button", { name: /Studio Groove/ }).click();
+  await page.getByRole("button", { name: "Play deck A" }).waitFor({ timeout: 30000 });
+  await page.getByRole("button", { name: "Play deck A" }).click();
+  await page.getByRole("button", { name: "Load a song" }).click();
+  await page.getByRole("dialog", { name: "Load deck B" }).getByRole("button", { name: /Second Groove/ }).click();
+  await page.getByRole("button", { name: "Sync deck B" }).waitFor({ timeout: 30000 });
+  await page.getByRole("button", { name: "Sync deck B" }).click();
+  await page.waitForTimeout(1200);
+  const b = await page.locator(".st-deck .st-stats b").evaluateAll((els) => els.map((e) => e.textContent));
+  expect(b[0] === b[2] && b[0] !== "—", `bpms ${b}`);
+  const time = await page.locator(".st-deck").first().locator(".st-mono").first().innerText();
+  expect(!time.startsWith("0:00 /"), `deck A not playing: ${time}`);
+  await page.screenshot({ path: path.join(shots, "32-studio-dj.png") });
+  await page.getByRole("button", { name: "Pause deck A" }).click();
+});
+
+await step("Studio Synth Lab and Drum Lab: sounds from words, played and saved", async () => {
+  await nav("Synth Lab").click();
+  await page.getByLabel("Describe the sound").fill("bright cinematic synth organ");
+  await page.getByRole("button", { name: "Make it" }).click();
+  await page.getByRole("heading", { name: /Bright Cinematic Synth Organ/ }).waitFor();
+  await page.keyboard.down("a"); await page.waitForTimeout(150); await page.keyboard.up("a");
+  await page.getByRole("button", { name: "Download instrument" }).click();
+  await waitFile(path.join(studioOut, "Bright Cinematic Synth Organ", "Bright Cinematic Synth Organ.sfz"));
+  await page.screenshot({ path: path.join(shots, "33-studio-synth.png") });
+  await nav("Drum Lab").click();
+  await page.getByLabel("Describe the kit").fill("warm disco house kit");
+  await page.getByRole("button", { name: "Make it" }).click();
+  await page.getByRole("heading", { name: /Warm Disco House Kit/ }).waitFor();
+  await page.keyboard.press("z");
+  await page.getByRole("button", { name: "Download kit" }).click();
+  await waitFile(path.join(studioOut, "Warm Disco House Kit", "Warm Disco House Kit.sfz"));
+  expect(listDir(path.join(studioOut, "Warm Disco House Kit")).filter((f) => f.endsWith(".wav")).length === 16, "kit pads");
+  await page.screenshot({ path: path.join(shots, "34-studio-drums.png") });
 });
 
 // ---------------------------------------------------------------- local accounts

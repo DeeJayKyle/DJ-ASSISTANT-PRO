@@ -1,3 +1,18 @@
+DJ Assistant 1.5.0
+
+**New in 1.5: the Studio** (sidebar → Create)
+- **Stems:** split any track into vocals, drums, bass and melodies, plus an instrumental. The key, tempo and a live chord readout show as it plays. Solo, mute or rebalance each stem. Download the stems as WAV, or download MIDI with bass, melody, vocal melody, chords and drums.
+- **Remix:** add whole tracks or single stems as clips on a beat grid. Move, trim and loop clips, and set volume, pan, mute and solo per track. Pick the remix's tempo and key, and every clip is time-stretched and pitch-shifted to match. Export the mix, or each track, as WAV.
+- **DJ Decks:** two decks with Sync (tempo and beat phase), tempo faders, key shift and *Match key*, live stem toggles, volume and a crossfader. A deck loaded while the other plays starts in time with it.
+- **Synth Lab:** describe an instrument ("dark thick sub bass"), then play it with your computer keys, the on-screen keyboard or a MIDI controller. Fine-tune it and step through variations. Save it as samples plus an SFZ file. With the AI assistant on, the AI designs the patch.
+- **Drum Lab:** describe a kit ("crisp trap kit with booming 808") and get 16 pads, played with keys or MIDI notes 36–51. Tune each pad, then save the WAVs plus an SFZ file.
+
+**How it works:** everything runs on this computer, spread over your CPU cores. Stem separation uses signal processing, not an AI model: it's private and fast, but less clean than AI separators.
+
+**Safety:** your music files are only read. The Studio saves only new files you choose (WAV, MIDI, SFZ, JSON), and never replaces an existing audio file.
+
+---
+
 DJ Assistant 1.4.0
 
 **Auto-prep: your library fixes itself as you add music**

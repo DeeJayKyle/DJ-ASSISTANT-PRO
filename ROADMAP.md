@@ -4,7 +4,19 @@
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
 
-## v1.4 (this release)
+## v1.5 (this release)
+
+| Area | Feature | Status |
+|---|---|---|
+| Studio | Four-stem separation (DSP: STFT, harmonic/percussive medians, centre and band masks), parallel workers, stems sum back to the mix | Tested (unit + e2e) |
+| Studio | Key, tempo, beat phase, live chords; MIDI for bass, melody, vocal melody, chords and drums | Tested (synthetic audio) |
+| Studio | Remix: clips from tracks or stems, move/trim/loop, tempo and key sync (WSOLA + pitch shift), mix and track export | Tested |
+| Studio | DJ Decks: realtime tempo/key (AudioWorklet), Sync, Match key, stem toggles, crossfader | Tested (e2e); real-music feel needs a hand test on Windows |
+| Studio | Synth Lab and Drum Lab: sounds and kits from words, keyboard/MIDI play, WAV + SFZ downloads | Tested |
+| Studio | Saves only new WAV/MIDI/SFZ/JSON files; folder saves only inside folders the Studio just created | Tested |
+| Studio | AI-quality stem separation | Planned (needs a permissively licensed offline model) |
+
+## v1.4
 
 | Area | Feature | Status |
 |---|---|---|

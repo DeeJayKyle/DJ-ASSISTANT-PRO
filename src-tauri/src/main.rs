@@ -83,6 +83,66 @@ fn reveal(path: String) -> Result<(), String> {
     tauri_plugin_opener::reveal_item_in_dir(p).map_err(|e| e.to_string())
 }
 
+/// Studio saves: the file's bytes arrive as the raw request body (no JSON/base64 copy), with
+/// the target in headers. `x-mode: file` writes the path the save dialog returned; `x-mode: into`
+/// writes inside a folder the Studio created with `studio_new_folder`.
+#[tauri::command]
+async fn studio_write(
+    state: tauri::State<'_, State>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected file bytes".into());
+    };
+    let h = |k: &str| {
+        request
+            .headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .map(percent_decode)
+    };
+    let app = state
+        .inner()
+        .session
+        .app()
+        .ok_or("create an account first")?;
+    let bytes = bytes.clone();
+    let (mode, path, rel, overwrite) = (
+        h("x-mode").unwrap_or_default(),
+        h("x-path").unwrap_or_default(),
+        h("x-name").unwrap_or_default(),
+        h("x-overwrite").as_deref() == Some("1"),
+    );
+    tauri::async_runtime::spawn_blocking(move || {
+        if mode == "into" {
+            app.studio_write_into(std::path::Path::new(&path), &rel, &bytes)
+        } else {
+            app.studio_write_file(std::path::Path::new(&path), &bytes, overwrite)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
+}
+
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Bring the main window back (from the tray), un-minimising and focusing it.
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -195,7 +255,7 @@ fn main() {
                 responder.respond(resp.unwrap_or_else(|_| tauri::http::Response::new(Vec::new())));
             });
         })
-        .invoke_handler(tauri::generate_handler![api, reveal])
+        .invoke_handler(tauri::generate_handler![api, reveal, studio_write])
         .run(tauri::generate_context!())
         .expect("error while running DJ Assistant");
 }

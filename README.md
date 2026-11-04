@@ -6,6 +6,14 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ## What it does (v1.3)
 
+**Studio (new in 1.5)** — under *Create* in the sidebar:
+- **Stems:** vocals, drums, bass and melodies from any track, with key, tempo, live chords, WAV stems and a MIDI file.
+- **Remix:** tracks and stems on a beat grid; move, trim and loop clips; every clip is auto-synced to the remix's tempo and key.
+- **DJ Decks:** two decks with Sync, key matching, live stem toggles and a crossfader.
+- **Synth Lab** and **Drum Lab:** describe a sound or a kit in words, play it from the keyboard or a MIDI controller, and save it as WAV plus SFZ.
+
+It all runs on this computer. Stems use signal processing rather than an AI model, so they're private but less clean than AI separators.
+
 **Quick Prep (new in 1.3)** — a fast lane for a folder of fresh downloads. Pick a folder (it's added read-only and analysed on this computer, with a small mini-game while you wait), then one of four paths:
 - **Clean names:** strips `[FREE DL]`, `www.site.net`, `320kbps`, `final FINAL v3`, track numbers and underscores; fixes capitals; keeps the mix name; *Artist – Title* or *Title – Artist*; edit any name inline; genre per track. Saved to the catalogue only.
 - **Build a playlist:** drag to reorder or one-click *Warm-up → peak* (harmonic, smooth tempo steps), *Ascending BPM*, *Harmonic*, *Group by genre*, *Cool down*, or type what you want ("fastest first"). A flow score shows how well it mixes.

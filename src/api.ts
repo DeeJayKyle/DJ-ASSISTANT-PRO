@@ -12,6 +12,9 @@ import type {
 
 const BRIDGE = import.meta.env.VITE_DEV_BRIDGE === "1";
 const BRIDGE_URL = (import.meta.env.VITE_BRIDGE_URL as string | undefined) ?? "http://127.0.0.1:7878";
+/** Dev/e2e builds only (compiled out of releases). */
+export const isBridge = BRIDGE;
+export const bridgeUrl = BRIDGE ? BRIDGE_URL : "";
 
 export const isDesktop = (): boolean =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

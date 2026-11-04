@@ -5,7 +5,7 @@ import { ColorDot } from "./ui";
 
 export type View =
   | "library" | "quick" | "organize" | "crates" | "duplicates" | "health" | "activity" | "suggestions" | "discovery" | "set-studio" | "gig" | "gig-pack"
-  | "files" | "settings" | `crate:${number}` | `root:${number}`;
+  | "files" | "settings" | `crate:${number}` | `root:${number}` | `studio:${"stems" | "remix" | "dj" | "synth" | "drums"}`;
 
 function CrateTree({ crates, parent, depth, view, setView }: { crates: Crate[]; parent: number | null; depth: number; view: View; setView: (v: View) => void }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
@@ -61,6 +61,14 @@ export function Sidebar({ view, setView, crates, roots, stats, pending, onNewCra
         {item("activity", "refresh", "Scan Activity")}
         {item("health", "health", "Library Health", problems || undefined, problems > 0)}
         {item("organize", "wrench", "Organise Files")}
+      </div>
+      <div className="nav-section">Create</div>
+      <div className="nav">
+        {item("studio:stems", "layers", "Stems")}
+        {item("studio:remix", "shuffle", "Remix")}
+        {item("studio:dj", "headphones", "DJ Decks")}
+        {item("studio:synth", "wave", "Synth Lab")}
+        {item("studio:drums", "disc", "Drum Lab")}
       </div>
       <div className="nav-section">Prepare</div>
       <div className="nav">
