@@ -200,6 +200,68 @@ impl App {
                 crate::agent::reset(self, &arg::<String>(a, "conversation_id")?);
                 json!({"ok": true})
             }
+            "ai_local_setup" => {
+                let cfg = crate::agent::config(self)?;
+                let probe = self.online.llm_local_probe(&cfg.local_url);
+                let has_model = probe
+                    .models
+                    .iter()
+                    .any(|m| m == &cfg.model || m.trim_end_matches(":latest") == cfg.model);
+                json!({"probe": probe, "model": cfg.model, "has_model": has_model, "local_url": cfg.local_url,
+                    "recommended": crate::agent::LOCAL_MODELS.iter().map(|(id, size, note)| json!({"id": id, "size": size, "note": note})).collect::<Vec<_>>(),
+                    "download": self.jobs.status("ai_model")})
+            }
+            "ai_local_start" => {
+                self.online.llm_local_start().map_err(Error::Invalid)?;
+                // Give the server a moment to come up.
+                let url = crate::agent::config(self)?.local_url;
+                for _ in 0..40 {
+                    if self.online.llm_local_probe(&url).running {
+                        return Ok(json!({"running": true}));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+                json!({"running": false})
+            }
+            "ai_local_pull" => {
+                let cfg = crate::agent::config(self)?;
+                let model: String = arg::<Option<String>>(a, "model")?.unwrap_or(cfg.model.clone());
+                if model.is_empty()
+                    || model.len() > 100
+                    || !model
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || ":._-/".contains(c))
+                {
+                    return invalid("that doesn't look like a model name");
+                }
+                let online = self.online.clone();
+                let url = cfg.local_url.clone();
+                // Not paused by gig mode: it only talks to this computer's model server.
+                self.jobs.start("ai_model", false, move |ctl, p| {
+                    crate::jobs::message(p, format!("Downloading {model}…"));
+                    let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
+                    let r = online.llm_local_pull(&url, &model, &mut |done, total, status| {
+                        if last.elapsed() >= std::time::Duration::from_millis(250)
+                            || status == "success"
+                        {
+                            last = std::time::Instant::now();
+                            let mut s = crate::jobs::lock(p);
+                            s.done = done;
+                            s.total = total;
+                            s.message = Some(match status {
+                                "success" => format!("{model} is ready"),
+                                st if st.starts_with("pulling") && total > 0 => {
+                                    format!("Downloading {model}")
+                                }
+                                st => format!("{model}: {st}"),
+                            });
+                        }
+                        !crate::jobs::wait_or_cancelled(ctl)
+                    });
+                    r.map_err(Error::Invalid)
+                })?;
+                json!({"started": true})
+            }
             "ai_local_models" => {
                 let url = crate::agent::config(self)?.local_url;
                 json!(self.online.llm_local_models(&url).map_err(Error::Invalid)?)

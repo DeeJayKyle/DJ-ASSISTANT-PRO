@@ -34,7 +34,7 @@ fn main() {
     // A scripted stand-in for the AI model (--demo-ai) lets the UI flow be
     // tested without network access or an API key. Never used by the real app.
     let net: Arc<dyn dj_core::online::Online> = if demo_ai {
-        Arc::new(DemoAi(std::sync::Mutex::new(0)))
+        Arc::new(DemoAi(std::sync::Mutex::new(0), dj_online::Http::new()))
     } else if online {
         Arc::new(dj_online::Http::new())
     } else {
@@ -117,8 +117,23 @@ fn main() {
 
 /// Scripted "model": picks tools from keywords so the e2e test can exercise
 /// read tools, screen changes and approval cards deterministically.
-struct DemoAi(std::sync::Mutex<u64>);
+struct DemoAi(std::sync::Mutex<u64>, dj_online::Http);
 impl dj_core::online::Online for DemoAi {
+    // Local model setup uses the real code (it only talks to 127.0.0.1).
+    fn llm_local_probe(&self, url: &str) -> dj_core::online::LocalProbe {
+        self.1.llm_local_probe(url)
+    }
+    fn llm_local_start(&self) -> Result<(), String> {
+        self.1.llm_local_start()
+    }
+    fn llm_local_pull(
+        &self,
+        url: &str,
+        model: &str,
+        p: &mut dyn FnMut(u64, u64, &str) -> bool,
+    ) -> Result<(), String> {
+        self.1.llm_local_pull(url, model, p)
+    }
     fn musicbrainz_recordings(
         &self,
         _: &str,

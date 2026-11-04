@@ -82,6 +82,33 @@ pub trait Online: Send + Sync {
     fn llm_local_models(&self, _url: &str) -> Result<Vec<String>, String> {
         Err("AI models are not available in this build".into())
     }
+    /// Is Ollama installed on this computer, is its server answering, which models does it have?
+    fn llm_local_probe(&self, _url: &str) -> LocalProbe {
+        LocalProbe::default()
+    }
+    /// Start the installed Ollama in the background (no window).
+    fn llm_local_start(&self) -> Result<(), String> {
+        Err("starting a local model server is not available in this build".into())
+    }
+    /// Download a model into Ollama. `progress(done_bytes, total_bytes, status)`
+    /// returns false to stop (Ollama keeps what it has and resumes next time).
+    fn llm_local_pull(
+        &self,
+        _url: &str,
+        _model: &str,
+        _progress: &mut dyn FnMut(u64, u64, &str) -> bool,
+    ) -> Result<(), String> {
+        Err("downloading local models is not available in this build".into())
+    }
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct LocalProbe {
+    /// Ollama's program was found on this computer.
+    pub installed: bool,
+    /// Its server answered at the configured address.
+    pub running: bool,
+    pub models: Vec<String>,
 }
 
 /// Used when no online implementation is installed.

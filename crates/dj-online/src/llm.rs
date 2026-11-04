@@ -156,9 +156,61 @@ pub fn ollama_body(model: &str, system: &str, tools: &[Value], messages: &[Value
     json!({"model": model, "messages": to_ollama_messages(system, messages), "tools": to_ollama_tools(tools), "stream": false})
 }
 
+/// Sums Ollama's per-layer download progress into one figure.
+#[derive(Default)]
+pub struct PullProgress {
+    layers: std::collections::BTreeMap<String, (u64, u64)>,
+}
+
+impl PullProgress {
+    /// Returns (done bytes, total bytes, status text, finished).
+    pub fn update(&mut self, ev: &Value) -> Result<(u64, u64, String, bool), String> {
+        if let Some(e) = ev["error"].as_str() {
+            return Err(e.to_string());
+        }
+        let status = ev["status"].as_str().unwrap_or("").to_string();
+        if let Some(d) = ev["digest"].as_str() {
+            let total = ev["total"].as_u64().unwrap_or(0);
+            let done = ev["completed"].as_u64().unwrap_or(0);
+            let e = self.layers.entry(d.to_string()).or_insert((0, 0));
+            e.0 = e.0.max(done);
+            e.1 = e.1.max(total);
+        }
+        let done = self.layers.values().map(|l| l.0).sum();
+        let total = self.layers.values().map(|l| l.1).sum();
+        Ok((done, total, status.clone(), status == "success"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pull_progress_sums_layers_and_reports_errors() {
+        let mut p = PullProgress::default();
+        assert_eq!(
+            p.update(&json!({"status": "pulling manifest"})).unwrap(),
+            (0, 0, "pulling manifest".into(), false)
+        );
+        p.update(&json!({"status": "pulling a", "digest": "a", "total": 100, "completed": 40}))
+            .unwrap();
+        let r = p
+            .update(&json!({"status": "pulling b", "digest": "b", "total": 50, "completed": 10}))
+            .unwrap();
+        assert_eq!((r.0, r.1), (50, 150));
+        // completed never goes backwards for a layer
+        let r = p
+            .update(&json!({"status": "pulling a", "digest": "a", "total": 100}))
+            .unwrap();
+        assert_eq!(r.0, 50);
+        assert!(p.update(&json!({"status": "success"})).unwrap().3);
+        assert_eq!(
+            p.update(&json!({"error": "pull model manifest: file does not exist"}))
+                .unwrap_err(),
+            "pull model manifest: file does not exist"
+        );
+    }
 
     #[test]
     fn claude_body_caches_the_guide_and_opts_into_fallbacks() {

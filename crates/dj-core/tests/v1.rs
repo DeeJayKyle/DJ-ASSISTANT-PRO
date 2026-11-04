@@ -1961,3 +1961,33 @@ fn quick_prep_ai_uses_the_assistant_model_and_sends_no_paths() {
     let row = &search(&app, json!({"text": "sunrise groove"}))["rows"][0];
     assert!(row["version"].as_str() != Some("Radio Edit"), "{row}");
 }
+
+#[test]
+fn local_model_is_only_ready_when_set_up() {
+    let e = env();
+    let app = app_with_fake(&e);
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_provider", "value": "local"}),
+    );
+    // The fake has no local model server: not installed, not running.
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(st["ready"], false);
+    assert!(
+        st["reason"].as_str().unwrap().contains("install Ollama"),
+        "{st}"
+    );
+    let setup = call(&app, "ai_local_setup", json!({}));
+    assert_eq!(setup["probe"]["running"], false);
+    assert_eq!(setup["model"], "qwen2.5:7b");
+    assert_eq!(setup["recommended"].as_array().unwrap().len(), 3);
+    // Starting or downloading without Ollama fails with a clear message, not a crash.
+    assert!(app.dispatch("ai_local_start", json!({})).is_err());
+    assert!(app
+        .dispatch("ai_local_pull", json!({"model": "bad model!"}))
+        .is_err());
+    call(&app, "ai_local_pull", json!({"model": "qwen2.5:3b"}));
+    let j = wait_job(&app, "ai_model");
+    assert_eq!(j["state"], "failed", "{j}");
+}

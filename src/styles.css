@@ -717,3 +717,14 @@ label.check input { accent-color: var(--mint); width: 16px; height: 16px; flex: 
 .cmd-palette button { display: flex; width: 100%; gap: 8px; align-items: center; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
 .cmd-palette button:hover { background: var(--hover); }
 :root[data-palette="midnight-pro"] .ai-pill { color: #22d3ee; background: rgba(34, 211, 238, 0.1); border-color: rgba(34, 211, 238, 0.35); }
+
+/* ---- Local model setup ---- */
+.setup-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.setup-step { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--raised); transition: background 200ms var(--ease-out), border-color 200ms var(--ease-out); }
+.setup-step.done { background: color-mix(in srgb, var(--mint) 7%, transparent); border-color: var(--mint-line); }
+.setup-n { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; border: 1px solid var(--line-strong); color: var(--muted); }
+.setup-step.done .setup-n { background: var(--mint); border-color: var(--mint); color: var(--mint-ink); animation: success-pop 380ms var(--ease-spring); }
+.model-pick { display: flex; flex-direction: column; gap: 6px; }
+.model-opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; color: var(--text); }
+.model-opt.on { border-color: var(--mint-line); background: var(--mint-soft); }
+.model-opt input { margin-top: 4px; accent-color: var(--mint); }

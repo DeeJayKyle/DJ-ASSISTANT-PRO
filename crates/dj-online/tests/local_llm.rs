@@ -105,5 +105,88 @@ fn local_model_chat_and_model_list() {
     let e = http
         .llm_chat(&off, "G", &[], &[json!({"role": "user", "content": "x"})])
         .unwrap_err();
-    assert!(e.contains("Is Ollama running"), "{e}");
+    assert!(e.contains("Ollama") && !e.contains("os error"), "{e}");
+}
+
+/// Serve one raw newline-delimited body (Ollama streams /api/pull like this).
+fn serve_raw(body: String) -> String {
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://127.0.0.1:{}", l.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        let (mut c, _) = l.accept().unwrap();
+        let mut r = BufReader::new(c.try_clone().unwrap());
+        let mut len = 0;
+        loop {
+            let mut h = String::new();
+            r.read_line(&mut h).unwrap();
+            if h == "\r\n" || h.is_empty() {
+                break;
+            }
+            if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                len = v.trim().parse().unwrap();
+            }
+        }
+        let mut buf = vec![0; len];
+        r.read_exact(&mut buf).unwrap();
+        write!(c, "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+    });
+    url
+}
+
+#[test]
+fn local_model_download_reports_progress_and_errors() {
+    let http = dj_online::Http::new();
+    let ok = [
+        json!({"status": "pulling manifest"}),
+        json!({"status": "pulling abc", "digest": "abc", "total": 1000, "completed": 0}),
+        json!({"status": "pulling abc", "digest": "abc", "total": 1000, "completed": 600}),
+        json!({"status": "pulling def", "digest": "def", "total": 200, "completed": 200}),
+        json!({"status": "pulling abc", "digest": "abc", "total": 1000, "completed": 1000}),
+        json!({"status": "verifying sha256 digest"}),
+        json!({"status": "success"}),
+    ]
+    .iter()
+    .map(|v| v.to_string() + "\n")
+    .collect::<String>();
+    let url = serve_raw(ok);
+    let mut seen = vec![];
+    http.llm_local_pull(&url, "qwen2.5:3b", &mut |d, t, s| {
+        seen.push((d, t, s.to_string()));
+        true
+    })
+    .unwrap();
+    assert_eq!(seen.last().unwrap().2, "success");
+    assert!(seen.iter().any(|x| x.0 == 1200 && x.1 == 1200));
+    assert!(
+        seen.windows(2).all(|w| w[1].0 >= w[0].0),
+        "progress went backwards"
+    );
+
+    let bad = json!({"status": "pulling manifest"}).to_string()
+        + "\n"
+        + &json!({"error": "pull model manifest: file does not exist"}).to_string()
+        + "\n";
+    let url = serve_raw(bad);
+    let e = http
+        .llm_local_pull(&url, "nope:1b", &mut |_, _, _| true)
+        .unwrap_err();
+    assert!(e.contains("does not exist"), "{e}");
+
+    // Stopping is honoured.
+    let url = serve_raw(
+        json!({"status": "pulling a", "digest": "a", "total": 10, "completed": 1}).to_string()
+            + "\n",
+    );
+    let e = http
+        .llm_local_pull(&url, "x:1b", &mut |_, _, _| false)
+        .unwrap_err();
+    assert_eq!(e, "download stopped");
+
+    // Nothing listening: plain words, no OS error codes.
+    let e = http
+        .llm_local_pull("http://127.0.0.1:9", "x:1b", &mut |_, _, _| true)
+        .unwrap_err();
+    assert!(e.contains("Ollama") && !e.contains("os error"), "{e}");
+    let p = http.llm_local_probe("http://127.0.0.1:9");
+    assert!(!p.running && p.models.is_empty());
 }

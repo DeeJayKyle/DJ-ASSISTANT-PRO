@@ -53,6 +53,24 @@ pub const CLAUDE_MODELS: &[(&str, &str)] = &[
     ),
 ];
 pub const DEFAULT_LOCAL_MODEL: &str = "qwen2.5:7b";
+/// Local models offered in one-click setup: (Ollama name, download size, note).
+pub const LOCAL_MODELS: &[(&str, &str, &str)] = &[
+    (
+        "qwen2.5:7b",
+        "4.7 GB",
+        "Recommended: best balance of quality and speed (needs about 8 GB of RAM).",
+    ),
+    (
+        "qwen2.5:3b",
+        "1.9 GB",
+        "Faster and smaller for older or low-memory PCs; less reliable at multi-step tasks.",
+    ),
+    (
+        "llama3.1:8b",
+        "4.9 GB",
+        "Alternative general model (needs about 8 GB of RAM).",
+    ),
+];
 pub const DEFAULT_LOCAL_URL: &str = "http://127.0.0.1:11434";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -653,7 +671,21 @@ pub fn status(app: &App) -> Result<Value> {
             false,
             Some("Add your Anthropic API key in Settings → AI assistant."),
         ),
-        "claude" | "local" => (true, None),
+        "local" => {
+            // Ready only when the model server answers and has the chosen model.
+            let probe = app.online.llm_local_probe(&c.local_url);
+            let has = probe
+                .models
+                .iter()
+                .any(|m| m == &c.model || m.trim_end_matches(":latest") == c.model);
+            match (probe.installed, probe.running, has) {
+                (_, true, true) => (true, None),
+                (false, false, _) => (false, Some("Finish setting up the local model in Settings → AI assistant (install Ollama).")),
+                (_, false, _) => (false, Some("Ollama isn't running. Start it in Settings → AI assistant.")),
+                (_, true, false) => (false, Some("Download the local model in Settings → AI assistant.")),
+            }
+        }
+        "claude" => (true, None),
         _ => (
             false,
             Some("The AI assistant is off. The built-in rule-based assistant answers instead."),

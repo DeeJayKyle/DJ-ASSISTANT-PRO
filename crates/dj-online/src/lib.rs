@@ -331,12 +331,11 @@ impl Online for Http {
             "local" => {
                 let url = format!("{}/api/chat", cfg.local_url.trim_end_matches('/'));
                 let body = llm::ollama_body(&cfg.model, system, tools, messages);
-                let mut res = self.local_agent.post(&url).send_json(&body).map_err(|e| {
-                    format!(
-                        "can't reach the local model server at {} ({e}). Is Ollama running?",
-                        cfg.local_url
-                    )
-                })?;
+                let mut res = self
+                    .local_agent
+                    .post(&url)
+                    .send_json(&body)
+                    .map_err(|e| local_unreachable(&cfg.local_url, &e))?;
                 let status = res.status().as_u16();
                 let v: Value = res
                     .body_mut()
@@ -368,9 +367,7 @@ impl Online for Http {
             .local_agent
             .get(&format!("{}/api/tags", url.trim_end_matches('/')))
             .call()
-            .map_err(|e| {
-                format!("can't reach the local model server at {url} ({e}). Is Ollama running?")
-            })?;
+            .map_err(|e| local_unreachable(url, &e))?;
         let v: Value = res
             .body_mut()
             .read_json()
@@ -383,6 +380,89 @@ impl Online for Http {
                     .collect()
             })
             .unwrap_or_default())
+    }
+
+    fn llm_local_probe(&self, url: &str) -> dj_core::online::LocalProbe {
+        let models = self.llm_local_models(url);
+        dj_core::online::LocalProbe {
+            installed: ollama_exe().is_some() || models.is_ok(),
+            running: models.is_ok(),
+            models: models.unwrap_or_default(),
+        }
+    }
+
+    fn llm_local_start(&self) -> Result<(), String> {
+        let exe = ollama_exe()
+            .ok_or("Ollama isn't installed on this computer. Download it free from ollama.com.")?;
+        // On Windows prefer the tray app (it runs the server and keeps it running);
+        // otherwise run "ollama serve" in the background.
+        let app = exe.with_file_name("ollama app.exe");
+        let mut cmd = if app.is_file() {
+            std::process::Command::new(app)
+        } else {
+            let mut c = std::process::Command::new(&exe);
+            c.arg("serve");
+            c
+        };
+        cmd.stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            const DETACHED_PROCESS: u32 = 0x0000_0008;
+            cmd.creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS);
+        }
+        cmd.spawn()
+            .map_err(|e| format!("couldn't start Ollama: {e}"))?;
+        Ok(())
+    }
+
+    fn llm_local_pull(
+        &self,
+        url: &str,
+        model: &str,
+        progress: &mut dyn FnMut(u64, u64, &str) -> bool,
+    ) -> Result<(), String> {
+        use std::io::BufRead;
+        // Model downloads take minutes to hours: no overall timeout, only on connecting.
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(None)
+            .timeout_connect(Some(Duration::from_secs(3)))
+            .user_agent(USER_AGENT)
+            .http_status_as_error(false)
+            .proxy(None)
+            .build()
+            .into();
+        let mut res = agent
+            .post(&format!("{}/api/pull", url.trim_end_matches('/')))
+            .send_json(serde_json::json!({"model": model, "stream": true}))
+            .map_err(|e| local_unreachable(url, &e))?;
+        let status = res.status().as_u16();
+        if status >= 400 {
+            let v: Value = res.body_mut().read_json().unwrap_or(Value::Null);
+            return Err(v["error"]
+                .as_str()
+                .map(|e| e.to_string())
+                .unwrap_or(format!("download failed (HTTP {status})")));
+        }
+        let reader = std::io::BufReader::new(res.body_mut().with_config().limit(u64::MAX).reader());
+        let mut parts = llm::PullProgress::default();
+        for line in reader.lines() {
+            let line = line.map_err(|e| format!("download interrupted: {e}"))?;
+            let Ok(ev) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
+            let (done, total, status, finished) = parts.update(&ev)?;
+            if !progress(done, total, &status) {
+                return Err("download stopped".into());
+            }
+            if finished {
+                return Ok(());
+            }
+        }
+        Err("the download ended before it finished; try again to resume".into())
     }
 
     fn musicbrainz_recordings(
@@ -577,4 +657,54 @@ mod live {
         assert!(!r.is_empty());
         println!("{:?}", &r[..r.len().min(2)]);
     }
+}
+
+/// A plain-language message when nothing answers at the local model address.
+fn local_unreachable(url: &str, e: &ureq::Error) -> String {
+    let refused = matches!(e, ureq::Error::Io(io) if io.kind() == std::io::ErrorKind::ConnectionRefused)
+        || e.to_string().to_ascii_lowercase().contains("refused");
+    if refused {
+        if ollama_exe().is_some() {
+            format!("Ollama is installed but not running (nothing answers at {url}). Start it in Settings → AI assistant, or from the Start menu.")
+        } else {
+            "Ollama isn't installed on this computer yet. Set it up in Settings → AI assistant (free download from ollama.com).".to_string()
+        }
+    } else {
+        format!("couldn't reach the local model server at {url}: {e}")
+    }
+}
+
+/// Where the Ollama program is installed, if it is.
+pub fn ollama_exe() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let name = if cfg!(windows) {
+        "ollama.exe"
+    } else {
+        "ollama"
+    };
+    let mut candidates: Vec<PathBuf> = vec![];
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(local)
+                .join("Programs")
+                .join("Ollama")
+                .join(name),
+        );
+    }
+    if let Some(pf) = std::env::var_os("ProgramFiles") {
+        candidates.push(PathBuf::from(pf).join("Ollama").join(name));
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        candidates.extend(std::env::split_paths(&path).map(|d| d.join(name)));
+    }
+    candidates.extend(
+        [
+            "/usr/local/bin/ollama",
+            "/usr/bin/ollama",
+            "/opt/homebrew/bin/ollama",
+            "/Applications/Ollama.app/Contents/Resources/ollama",
+        ]
+        .map(PathBuf::from),
+    );
+    candidates.into_iter().find(|p| p.is_file())
 }

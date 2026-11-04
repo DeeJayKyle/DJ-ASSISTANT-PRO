@@ -1,3 +1,16 @@
+DJ Assistant 1.3.2
+
+**One-click setup for the private AI model**
+- Settings → AI assistant → **Local model (private)** now walks you through three steps:
+  1. **Install Ollama:** opens the free download; the page notices when it's installed.
+  2. **Start Ollama:** one button starts it quietly in the background (no window).
+  3. **Download the model:** choose qwen2.5:7b (recommended, 4.7 GB), qwen2.5:3b (1.9 GB, for older or low-memory PCs) or llama3.1:8b, then watch the download with a progress bar. You can stop it; it resumes later.
+- The assistant only shows as ready once Ollama is running and the model is downloaded. Until then the chat says which step is missing.
+- Clear messages instead of system errors such as "os error 10061".
+- Nothing about the local model leaves your computer. The setup only talks to Ollama on this PC; the one exception is the Download Ollama button, which opens ollama.com in your browser.
+
+---
+
 DJ Assistant 1.3.1
 
 **Maintenance release**
