@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { hideSplash } from "../lib/splash";
 import { api } from "../api";
 import type { Account, AccountList } from "../types";
 import { Dialog } from "./ui";
@@ -37,10 +38,10 @@ export function AccountGate({ children }: { children: (key: string) => ReactNode
   }, [load]);
   const switchTo = useCallback(async (id: string) => setList(await api.accountSwitch(id)), []);
 
-  if (error) return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><h2>DJ Assistant could not start</h2><p>{error}</p></div>;
+  if (error) { hideSplash(); return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><h2>DJ Assistant could not start</h2><p>{error}</p></div>; }
   if (!list) return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><div className="spin"><Icon name="disc" size={32} /></div></div>;
   const current = list.accounts.find((a) => a.id === list.current);
-  if (!current) return <Welcome list={list} onDone={setList} />;
+  if (!current) { hideSplash(); return <Welcome list={list} onDone={setList} />; }
   return <AccountCtx.Provider value={{ list, current, switchTo, refresh: load }}>{children(current.id)}</AccountCtx.Provider>;
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { isDesktop } from "../api";
 import { Icon, Logo } from "./Icon";
+import { closeWithAnimation } from "../lib/splash";
 import { AccountMenu } from "./Accounts";
 
 /** Custom window title bar (the window has no native decorations). */
@@ -37,7 +38,7 @@ export function TitleBar({ gig, premium, onPremium, toast }: { gig: boolean; pre
           <button className="winbtn" aria-label={max ? "Restore" : "Maximise"} onClick={() => win().then((w) => w.toggleMaximize().then(() => w.isMaximized().then(setMax)))}>
             <Icon name="square" size={13} />
           </button>
-          <button className="winbtn close" aria-label="Close" onClick={() => win().then((w) => w.close())}>
+          <button className="winbtn close" aria-label="Close" onClick={() => closeWithAnimation()}>
             <Icon name="close" size={17} />
           </button>
         </>

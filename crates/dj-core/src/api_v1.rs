@@ -689,6 +689,13 @@ impl App {
                 lock(&self.write_previews).insert(t.clone(), plan.clone());
                 json!({"token": t, "plan": plan})
             }
+            "run_auto_prep" => {
+                let db = self.db_path.clone();
+                let online = self.online.clone();
+                self.start_job("auto_prep", move |ctl, p| {
+                    crate::autoprep::run(&db, online.as_ref(), ctl, p)
+                })?
+            }
             "bad_files" => {
                 let conn = lock(&self.conn);
                 let ids = crate::organize::bad_files(&conn)?;

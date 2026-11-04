@@ -240,6 +240,9 @@ export interface Settings {
   scan_video: boolean;
   premium_ui: boolean;
   ai_provider: "off" | "claude" | "local";
+  auto_prep: boolean;
+  auto_fix_min: number;
+  ui_prefs: import("./lib/theme").UiPrefs;
 }
 
 export interface AiPending {
@@ -593,4 +596,30 @@ export interface WatchItem {
   genre: string | null;
   suggested_folder: string | null;
   note: string;
+}
+
+export interface OrgOp {
+  op: "rename" | "move" | "folder_rename" | "remove";
+  track_id: number | null;
+  from: string;
+  to: string;
+  blocked: string | null;
+  tracks: number;
+}
+export interface OrgPlan {
+  ops: OrgOp[];
+  ready: number;
+  blocked: number;
+  warning: string | null;
+}
+export interface OrgHistory {
+  id: number;
+  batch: string;
+  op: string;
+  track_id: number | null;
+  from: string;
+  to: string;
+  status: "done" | "undone" | "purged" | "failed";
+  error: string | null;
+  at: number;
 }

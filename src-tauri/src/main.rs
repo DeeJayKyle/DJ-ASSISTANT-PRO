@@ -83,6 +83,15 @@ fn reveal(path: String) -> Result<(), String> {
     tauri_plugin_opener::reveal_item_in_dir(p).map_err(|e| e.to_string())
 }
 
+/// Bring the main window back (from the tray), un-minimising and focusing it.
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -117,6 +126,46 @@ fn main() {
             };
             state.log(&format!("started v{}", dj_core::api::APP_VERSION));
             app.manage(state);
+            // Taskbar: give the window the app icon explicitly (the frameless
+            // window otherwise relies on the exe resource alone).
+            if let (Some(win), Some(icon)) =
+                (app.get_webview_window("main"), app.default_window_icon())
+            {
+                let _ = win.set_icon(icon.clone());
+                let _ = win.set_skip_taskbar(false);
+            }
+            // System tray: the DJ Assistant icon stays next to the clock with Show / Quit.
+            {
+                use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+                let show = MenuItem::with_id(app, "show", "Show DJ Assistant", true, None::<&str>)?;
+                let sep = PredefinedMenuItem::separator(app)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit DJ Assistant", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show, &sep, &quit])?;
+                let mut tray = TrayIconBuilder::with_id("main-tray")
+                    .tooltip("DJ Assistant")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => show_main(app),
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            show_main(tray.app_handle());
+                        }
+                    });
+                if let Some(icon) = app.default_window_icon() {
+                    tray = tray.icon(icon.clone());
+                }
+                tray.build(app)?;
+            }
             Ok(())
         })
         // Previews: `track://localhost/<id>` streams a catalogued track (read-only,

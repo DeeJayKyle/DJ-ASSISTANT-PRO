@@ -2,7 +2,7 @@
 // The HTTP bridge is compiled in ONLY for development/e2e builds
 // (VITE_DEV_BRIDGE=1) and talks to 127.0.0.1 — release builds never contain it.
 import type {
-  AiStatus, AiTurn, FixList,
+  AiStatus, AiTurn, FixList, OrgHistory, OrgPlan, TrackRow,
   ChangeLogEntry, CrateGaps, CrateTemplate, DiscoveryItem, DocHit, DocsReport, Gig, GigRecap, JobState, Labels, Overplayed, PackPlan,
   PlannedChange, Preferences, Recommendation, SavedSet, Service, SetParams, SetPlan, Suggestion, TracklistMatch, WatchItem,
   AccountList, PackOptions,
@@ -197,6 +197,18 @@ export const api = {
   gigpackPreview: (sel: Selection, dest: string, name: string, options?: PackOptions) => call<{ token: string; plan: PackPlan }>("gigpack_preview", { ...sel, dest, name, options: options ?? null }),
   gigpackStart: (token: string) => call("gigpack_start", { token }),
   writePreview: (sel: Selection, values: Record<string, string | null>) => call<{ token: string; plan: PlannedChange[] }>("write_preview", { ...sel, values }),
+  fixFilesPreview: (sel: Selection | { all: true }, include_estimates = true) => call<{ token: string; plan: PlannedChange[] }>("fix_files_preview", { ...sel, include_estimates }),
+  runAutoPrep: () => call<{ started: boolean }>("run_auto_prep"),
+  badFiles: () => call<{ ids: number[]; rows: TrackRow[] }>("bad_files"),
+  organizePreview: (args: Record<string, unknown>) => call<{ token: string; plan: OrgPlan }>("organize_preview", args),
+  organizeApply: (token: string) => call<{ batch: string; done: number; skipped: [string, string][] }>("organize_apply", { token, approved: true }),
+  organizeUndo: (batch: string | null, id: number | null = null) => call<{ undone: number }>("organize_undo", { batch, id }),
+  organizeHistory: () => call<OrgHistory[]>("organize_history"),
+  removedSummary: () => call<{ files: number; bytes: number }>("removed_summary"),
+  emptyRemoved: () => call<{ deleted: number }>("empty_removed", { confirmed: true }),
+  exportSerato: (serato_dir: string, crate_ids: number[] | null) => call<{ written: { crate: string; file: string; tracks: number }[]; skipped_other_drive: number; note: string }>("export_serato", { serato_dir, crate_ids }),
+  exportRekordbox: (path: string, crate_ids: number[] | null) => call<{ file: string; tracks: number; playlists: number; note: string }>("export_rekordbox", { path, crate_ids }),
+  exportCrateFolders: (dest: string, crate_ids: number[] | null) => call<{ started: boolean }>("export_crate_folders", { dest, crate_ids }),
   writeApply: (token: string) => call<{ track_id: number; status: string; message?: string }[]>("write_apply", { token, approved: true }),
   changeLog: () => call<ChangeLogEntry[]>("change_log"),
   rollback: (id: number) => call("rollback_change", { id }),

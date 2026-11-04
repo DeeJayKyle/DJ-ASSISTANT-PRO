@@ -3,7 +3,18 @@
 **Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
-## v1.3 (this release)
+
+## v1.4 (this release)
+
+| Area | Feature | Status |
+|---|---|---|
+| Auto-prep | Analysis + suggestions + recommended fixes after every scan (catalogue only), run on demand | Tested |
+| Organise Files | Tags from catalogue, rename by template, sort into folders, folder rename, restorable removal, duplicate replace, undo | Tested (integration + e2e rename/undo) |
+| Export | Serato .crate (round-trip with our importer), rekordbox XML, folders | Tested; not yet opened in real Serato/rekordbox |
+| Look & sound | Colour presets, custom accent, backgrounds, transitions, speed, sounds | Tested (e2e theme); sounds checked in code only |
+| Windows | Splash, close animation, taskbar icon, tray icon, dark first frame, optimised build | Builds; needs a check on a real Windows PC |
+
+## v1.3
 
 | Area | Feature | Status |
 |---|---|---|

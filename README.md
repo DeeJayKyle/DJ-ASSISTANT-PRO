@@ -20,6 +20,14 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 
 **Video files** — music videos and visuals (MP4, M4V, MOV, MKV, WebM, AVI) are catalogued next to your audio with resolution, codec and frame rate, so you can search, rate, tag and crate them. Only file headers are read and videos are never written to. Media and resolution filters, a Video badge, and an option to turn video scanning off.
 
+**Auto-prep** — after every scan, new tracks are analysed and recommended fixes (titles, artists, genres, years…) are applied to your catalogue; empty fields are filled from evidence, existing values change only at high confidence. Undo from Suggestions.
+
+**Organise Files (opt-in)** — write catalogue fixes into file tags, rename files by template, sort files into folders, rename folders, remove corrupt/empty files to a restorable area, and replace duplicates. Every change is previewed, approved, change-checked and undoable.
+
+**Export crates** — to Serato (.crate files, never overwriting), rekordbox (XML) or folders (verified copies with playlists).
+
+**Look & sound** — colour themes or a custom accent, background styles, page transitions, animation speed, completion sounds, animated splash, system tray icon.
+
 **Your catalogue** — energy (1–10 LED meter), star ratings, colour, mood, tags, notes and overrides for title, artist, genre, year, BPM, key and more. Stored in DJ Assistant only; the file’s own tags stay visible separately.
 
 **Virtual crates** — manual and smart crates (AND/OR, ranges, exclusions, manual additions, live preview), nested folders, and one-click templates from the *Crate & Playlist Cheat Sheet*: genres, energy (Peak Time 9–10 → Cool Down 1–2), utility (openers, closers, bangers, acapellas…), events, ratings (Guaranteed → Archive), decades and genre-by-energy folders. Crate-hygiene warnings for vague or oversized crates. Export any crate or selection as M3U8 or CSV.
@@ -38,7 +46,7 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 
 **Serato & history** — read-only import of Serato crates and Serato history CSV exports.
 
-**Safe tag writing (opt-in, off by default)** — write catalogue values to MP3/FLAC/M4A tags with an exact preview, change detection, a verified backup, checks that the audio data and every other tag frame (including Serato’s cue/beatgrid frames) are preserved, a change log and exact-byte rollback.
+**Safe tag writing (opt-in, off by default; also used by Organise Files)** — write catalogue values to MP3/FLAC/M4A tags with an exact preview, change detection, a verified backup, checks that the audio data and every other tag frame (including Serato’s cue/beatgrid frames) are preserved, a change log and exact-byte rollback.
 
 **Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
 

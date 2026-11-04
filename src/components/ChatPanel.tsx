@@ -4,6 +4,7 @@ import type { AiStatus, AiTurn, AssistantReply, RuleSet, SetParams } from "../ty
 import { text } from "../lib/format";
 import { Icon } from "./Icon";
 import { QualityBadge } from "./ui";
+import { playSound } from "../lib/sound";
 
 interface Msg {
   role: "user" | "bot" | "ai" | "cmd";
@@ -192,6 +193,7 @@ export function ChatPanel({ mode, setMode, onApply, onNavigate, onUi, onOpenSett
         if (!(await runCommand(q))) say({ role: "cmd", text: `Unknown command ${q.split(/\s/)[0]}. Type /help for the list.`, error: true });
       } else if (aiOn) {
         const t = await api.aiChat(q, conv);
+        playSound("ai");
         say({ role: "ai", text: t.text, turn: t });
         applyTurn(t);
       } else {

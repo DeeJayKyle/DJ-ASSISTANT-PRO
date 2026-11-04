@@ -3,10 +3,12 @@ import { api } from "../api";
 import type { Crate, CrateTemplate, Labels } from "../types";
 import { plural } from "../lib/format";
 import { Icon } from "./Icon";
+import { ExportCratesDialog } from "./ExportCratesDialog";
 import { ColorDot } from "./ui";
 import type { View } from "./Sidebar";
 
 export function CratesView({ crates, version, bump, toast, setView, onNewCrate }: { crates: Crate[]; version: number; bump: () => void; toast: (m: string, e?: boolean) => void; setView: (v: View) => void; onNewCrate: () => void }) {
+  const [exporting, setExporting] = useState(false);
   const [templates, setTemplates] = useState<CrateTemplate[]>([]);
   const [labels, setLabels] = useState<Labels | null>(null);
   const [hyg, setHyg] = useState<Awaited<ReturnType<typeof api.crateHygiene>> | null>(null);
@@ -32,6 +34,7 @@ export function CratesView({ crates, version, bump, toast, setView, onNewCrate }
         <button className="btn" onClick={() => api.colourByEnergy(true).then((r) => { toast(`Coloured ${plural(r.updated, "track")} by energy.`); bump(); })}>
           <Icon name="palette" size={16} /> Colour tracks by energy
         </button>
+        <button className="btn" onClick={() => setExporting(true)}><Icon name="export" size={16} /> Export crates…</button>
         <button className="btn primary" onClick={onNewCrate}><Icon name="plus" size={18} /> New crate</button>
       </div>
       <div className="view-body">
@@ -101,6 +104,7 @@ export function CratesView({ crates, version, bump, toast, setView, onNewCrate }
           )}
         </div>
       </div>
+      {exporting && <ExportCratesDialog crates={crates} onClose={() => setExporting(false)} toast={toast} />}
     </div>
   );
 }

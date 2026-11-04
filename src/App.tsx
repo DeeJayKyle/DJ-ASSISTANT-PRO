@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { setKeyNotation } from "./lib/format";
+import { applyUiPrefs } from "./lib/theme";
+import { configureSounds, playSound, soundForJob } from "./lib/sound";
+import { hideSplash, interceptCloseRequests } from "./lib/splash";
 import type { AssistantReply, Crate, FieldInfo, Health, HealthItem, JobState, Root, RuleSet, ScanProgress, SetParams, Settings, Stats } from "./types";
 import { Sidebar, type View } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
@@ -18,6 +21,7 @@ import { FilesView } from "./components/FilesView";
 import { SettingsView, SAFETY_POINTS } from "./components/SettingsView";
 import { QuickPrepView } from "./components/quick/QuickPrepView";
 import { ChatPanel, type UiAction } from "./components/ChatPanel";
+import { OrganizeView } from "./components/OrganizeView";
 import { StatusBar } from "./components/StatusBar";
 import { CrateDialog } from "./components/CrateDialog";
 import { Dialog } from "./components/ui";
@@ -32,6 +36,9 @@ export default function App() {
   const [view, setView] = useState<View>("library");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [healthFix, setHealthFix] = useState<{ category: string; n: number } | null>(null);
+  useEffect(() => {
+    interceptCloseRequests().catch(() => {});
+  }, []);
   // The status bar's "online services" list must follow AI provider changes at once.
   useEffect(() => {
     const on = () => setVersion((v) => v + 1);
@@ -98,6 +105,9 @@ export default function App() {
     r.dataset.theme = settings.theme;
     r.dataset.surface = settings.surface;
     r.dataset.motion = settings.motion;
+    applyUiPrefs(settings.ui_prefs, settings.theme === "light");
+    configureSounds(settings.ui_prefs?.sounds, settings.ui_prefs?.volume);
+    hideSplash();
     // Premium UI only repaints: the Midnight Pro palette over the current view.
     if (settings.premium_ui) r.dataset.palette = "midnight-pro";
     else delete r.dataset.palette;
@@ -118,6 +128,7 @@ export default function App() {
       if (s) {
         if (live(prevScan.current) && !live(s.state)) {
           changed = true;
+          playSound(s.state === "failed" ? "error" : "scan");
           toast(s.state === "completed" ? `Scan complete: ${s.added} new, ${s.updated} updated, ${s.errors} problem${s.errors === 1 ? "" : "s"}.` : `Scan ${s.state}.`, s.state === "failed");
         }
         prevScan.current = s.state;
@@ -129,6 +140,7 @@ export default function App() {
         const was = prevJobs.current[n.kind];
         if (was && live(was) && !live(n.state)) {
           changed = true;
+          if (n.state === "completed" || n.state === "failed") playSound(soundForJob(n.kind, n.state === "failed"));
           toast(n.state === "failed" ? `${n.kind} failed: ${n.message}` : `${n.kind[0].toUpperCase() + n.kind.slice(1)} ${n.state}${n.errors ? ` (${n.errors} could not be processed)` : ""}.`, n.state === "failed");
         }
         prevJobs.current[n.kind] = n.state;
@@ -238,7 +250,8 @@ export default function App() {
         scanning={scanning}
       />
     );
-  } else if (view === "quick") main = <QuickPrepView crates={crates} roots={roots} toast={toast} bump={bump} />;
+  } else if (view === "organize") main = <OrganizeView settings={settings} crates={crates} toast={toast} bump={refreshAfterChat} onSettings={() => setView("settings")} onReview={() => setView("suggestions")} />;
+  else if (view === "quick") main = <QuickPrepView crates={crates} roots={roots} toast={toast} bump={bump} />;
   else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} startFix={healthFix} /></div>;
   else if (view === "duplicates") main = <div className="page"><DuplicatesView version={version} toast={toast} /></div>;
   else if (view === "activity") main = <ActivityView scan={scan} version={version} bump={bump} toast={toast} health={health} />;

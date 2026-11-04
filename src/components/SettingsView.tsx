@@ -3,6 +3,8 @@ import { api, isDesktop, openUrl, pickFile, pickFolder } from "../api";
 import type { AiStatus, ChangeLogEntry, Labels, Service, Settings } from "../types";
 import { checkForUpdate, type UpdateInfo } from "../lib/updater";
 import { dateTime } from "../lib/format";
+import { BACKGROUNDS, PRESETS, type UiPrefs } from "../lib/theme";
+import { configureSounds, playSound, type SoundKind } from "../lib/sound";
 import { Dialog } from "./ui";
 import { Icon } from "./Icon";
 
@@ -37,6 +39,70 @@ type LocalSetupState = {
 const gb = (n: number) => `${(n / 1e9).toFixed(n >= 1e10 ? 0 : 1)} GB`;
 
 /** One-click setup for a private model on this computer (Ollama). */
+function LookAndSound({ settings, onChange, toast }: { settings: Settings; onChange: (s: Settings) => void; toast: (m: string, e?: boolean) => void }) {
+  const prefs: UiPrefs = settings.ui_prefs ?? {};
+  const save = (patch: Partial<UiPrefs>) => {
+    const next = { ...prefs, ...patch };
+    onChange({ ...settings, ui_prefs: next });
+    api.setSetting("ui_prefs", next).catch((e) => toast(e.message, true));
+  };
+  const activePreset = prefs.accent ? null : prefs.preset ?? "mint";
+  return (
+    <section className="panel">
+      <h2 style={{ marginBottom: 4 }}>Look &amp; sound</h2>
+      <p className="small muted" style={{ marginTop: 0 }}>Make DJ Assistant yours. Changes apply instantly and are saved with your account.</p>
+      <div className="col" style={{ gap: 16 }}>
+        <div>
+          <div className="small muted" style={{ marginBottom: 8 }}>Colour</div>
+          <div className="swatches" role="group" aria-label="Colour theme">
+            {PRESETS.map((p) => (
+              <div key={p.id}>
+                <button className="swatch" style={{ background: `linear-gradient(135deg, ${p.accent}, ${p.accent2})` }} aria-pressed={activePreset === p.id} aria-label={`${p.name} colour theme`} onClick={() => save({ preset: p.id, accent: undefined })} />
+                <div className="swatch-label">{p.name}</div>
+              </div>
+            ))}
+            <div>
+              <input className="color-input" type="color" aria-label="Custom accent colour" value={prefs.accent ?? PRESETS.find((x) => x.id === (prefs.preset ?? "mint"))?.accent ?? "#4fe0a6"} onChange={(e) => save({ accent: e.target.value })} />
+              <div className="swatch-label">{prefs.accent ? "Custom ✓" : "Custom"}</div>
+            </div>
+          </div>
+        </div>
+        {settings.theme === "dark" && (
+          <div>
+            <div className="small muted" style={{ marginBottom: 8 }}>Background</div>
+            <div className="row wrap" style={{ gap: 10 }} role="group" aria-label="Background style">
+              {BACKGROUNDS.map((b) => (
+                <button key={b.id} className="bg-swatch" style={{ background: `linear-gradient(160deg, ${b.panel}, ${b.bg})` }} aria-pressed={(prefs.background ?? "deep") === b.id} onClick={() => save({ background: b.id })}>{b.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="row wrap" style={{ gap: 24, alignItems: "flex-end" }}>
+          <div className="col" style={{ gap: 6 }}>
+            <span className="small muted">Page transitions</span>
+            <div className="seg">{(["slide", "fade", "zoom"] as const).map((t) => <button key={t} aria-pressed={(prefs.transition ?? "slide") === t} onClick={() => save({ transition: t })}>{t[0].toUpperCase() + t.slice(1)}</button>)}</div>
+          </div>
+          <label className="col" style={{ gap: 6, minWidth: 220 }}>
+            <span className="small muted">Animation speed: {(prefs.speed ?? 1) < 0.85 ? "Relaxed" : (prefs.speed ?? 1) > 1.15 ? "Snappy" : "Normal"}</span>
+            <input type="range" min={0.5} max={1.5} step={0.05} value={prefs.speed ?? 1} onChange={(e) => save({ speed: Number(e.target.value) })} aria-label="Animation speed" />
+          </label>
+        </div>
+        <div className="row wrap" style={{ gap: 16, alignItems: "center" }}>
+          <span className="small muted">Sounds when tasks finish</span>
+          <Toggle label="Sounds when tasks finish" checked={prefs.sounds ?? true} onChange={(v) => { save({ sounds: v }); if (v) { configureSounds(true, prefs.volume); playSound("saved"); } }} />
+          <input type="range" min={0} max={1} step={0.05} value={prefs.volume ?? 0.6} disabled={prefs.sounds === false} onChange={(e) => save({ volume: Number(e.target.value) })} aria-label="Sound volume" style={{ width: 140 }} />
+          <div className="row wrap" style={{ gap: 6 }}>
+            {(["scan", "analysis", "prep", "export", "ai", "error"] as SoundKind[]).map((k) => (
+              <button key={k} className="btn ghost small" disabled={prefs.sounds === false} onClick={() => { configureSounds(true, prefs.volume); playSound(k); }}>▶ {k === "prep" ? "Auto-prep" : k === "ai" ? "Assistant" : k[0].toUpperCase() + k.slice(1)}</button>
+            ))}
+          </div>
+        </div>
+        <button className="btn ghost small" style={{ alignSelf: "flex-start" }} onClick={() => save({ preset: "mint", accent: undefined, background: "deep", transition: "slide", speed: 1 })}>Reset look to default</button>
+      </div>
+    </section>
+  );
+}
+
 function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => void; onChanged: () => void }) {
   const [s, setS] = useState<LocalSetupState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -258,6 +324,8 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
             <div className="col" style={{ gap: 6 }}><span className="small muted">Premium UI (Midnight Pro)</span><div className="row" style={{ height: 36 }}><Toggle label="Premium UI" checked={settings.premium_ui} onChange={(v) => set("premium_ui", v)} /></div></div>
           </div>
         </section>
+
+        <LookAndSound settings={settings} onChange={onChange} toast={toast} />
 
         <section className="panel">
           <h2 style={{ marginBottom: 6 }}>Key notation</h2>

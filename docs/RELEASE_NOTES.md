@@ -1,3 +1,41 @@
+DJ Assistant 1.4.0
+
+**Auto-prep: your library fixes itself as you add music**
+- After every scan, new tracks are analysed (BPM, key, energy, loudness, intro/outro, cue ideas).
+- Titles, artists, genres and years are then found from file names, folders, albums and artists, plus MusicBrainz if you switched it on.
+- The recommended fixes are applied to your catalogue: empty fields are filled from good evidence, and existing values change only at high confidence (85% by default).
+- Every fix can be undone from Suggestions → Accepted. A summary and a "Run auto-prep now" button are in the new **Organise Files** screen.
+
+**Organise Files: change files on disk, safely** (only after you turn on "Allow writing to music files")
+- **Write fixes into the files:** catalogue values go into each file's tags (MP3, FLAC, M4A), with a verified backup and rollback.
+- **Rename files** with a template like `{artist} - {title}`.
+- **Sort into folders** like `{genre}/{artist}`.
+- **Rename a folder:** its tracks, crates and analysis follow.
+- **Remove corrupt and empty files** to a restorable "Removed files" area, emptied only when you confirm.
+- **Replace duplicates:** Duplicate Review → "Keep this, replace others". Crates, tags and ratings move to the copy you keep.
+
+Every change is previewed (with the reason for anything that can't be done), needs your OK, skips files that changed since the preview, and can be undone. Renaming or moving warns that Serato's links will need relocating.
+
+**Export crates** (Virtual Crates → Export crates…)
+- **Serato:** new `.crate` files in your `_Serato_` folder. Sub-crates stay nested; existing crates are never overwritten.
+- **rekordbox:** an XML collection with a playlist per crate.
+- **Folders:** verified copies with a playlist per crate.
+
+**Make it yours** (Settings → Look & sound)
+- **Colour:** 8 colour themes (Mint, Ocean, Violet, Sunset, Rose, Gold, Cyan, Lime) or any custom accent colour.
+- **Background and motion:** 4 background styles, slide/fade/zoom page transitions, and an animation speed slider.
+- **Sounds:** a different short chime for scans, analysis, auto-prep, exports, assistant replies and errors, with volume control.
+- **Opening and closing:** an animated splash when DJ Assistant opens, and a smooth fade when it closes (also with Alt+F4).
+- **Taskbar and tray:** the app icon is set on the taskbar, and a system tray icon offers Show/Quit.
+
+**Smoother on Windows**
+- The window starts dark, with no white flash.
+- Release builds are fully optimised, and long track lists render more cheaply.
+
+**Fixed:** starting gig mode could report the wrong gig id.
+
+---
+
 DJ Assistant 1.3.2
 
 **One-click setup for the private AI model**

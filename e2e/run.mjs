@@ -106,6 +106,12 @@ await step("first run asks for a local account name (no sign-in)", async () => {
   await page.getByLabel("Account name").fill("Herbie");
   await page.getByRole("button", { name: /Create account/ }).click();
   await page.getByRole("button", { name: /Herbie/ }).first().waitFor();
+  // The scripted steps below check exact counts; auto-prep gets its own step later.
+  await bridge("set_setting", { key: "auto_prep", value: false });
+});
+
+await step("splash animation shows on opening and hands over to the app", async () => {
+  await page.locator("#splash").waitFor({ state: "detached", timeout: 15000 });
 });
 
 await step("first run shows the safety notice and it can be acknowledged", async () => {
@@ -568,6 +574,56 @@ await step("a second local account has its own empty library, and switching back
   await nav("Library").click();
   await page.getByRole("heading", { name: "Music Library" }).waitFor();
   await nav("Wedding").waitFor();
+});
+
+await step("Organise Files: auto-prep analyses and applies recommended fixes", async () => {
+  await nav("Organise Files").click();
+  await page.getByRole("heading", { name: "Organise Files" }).waitFor();
+  await page.getByRole("button", { name: "Run auto-prep now" }).click();
+  await page.getByText("fixes applied").waitFor({ timeout: 120000 });
+  await page.screenshot({ path: path.join(shots, "11-organise.png") });
+});
+
+await step("Organise Files: rename is previewed, applied on approval, and undone", async () => {
+  await bridge("set_setting", { key: "allow_file_changes", value: true });
+  await page.reload();
+  await nav("Organise Files").click();
+  await page.getByText("Changes to files: on").waitFor();
+  await page.getByRole("button", { name: "Preview renames" }).click();
+  const dlg = page.getByRole("dialog", { name: "Rename files" });
+  await dlg.waitFor();
+  await dlg.getByText(/Serato's links/).waitFor();
+  await page.screenshot({ path: path.join(shots, "12-rename-preview.png") });
+  await dlg.getByRole("button", { name: /^Apply/ }).click();
+  await page.getByText(/changes? done/).first().waitFor();
+  expect(existsSync(path.join(music, "House", "Old School", "Deep Tenant - Basement Hours.mp3")), "file was not renamed");
+  await page.getByRole("button", { name: "Undo" }).first().click();
+  await page.getByText(/Undid/).waitFor();
+  expect(existsSync(path.join(music, "House", "Old School", "Basement Hours.mp3")), "undo did not restore the name");
+  await bridge("set_setting", { key: "allow_file_changes", value: false });
+});
+
+await step("crates export to rekordbox XML", async () => {
+  await nav("Virtual Crates").click();
+  await page.getByRole("button", { name: "Export crates…" }).click();
+  const dlg = page.getByRole("dialog", { name: "Export crates" });
+  await dlg.getByRole("button", { name: "rekordbox XML" }).click();
+  const xml = path.join(data, "export-test.xml");
+  await dlg.getByLabel("Export destination").fill(xml);
+  await dlg.getByRole("button", { name: /^Export \d+ crate/ }).click();
+  await dlg.getByText(/Saved \d+ tracks?/).waitFor();
+  const text = readFileSync(xml, "utf8");
+  expect(text.includes("<DJ_PLAYLISTS") && text.includes("<TRACK TrackID="), "rekordbox XML looks wrong");
+  await dlg.getByRole("button", { name: "Done" }).click();
+});
+
+await step("look: a colour theme recolours the app instantly", async () => {
+  await nav("Settings").click();
+  await page.getByRole("button", { name: "Ocean colour theme" }).click();
+  const accent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--mint").trim());
+  expect(accent === "#4cb8ff", `accent is ${accent}`);
+  await page.screenshot({ path: path.join(shots, "13-ocean-theme.png") });
+  await page.getByRole("button", { name: "Mint colour theme" }).click();
 });
 
 await step("data, crates and sets persist after restarting the backend", async () => {

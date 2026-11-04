@@ -399,6 +399,7 @@ impl App {
                     "scan_video": db::get_setting(&conn, "scan_video")?.map(|v| v == "1").unwrap_or(true),
                     "premium_ui": db::get_setting(&conn, "premium_ui")?.map(|v| v == "1").unwrap_or(false),
                     "auto_prep": crate::autoprep::enabled(&conn)?,
+                    "ui_prefs": db::get_setting(&conn, "ui_prefs")?.and_then(|v| serde_json::from_str::<Value>(&v).ok()).unwrap_or_else(|| json!({})),
                     "auto_fix_min": crate::autoprep::min_confidence(&conn)?,
                     "ai_provider": db::get_setting(&conn, "ai_provider")?.unwrap_or_else(|| "off".into()),
                 })
@@ -437,6 +438,17 @@ impl App {
                             return invalid("unknown motion setting");
                         }
                         db::set_setting(&conn, &key, v)?;
+                    }
+                    "ui_prefs" => {
+                        // Look-and-sound preferences (theme colours, animation, sounds). Opaque to the core.
+                        if !value.is_object() {
+                            return invalid("ui_prefs must be an object");
+                        }
+                        let text = value.to_string();
+                        if text.len() > 4096 {
+                            return invalid("ui_prefs is too large");
+                        }
+                        db::set_setting(&conn, &key, &text)?;
                     }
                     "auto_fix_min" => {
                         let v = value

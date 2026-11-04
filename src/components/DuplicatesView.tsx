@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
-import type { DupGroup, HashProgress } from "../types";
+import type { DupGroup, HashProgress, OrgPlan } from "../types";
 import { bytes, duration, text } from "../lib/format";
 import { Icon } from "./Icon";
-import { QualityBadge } from "./ui";
+import { Dialog, QualityBadge } from "./ui";
+import { OpsList } from "./OrganizeView";
+import { playSound } from "../lib/sound";
 
 const KIND_LABEL = { exact: "Exact duplicate", possible: "Possible duplicate", alternate: "Alternate versions" } as const;
 const TAB_LABEL = { exact: "Exact duplicates", possible: "Possible duplicates", alternate: "Alternate versions" } as const;
@@ -14,6 +16,7 @@ const DECISIONS: { id: string; label: string }[] = [
 ];
 
 export function DuplicatesView({ version, toast }: { version: number; toast: (m: string, err?: boolean) => void }) {
+  const [replace, setReplace] = useState<{ token: string; plan: OrgPlan; keep: string } | null>(null);
   const [groups, setGroups] = useState<DupGroup[] | null>(null);
   const [tab, setTab] = useState<DupGroup["kind"]>("exact");
   const [hash, setHash] = useState<HashProgress | null>(null);
@@ -125,6 +128,7 @@ export function DuplicatesView({ version, toast }: { version: number; toast: (m:
                   <th>Quality</th>
                   <th>Size</th>
                   <th>Location</th>
+                  {g.kind !== "alternate" && <th />}
                 </tr>
               </thead>
               <tbody>
@@ -140,6 +144,13 @@ export function DuplicatesView({ version, toast }: { version: number; toast: (m:
                     </td>
                     <td>{bytes(t.file_size)}</td>
                     <td className="path">{t.path}</td>
+                    {g.kind !== "alternate" && (
+                      <td>
+                        <button className="btn small" title="Keep this copy: crates, tags and your ratings move to it, and the other copies go to Removed files (restorable)" onClick={() => api.organizePreview({ kind: "replace", keep: t.id, others: g.tracks.filter((x) => x.id !== t.id).map((x) => x.id) }).then((r) => setReplace({ ...r, keep: t.title ?? t.file_name })).catch((e) => toast(e.message, true))}>
+                          Keep this, replace others
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -155,6 +166,15 @@ export function DuplicatesView({ version, toast }: { version: number; toast: (m:
           </article>
         ))}
       </div>
+      {replace && (
+        <Dialog title={`Keep “${replace.keep}”, replace the others`} onClose={() => setReplace(null)} footer={<>
+          <button className="btn ghost" onClick={() => setReplace(null)}>Cancel</button>
+          <button className="btn primary" disabled={!replace.plan.ready} onClick={() => api.organizeApply(replace.token).then((r) => { setReplace(null); toast(`Kept one copy; ${r.done} moved to Removed files (restorable from Organise Files).`); playSound("saved"); load(); }).catch((e) => toast(e.message, true))}>Replace {replace.plan.ready}</button>
+        </>}>
+          <p className="small muted" style={{ marginTop: 0 }}>Crates, tags and your ratings/energy move to the copy you keep. The other copies go to “Removed files” in DJ Assistant's data folder — you can restore them from Organise Files until you empty it.</p>
+          <OpsList plan={replace.plan} />
+        </Dialog>
+      )}
     </>
   );
 }
