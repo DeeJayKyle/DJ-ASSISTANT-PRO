@@ -208,6 +208,8 @@ export interface Settings {
   auto_update: boolean;
   surface: "glass" | "solid";
   motion: "full" | "reduced";
+  key_notation: "camelot" | "musical";
+  scan_video: boolean;
 }
 
 export interface FieldInfo {

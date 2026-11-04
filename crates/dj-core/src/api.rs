@@ -343,6 +343,8 @@ impl App {
                     "auto_update": db::get_setting(&conn, "auto_update")?.map(|v| v == "1").unwrap_or(true),
                     "surface": db::get_setting(&conn, "surface")?.unwrap_or_else(|| "glass".into()),
                     "motion": db::get_setting(&conn, "motion")?.unwrap_or_else(|| "full".into()),
+                    "key_notation": db::get_setting(&conn, "key_notation")?.unwrap_or_else(|| "camelot".into()),
+                    "scan_video": db::get_setting(&conn, "scan_video")?.map(|v| v == "1").unwrap_or(true),
                 })
             }
             "set_setting" => {
@@ -380,12 +382,20 @@ impl App {
                         }
                         db::set_setting(&conn, &key, v)?;
                     }
+                    "key_notation" => {
+                        let v = value.as_str().unwrap_or("");
+                        if !["camelot", "musical"].contains(&v) {
+                            return invalid("key notation must be camelot or musical");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
                     "chat_open"
                     | "privacy_acknowledged"
                     | "allow_file_changes"
                     | "docs_enabled"
                     | "learning_enabled"
                     | "auto_update"
+                    | "scan_video"
                     | "watch_enabled" => {
                         db::set_setting(
                             &conn,

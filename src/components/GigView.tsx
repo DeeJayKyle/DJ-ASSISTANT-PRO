@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, pickSave } from "../api";
 import type { Gig, GigRecap, SavedSet, SetPlan, TrackRow } from "../types";
-import { dateTime, duration, plural } from "../lib/format";
+import { dateTime, duration, keyName, plural } from "../lib/format";
 import { Icon } from "./Icon";
 import { useDebounced } from "./ui";
 
@@ -71,7 +71,7 @@ export function GigView({ toast, onChange }: { toast: (m: string, e?: boolean) =
           <div className="glass now-playing beam">
             <div className="small muted">Up next{plan ? " from your set" : ""}</div>
             <div className="big">{next?.track ?? (plan ? "Set complete" : "No set list — use quick search")}</div>
-            {next && <div className="muted small">Energy {next.energy ?? "—"} · {next.bpm ? Math.round(next.bpm) : "—"} BPM · {next.key ?? "—"} {next.transition.length ? `· ${next.transition.join(" · ")}` : ""}</div>}
+            {next && <div className="muted small">Energy {next.energy ?? "—"} · {next.bpm ? Math.round(next.bpm) : "—"} BPM · {keyName(next.key)} {next.transition.length ? `· ${next.transition.join(" · ")}` : ""}</div>}
             {next && <button className="btn primary" style={{ marginTop: 12 }} onClick={() => ev("played", next.track_id, null)}><Icon name="check" size={16} /> Mark as played</button>}
           </div>
           <div className="panel">

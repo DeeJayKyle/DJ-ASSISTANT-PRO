@@ -420,6 +420,10 @@ pub fn camelot_for(key: &str) -> Option<&'static str> {
             "Gb" => "F#",
             "G#" => "Ab",
             "A#" => "Bb",
+            "Cb" => "B",
+            "Fb" => "E",
+            "E#" => "F",
+            "B#" => "C",
             x => x,
         };
         NOTES.iter().position(|n| *n == r)
@@ -430,6 +434,70 @@ pub fn camelot_for(key: &str) -> Option<&'static str> {
     } else {
         CAMELOT_MAJOR[i]
     })
+}
+
+/// Normalise any common key spelling to its Camelot code: "8A", "08A",
+/// "Am", "A minor", "Amin", "F#m", "F♯ min", "Db", "Bbmaj", or Open Key
+/// ("1m" / "1d"). Returns None if the text isn't a recognisable key.
+pub fn normalize_key(s: &str) -> Option<String> {
+    let t = s
+        .trim()
+        .replace('♯', "#")
+        .replace('♭', "b")
+        .replace(char::is_whitespace, "");
+    if t.is_empty() || t.len() > 12 {
+        return None;
+    }
+    if let Some((n, minor)) = parse_camelot(&t) {
+        return Some(format!("{n}{}", if minor { 'A' } else { 'B' }));
+    }
+    // Open Key notation: 1d..12d (major) / 1m..12m (minor).
+    let lower = t.to_ascii_lowercase();
+    if lower.len() >= 2 {
+        let (n, l) = lower.split_at(lower.len() - 1);
+        if let Ok(n) = n.parse::<u8>() {
+            if (1..=12).contains(&n) && (l == "m" || l == "d") {
+                let c = ((n as u32 + 6) % 12) + 1;
+                return Some(format!("{c}{}", if l == "m" { 'A' } else { 'B' }));
+            }
+        }
+    }
+    let mut chars = t.chars();
+    let first = chars.next()?.to_ascii_uppercase();
+    if !('A'..='G').contains(&first) {
+        return None;
+    }
+    let rest: String = chars.collect();
+    let (acc, quality) = match rest.chars().next() {
+        Some('#') => ("#", &rest[1..]),
+        Some('b') => ("b", &rest[1..]),
+        _ => ("", rest.as_str()),
+    };
+    let minor = match quality.to_ascii_lowercase().as_str() {
+        "m" | "min" | "minor" | "-" => true,
+        "" | "maj" | "major" => false,
+        _ => return None,
+    };
+    let root = format!("{first}{acc}");
+    let name = if minor {
+        format!("{root} minor")
+    } else {
+        format!("{root} major")
+    };
+    camelot_for(&name).map(|c| c.to_string())
+}
+
+/// Camelot code -> standard musical name ("8A" -> "Am", "8B" -> "C").
+pub fn musical_name(camelot: &str) -> Option<&'static str> {
+    const MINOR: [&str; 12] = [
+        "Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m",
+    ];
+    const MAJOR: [&str; 12] = [
+        "B", "F#", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E",
+    ];
+    let (n, minor) = parse_camelot(camelot)?;
+    let i = (n - 1) as usize;
+    Some(if minor { MINOR[i] } else { MAJOR[i] })
 }
 
 /// Parse a Camelot code like "8A" into (number, is_minor).
@@ -793,6 +861,38 @@ mod tests {
         assert_eq!(camelot_for("C major"), Some("8B"));
         assert_eq!(camelot_for("F#m"), Some("11A"));
         assert_eq!(camelot_for("Db"), Some("3B"));
+        for (inp, want) in [
+            ("8A", "8A"),
+            ("08a", "8A"),
+            ("Am", "8A"),
+            ("A minor", "8A"),
+            ("Amin", "8A"),
+            ("F#m", "11A"),
+            ("F♯ min", "11A"),
+            ("Gbm", "11A"),
+            ("Db", "3B"),
+            ("C#", "3B"),
+            ("Bbmaj", "6B"),
+            ("B♭", "6B"),
+            ("C", "8B"),
+            ("1m", "8A"),
+            ("1d", "8B"),
+            ("6m", "1A"),
+            ("Ebm", "2A"),
+            ("e", "12B"),
+        ] {
+            assert_eq!(normalize_key(inp).as_deref(), Some(want), "{inp}");
+        }
+        for bad in ["", "H", "13A", "Xm", "Amajorminor", "unknown"] {
+            assert_eq!(normalize_key(bad), None, "{bad}");
+        }
+        for n in 1..=12u8 {
+            for l in ['A', 'B'] {
+                let c = format!("{n}{l}");
+                let m = musical_name(&c).unwrap();
+                assert_eq!(normalize_key(m).as_deref(), Some(c.as_str()), "{m}");
+            }
+        }
         assert_eq!(camelot_compatible("8A", "8A"), Some("same key"));
         assert_eq!(
             camelot_compatible("8A", "9A"),

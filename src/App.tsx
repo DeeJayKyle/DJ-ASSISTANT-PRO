@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { setKeyNotation } from "./lib/format";
 import type { AssistantReply, Crate, FieldInfo, Health, HealthItem, JobState, Root, RuleSet, ScanProgress, SetParams, Settings, Stats } from "./types";
 import { Sidebar, type View } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
@@ -88,6 +89,8 @@ export default function App() {
     r.dataset.surface = settings.surface;
     r.dataset.motion = settings.motion;
   }, [settings]);
+  // Applied during render so every view formats keys with the current choice.
+  if (settings) setKeyNotation(settings.key_notation);
 
   // Poll scan + background jobs; refresh data when they finish.
   const busy = scan?.state === "running" || scan?.state === "paused" || jobs.some((j) => j.state === "running" || j.state === "paused");

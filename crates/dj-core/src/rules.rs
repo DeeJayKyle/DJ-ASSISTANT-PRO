@@ -88,7 +88,7 @@ fn field(id: &str, low_kbps: u32) -> Option<(String, FieldType)> {
         "mood" => (s("u.mood"), Text),
         "notes" => (s("u.notes"), Text),
         "color" => (s("u.color"), Enum),
-        "key" => (s("COALESCE(u.musical_key, t.key_tag, a.camelot)"), Text),
+        "key" => (s("keynorm(COALESCE(u.musical_key, t.key_tag, a.camelot))"), Text),
         "camelot" => (s("a.camelot"), Text),
         "version" => (s("COALESCE(u.version_label, t.version_hint)"), Text),
         "clean_explicit" => (s("COALESCE(u.clean_explicit, t.clean_hint)"), Enum),
@@ -334,8 +334,17 @@ impl Compiler {
         let Some((expr, ty)) = field(field_id, self.low_kbps) else {
             return invalid(format!("unknown field '{field_id}'"));
         };
+        let is_key = matches!(field_id, "key" | "camelot");
+        // Key values may be typed in either notation; compare as Camelot.
+        let key_norm = |t: String| -> String {
+            if is_key {
+                crate::analysis::normalize_key(&t).unwrap_or(t)
+            } else {
+                t
+            }
+        };
         let text_value = || {
-            as_text(value).ok_or_else(|| {
+            as_text(value).map(key_norm).ok_or_else(|| {
                 crate::error::Error::Invalid(format!("'{field_id}' needs a text value"))
             })
         };
@@ -394,7 +403,7 @@ impl Compiler {
                     let t = as_text(v).ok_or_else(|| {
                         crate::error::Error::Invalid("list values must be text".into())
                     })?;
-                    ps.push(self.bind(Value::Text(fold(t.trim()))));
+                    ps.push(self.bind(Value::Text(fold(key_norm(t).trim()))));
                 }
                 let list = ps.join(", ");
                 Ok(if op == "not_in" {

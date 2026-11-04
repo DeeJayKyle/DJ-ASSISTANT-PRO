@@ -36,7 +36,7 @@ impl Tp {
 pub fn load(conn: &Connection) -> Result<Vec<Tp>> {
     let mut stmt = conn.prepare(
         "SELECT t.id, COALESCE(u.artist, t.artist, ''), COALESCE(u.title, t.title, t.file_name), COALESCE(u.genre, t.genre), COALESCE(u.year, t.year),
-                COALESCE(u.bpm, t.bpm_tag, a.bpm), COALESCE(u.musical_key, t.key_tag, a.camelot), COALESCE(u.energy, a.energy), u.rating, t.duration_ms,
+                COALESCE(u.bpm, t.bpm_tag, a.bpm), keynorm(COALESCE(u.musical_key, t.key_tag, a.camelot)), COALESCE(u.energy, a.energy), u.rating, t.duration_ms,
                 COALESCE(u.clean_explicit, t.clean_hint), COALESCE(u.version_label, t.version_hint),
                 (SELECT GROUP_CONCAT(g.name_fold, char(31)) FROM track_tags tt JOIN tags g ON g.id=tt.tag_id WHERE tt.track_id=t.id),
                 (SELECT COUNT(*) FROM play_history ph WHERE ph.track_id=t.id) + (SELECT COUNT(*) FROM gig_events ge WHERE ge.track_id=t.id AND ge.kind='played'),

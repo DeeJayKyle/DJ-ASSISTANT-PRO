@@ -61,3 +61,61 @@ export const STATUS_LABEL: Record<string, string> = {
   missing: "Missing",
   offline: "Offline",
 };
+
+// ---- Key notation --------------------------------------------------------
+// The catalogue always stores and reports Camelot codes (8A). The DJ can
+// choose to see them as Camelot or as standard musical names (Am).
+export type KeyNotation = "camelot" | "musical";
+let keyNotation: KeyNotation = "camelot";
+export function setKeyNotation(n: KeyNotation) {
+  keyNotation = n === "musical" ? "musical" : "camelot";
+}
+export function getKeyNotation(): KeyNotation {
+  return keyNotation;
+}
+const MINOR = ["Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m"];
+const MAJOR = ["B", "F#", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E"];
+
+/** Camelot code -> musical name, e.g. "8A" -> "Am". Null if not a Camelot code. */
+export function camelotToMusical(c: string): string | null {
+  const m = /^\s*0?(1[0-2]|[1-9])\s*([AaBb])\s*$/.exec(c);
+  if (!m) return null;
+  const i = Number(m[1]) - 1;
+  return m[2].toUpperCase() === "A" ? MINOR[i] : MAJOR[i];
+}
+
+/** Musical name -> Camelot code, e.g. "F#m" / "F# minor" -> "11A". */
+export function musicalToCamelot(k: string): string | null {
+  const t = k.trim().replace(/♯/g, "#").replace(/♭/g, "b").replace(/\s+/g, "");
+  if (camelotToMusical(t)) return t.replace(/^0/, "").toUpperCase();
+  const m = /^([A-Ga-g])([#b]?)(m|min|minor|maj|major)?$/i.exec(t);
+  if (!m) return null;
+  const minor = !!m[3] && /^m(in(or)?)?$/i.test(m[3]);
+  const aliases: Record<string, string> = { "C#": "Db", "D#": "Eb", "Gb": "F#", "G#": "Ab", "A#": "Bb", "Cb": "B", "Fb": "E", "E#": "F", "B#": "C" };
+  let root = m[1].toUpperCase() + (m[2] || "");
+  if (minor) {
+    const minorAliases: Record<string, string> = { "Db": "C#", "Gb": "F#", "G#": "Ab", "D#": "Eb", "A#": "Bb", "Cb": "B", "Fb": "E", "E#": "F", "B#": "C" };
+    root = minorAliases[root] ?? root;
+    const i = MINOR.indexOf(root + "m");
+    return i < 0 ? null : `${i + 1}A`;
+  }
+  root = aliases[root] ?? root;
+  const i = MAJOR.indexOf(root);
+  return i < 0 ? null : `${i + 1}B`;
+}
+
+/** Display a key in the chosen notation. Unrecognised text is shown as-is. */
+export function keyName(k: string | null | undefined, notation: KeyNotation = keyNotation): string {
+  if (k == null || k === "") return UNKNOWN;
+  const c = musicalToCamelot(k);
+  if (!c) return k;
+  return notation === "musical" ? camelotToMusical(c) ?? k : c;
+}
+
+/** The other notation, for a hover hint ("8A = Am"). */
+export function keyHint(k: string | null | undefined): string | undefined {
+  if (!k) return undefined;
+  const c = musicalToCamelot(k);
+  if (!c) return undefined;
+  return `${c} = ${camelotToMusical(c)}`;
+}

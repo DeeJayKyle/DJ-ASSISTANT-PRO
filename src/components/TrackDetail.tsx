@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, openUrl } from "../api";
 import type { Suggestion, TrackDetail as Detail } from "../types";
 import { Waveform } from "./Waveform";
-import { bpm, bytes, dateTime, duration, text } from "../lib/format";
+import { bpm, bytes, dateTime, duration, getKeyNotation, keyHint, keyName, text } from "../lib/format";
 import { ColorPicker, EnergyMeter, QualityBadge } from "./ui";
 import { Icon } from "./Icon";
 
@@ -117,7 +117,7 @@ export function TrackDetail({ id, onClose, onChanged, toast, onWrite }: { id: nu
             </dd>
             <dt>Key</dt>
             <dd>
-              {text(d.analysis.key)} {d.analysis.camelot && <span className="tag">{d.analysis.camelot}</span>} <span className="faint small">conf. {Math.round((d.analysis.key_confidence ?? 0) * 100)}%</span>
+              {d.analysis.camelot ? <span title={keyHint(d.analysis.camelot)}>{keyName(d.analysis.camelot)}</span> : text(d.analysis.key)} {d.analysis.camelot && <span className="tag">{keyName(d.analysis.camelot, getKeyNotation() === "camelot" ? "musical" : "camelot")}</span>} <span className="faint small">conf. {Math.round((d.analysis.key_confidence ?? 0) * 100)}%</span>
               {d.analysis.camelot && <button className="btn ghost small" onClick={() => patch({ key: d.analysis!.camelot })}>Use</button>}
             </dd>
             <dt>Energy</dt>
@@ -222,7 +222,7 @@ export function TrackDetail({ id, onClose, onChanged, toast, onWrite }: { id: nu
           {field("genre", "Genre", f.genre)}
           {field("year", "Year", f.year)}
           {field("bpm", "BPM", f.bpm)}
-          {field("key", "Key", f.key)}
+          {field("key", "Key", f.key, { placeholder: "e.g. 8A or Am" })}
           {field("mood", "Mood", null, { placeholder: "e.g. Uplifting" })}
           {field("version_label", "Version label", f.version_hint)}
           <label className="field">
@@ -254,7 +254,7 @@ export function TrackDetail({ id, onClose, onChanged, toast, onWrite }: { id: nu
             ["Date / year", text(f.date ?? f.year)],
             ["Original year", text(f.original_year)],
             ["BPM tag", bpm(f.bpm as number | null)],
-            ["Key tag", text(f.key)],
+            ["Key tag", f.key ? `${f.key}${keyHint(f.key as string) ? ` (${keyHint(f.key as string)})` : ""}` : text(f.key)],
             ["Label", text(f.label)],
             ["Composer", text(f.composer)],
             ["ISRC", text(f.isrc)],

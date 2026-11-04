@@ -388,6 +388,18 @@ fn configure(conn: &Connection) -> Result<()> {
             Ok(v.map(|s| crate::text::fold(&s)))
         },
     )?;
+    // keynorm(x): any key spelling -> Camelot code, or the text unchanged.
+    conn.create_scalar_function(
+        "keynorm",
+        1,
+        FunctionFlags::SQLITE_UTF8
+            | FunctionFlags::SQLITE_DETERMINISTIC
+            | FunctionFlags::SQLITE_INNOCUOUS,
+        |ctx| {
+            let v: Option<String> = ctx.get(0)?;
+            Ok(v.map(|s| crate::analysis::normalize_key(&s).unwrap_or(s)))
+        },
+    )?;
     Ok(())
 }
 

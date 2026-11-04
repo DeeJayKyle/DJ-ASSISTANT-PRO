@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, isDesktop, pickFolders, pickSave, reveal } from "../api";
 import type { Crate, FieldInfo, Root, RuleNode, RuleSet, TrackDetail as Detail, TrackQuery } from "../types";
 import { cleanRuleSet, countRules, describe, emptyRuleSet } from "../lib/rules";
-import { bpm, plural, text } from "../lib/format";
+import { bpm, keyName, plural, text } from "../lib/format";
 import { TrackTable } from "./TrackTable";
 import { TrackDetail } from "./TrackDetail";
 import { RuleBuilder } from "./RuleBuilder";
@@ -269,7 +269,7 @@ export function LibraryView({ state, setState, crate, root, crates, fields, vers
                     <span>Genre: {text(focus.file.genre)}</span>
                     <span>Format: {text(focus.technical.format)}</span>
                     <span>Bitrate: {focus.technical.bitrate_kbps != null ? `${focus.technical.bitrate_kbps} kbps` : "—"}</span>
-                    {focus.analysis?.status === "ok" && (focus.analysis.bpm != null || focus.analysis.camelot) && <span>Analysis: {[focus.analysis.bpm != null ? `${bpm(focus.analysis.bpm)} BPM` : null, focus.analysis.camelot ? `key ${focus.analysis.camelot}` : null, focus.analysis.energy != null ? `energy ${focus.analysis.energy}` : null].filter(Boolean).join(", ")} (estimates)</span>}
+                    {focus.analysis?.status === "ok" && (focus.analysis.bpm != null || focus.analysis.camelot) && <span>Analysis: {[focus.analysis.bpm != null ? `${bpm(focus.analysis.bpm)} BPM` : null, focus.analysis.camelot ? `key ${keyName(focus.analysis.camelot)}` : null, focus.analysis.energy != null ? `energy ${focus.analysis.energy}` : null].filter(Boolean).join(", ")} (estimates)</span>}
                   </div>
                 </div>
                 <div className="pathbox">

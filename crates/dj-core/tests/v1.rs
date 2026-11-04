@@ -1087,3 +1087,68 @@ fn assistant_routes_v1_requests() {
         "activity"
     );
 }
+
+#[test]
+fn keys_match_in_either_notation() {
+    let e = env();
+    let app = e.app();
+    add_and_scan(&app, &e.music);
+    let a = id_of(&app, "Deep Tenant - Warehouse 94.mp3");
+    let b = id_of(&app, "Basement Hours.mp3");
+    let q = |v: Value| {
+        search(
+            &app,
+            json!({"filters": {"match": "all", "rules": [{"kind": "condition", "field": "key", "op": "equals", "value": v}]}}),
+        )["total"]
+            .as_i64()
+            .unwrap()
+    };
+    // Some fixtures already carry an "Am"/"8A" key tag.
+    let base = q(json!("8A"));
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": [a], "patch": {"key": "A minor"}}),
+    );
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": [b], "patch": {"key": "8A"}}),
+    );
+    for spelling in ["8A", "08a", "Am", "a minor", "Amin", "1m"] {
+        assert_eq!(q(json!(spelling)), base + 2, "{spelling}");
+    }
+    assert!(q(json!("8B")) < base + 2);
+    // Rows always report the Camelot code; the UI chooses how to display it.
+    let page = search(&app, json!({"text": "warehouse"}));
+    assert_eq!(find(&page, "Deep Tenant - Warehouse 94.mp3")["key"], "8A");
+    // Facet groups both spellings together.
+    let f = call(&app, "facet", json!({"field": "key"}));
+    let s = f.to_string();
+    assert!(s.contains("8A"), "{s}");
+    assert!(!s.contains("minor"), "{s}");
+    for msg in ["key a minor", "key Am", "key 8a", "tracks in 8A"] {
+        let r = call(&app, "assistant", json!({"message": msg}));
+        assert_eq!(r["total"], base + 2, "{msg}: {r}");
+    }
+    // Setting round-trip and validation.
+    assert_eq!(
+        call(&app, "get_settings", json!({}))["key_notation"],
+        "camelot"
+    );
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "key_notation", "value": "musical"}),
+    );
+    assert_eq!(
+        call(&app, "get_settings", json!({}))["key_notation"],
+        "musical"
+    );
+    assert!(app
+        .dispatch(
+            "set_setting",
+            json!({"key": "key_notation", "value": "solfege"})
+        )
+        .is_err());
+}

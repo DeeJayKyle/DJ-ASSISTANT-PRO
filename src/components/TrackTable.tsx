@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { TrackQuery, TrackRow } from "../types";
-import { bpm, duration, text } from "../lib/format";
+import { bpm, duration, keyHint, keyName, text } from "../lib/format";
 import { EnergyMeter, Stars, StatusText } from "./ui";
 import { Icon } from "./Icon";
 
@@ -42,7 +42,7 @@ export const COLUMNS: Column[] = [
   { id: "genre", label: "Genre", minTable: 1050, width: "minmax(80px, 0.8fr)", sort: "genre", render: (t) => <span className="cell muted">{text(t.genre)}</span> },
   { id: "year", label: "Year", minTable: 640, width: "50px", sort: "year", render: (t) => <span className="cell">{text(t.year)}</span> },
   { id: "bpm", label: "BPM", minTable: 720, width: "78px", sort: "bpm", render: (t) => <span className="cell" style={{ overflow: "visible" }}>{bpm(t.bpm)}{src(t.bpm_source)}</span> },
-  { id: "key", label: "Key", minTable: 780, width: "66px", sort: "key", render: (t) => <span className="cell" style={{ overflow: "visible" }}>{text(t.key)}{src(t.key_source)}</span> },
+  { id: "key", label: "Key", minTable: 780, width: "66px", sort: "key", render: (t) => <span className="cell" style={{ overflow: "visible" }} title={keyHint(t.key)}>{keyName(t.key)}{src(t.key_source)}</span> },
   { id: "energy", label: "Energy", minTable: 560, width: "70px", sort: "energy", render: (t) => <EnergyMeter value={t.energy} estimate={t.energy_source === "analysis"} /> },
   { id: "rating", label: "Rating", minTable: 1180, width: "64px", sort: "rating", render: (t) => <Stars value={t.rating} /> },
   { id: "time", label: "Time", minTable: 980, width: "48px", sort: "duration", num: true, render: (t) => <span className="cell num">{duration(t.duration_ms)}</span> },

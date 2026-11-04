@@ -77,6 +77,18 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
         </section>
 
         <section className="panel">
+          <h2 style={{ marginBottom: 6 }}>Key notation</h2>
+          <p className="small muted" style={{ marginTop: 0 }}>How musical keys are shown in the library, track details, Set Studio and Gig mode. Search, filters and the Assistant accept either form — "8A", "Am" and "A minor" all find the same tracks. Your files are not changed.</p>
+          <div className="seg" role="group" aria-label="Key notation">
+            {(["camelot", "musical"] as const).map((t) => (
+              <button key={t} aria-pressed={settings.key_notation === t} onClick={() => set("key_notation", t)}>
+                {t === "camelot" ? "Camelot (8A, 11B)" : "Musical (Am, A)"}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel">
           <h2 style={{ marginBottom: 10 }}>Audio quality warning</h2>
           <form className="row wrap" onSubmit={(e) => { e.preventDefault(); const v = Number(kbps); if (Number.isInteger(v)) set("low_bitrate_kbps", v); }}>
             <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>Flag lossy files below<input className="input" style={{ width: 90 }} inputMode="numeric" value={kbps} onChange={(e) => setKbps(e.target.value)} aria-label="Low bitrate threshold in kbps" />kbps</label>

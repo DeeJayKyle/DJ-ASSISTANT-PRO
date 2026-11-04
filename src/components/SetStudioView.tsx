@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, pickSave } from "../api";
 import type { Crate, SavedSet, SetParams, SetPlan, SetSlot, TrackRow } from "../types";
-import { bpm, duration, plural, text } from "../lib/format";
+import { bpm, duration, keyName, plural, text } from "../lib/format";
 import { Icon } from "./Icon";
 import { useDebounced } from "./ui";
 
@@ -161,7 +161,7 @@ export function SetStudioView({ crates, version, toast, bump, initial }: { crate
                     <span className="n">{String(i + 1).padStart(2, "0")}</span>
                     <div style={{ minWidth: 0 }}>
                       <div className="row" style={{ gap: 10 }}><strong className="cell">{s.track}</strong>{s.must_play && <span className="badge q-lossless">must-play</span>}</div>
-                      <div className="small muted">{s.start_ms > 0 ? duration(s.start_ms) : "0:00"} · energy {text(s.energy)} (target {s.target_energy}) · {bpm(s.bpm)} BPM · {text(s.key)} {s.reasons.filter((r) => !r.startsWith("Energy ")).length ? `· ${s.reasons.filter((r) => !r.startsWith("Energy ")).join(", ")}` : ""}</div>
+                      <div className="small muted">{s.start_ms > 0 ? duration(s.start_ms) : "0:00"} · energy {text(s.energy)} (target {s.target_energy}) · {bpm(s.bpm)} BPM · {keyName(s.key)} {s.reasons.filter((r) => !r.startsWith("Energy ")).length ? `· ${s.reasons.filter((r) => !r.startsWith("Energy ")).join(", ")}` : ""}</div>
                       {s.transition.length > 0 && <div className="trans">{s.transition.map((t) => <span key={t} className={/jump|not a standard|unknown/i.test(t) ? "bad" : ""}>{t}</span>)}</div>}
                       {s.alternatives.length > 0 && (
                         <details style={{ marginTop: 4 }}>

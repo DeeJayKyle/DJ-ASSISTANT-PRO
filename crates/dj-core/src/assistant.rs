@@ -72,6 +72,12 @@ fn decade_of(tok: &str) -> Option<i64> {
     }
 }
 
+/// Bare tokens like "f#m" or "bbm" (not plain words such as "am").
+fn is_sharp_flat_minor(t: &str) -> bool {
+    let b = t.as_bytes();
+    b.len() == 3 && (b'a'..=b'g').contains(&b[0]) && (b[1] == b'#' || b[1] == b'b') && b[2] == b'm'
+}
+
 fn is_camelot(t: &str) -> bool {
     let u = t.to_ascii_uppercase();
     let (n, l) = u.split_at(u.len().saturating_sub(1));
@@ -367,17 +373,27 @@ pub fn handle(conn: &Connection, message: &str) -> Result<AssistantReply> {
         }
         if t == "key" {
             if let Some(k) = next {
-                rules.push(cond("key", "equals", json!(k.to_ascii_uppercase())));
-                understood.push(format!("key {}", k.to_ascii_uppercase()));
-                i += 2;
-                continue;
+                // "key 8A", "key Am", "key F#m", "key A minor", "key 1m"
+                let after = toks.get(i + 2).map(|x| x.as_str());
+                let (spelled, used) = match after {
+                    Some(q @ ("minor" | "major" | "min" | "maj")) => (format!("{k} {q}"), 3),
+                    _ => (k.to_string(), 2),
+                };
+                if let Some(c) = crate::analysis::normalize_key(&spelled) {
+                    rules.push(cond("key", "equals", json!(c)));
+                    understood.push(format!("key {c}"));
+                    i += used;
+                    continue;
+                }
             }
         }
-        if is_camelot(t) {
-            rules.push(cond("key", "equals", json!(t.to_ascii_uppercase())));
-            understood.push(format!("key {}", t.to_ascii_uppercase()));
-            i += 1;
-            continue;
+        if is_camelot(t) || is_sharp_flat_minor(t) {
+            if let Some(c) = crate::analysis::normalize_key(t) {
+                rules.push(cond("key", "equals", json!(c)));
+                understood.push(format!("key {c}"));
+                i += 1;
+                continue;
+            }
         }
         if t.contains('-') {
             if let Some((a, b)) = parse_range(t) {
