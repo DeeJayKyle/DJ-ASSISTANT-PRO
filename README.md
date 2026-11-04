@@ -4,9 +4,9 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ![Music Library](docs/screenshots/library.png)
 
-## What it does (v1.2)
+## What it does (v1.3)
 
-**Quick Prep (new in 1.2)** — a fast lane for a folder of fresh downloads. Pick a folder (it's added read-only and analysed on this computer, with a small mini-game while you wait), then one of four paths:
+**Quick Prep (new in 1.3)** — a fast lane for a folder of fresh downloads. Pick a folder (it's added read-only and analysed on this computer, with a small mini-game while you wait), then one of four paths:
 - **Clean names:** strips `[FREE DL]`, `www.site.net`, `320kbps`, `final FINAL v3`, track numbers and underscores; fixes capitals; keeps the mix name; *Artist – Title* or *Title – Artist*; edit any name inline; genre per track. Saved to the catalogue only.
 - **Build a playlist:** drag to reorder or one-click *Warm-up → peak* (harmonic, smooth tempo steps), *Ascending BPM*, *Harmonic*, *Group by genre*, *Cool down*, or type what you want ("fastest first"). A flow score shows how well it mixes.
 - **Organise folders:** set up gig folders with *Warm Up / Groove / Peak Time* sub-folders, listen on the waveform, and press **1–9** to sort each track (or drag it). *Auto-sort by energy* does it for you.
@@ -14,7 +14,7 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 Every path exports as a **verified copy in a new folder**, **one ZIP**, or **playlists only** (pointing at your originals), with an `.m3u8` per folder and — optionally — clean title, artist, genre, BPM and key written into the **copies** (MP3, FLAC, M4A; never the originals). Folders and genres can also be saved as crates.
 
-**Local accounts (new in 1.2)** — no sign-in. Create one account or several (a second DJ, a separate library) from the title bar; each keeps its own folders, crates, sets, analysis and settings in its own catalogue on this computer. An existing catalogue becomes the first account automatically.
+**Local accounts (new in 1.3)** — no sign-in. Create one account or several (a second DJ, a separate library) from the title bar; each keeps its own folders, crates, sets, analysis and settings in its own catalogue on this computer. An existing catalogue becomes the first account automatically.
 
 **Library** — choose music folders and drives; read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; fast accent-insensitive search; Genre / Decade / Format / Quality filters plus a full rule builder; offline drives kept, never treated as deleted; folder watcher that notices new music.
 

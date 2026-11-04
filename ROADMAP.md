@@ -3,7 +3,7 @@
 **Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
-## v1.2 (this release)
+## v1.3 (this release)
 
 | Area | Feature | Status |
 |---|---|---|
@@ -14,6 +14,11 @@ Every item still needs **manual testing on a real Windows PC with a real library
 | Quick Prep | Track previews (read-only `track:` protocol with range requests, catalogued tracks only) and waveform | Tested (bridge); desktop protocol needs a manual check on Windows |
 | Quick Prep | AI help for names, genres and set orders, using the assistant's model (Claude or local) | Tested with a fake model and the scripted demo model |
 | Accounts | Several local accounts, no sign-in; separate catalogues; rename/remove; existing catalogue migrates | Tested (Rust + e2e) |
+
+## v1.2
+
+| Area | Feature | Status |
+|---|---|---|
 | AI assistant | Built-in app knowledge (docs/ASSISTANT_GUIDE.md as the system prompt, cached) | Tested |
 | AI assistant | 31 tools over the app's commands: read (auto), screen (auto), actions (approval cards) | Tested (scripted model) |
 | AI assistant | Claude provider (Messages API, raw HTTPS, refusal fallback, prompt caching) | Implemented; request shape unit-tested, no live call possible here |
