@@ -205,7 +205,7 @@ export default function App() {
         scanning={scanning}
       />
     );
-  } else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} /></div>;
+  } else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} /></div>;
   else if (view === "duplicates") main = <div className="page"><DuplicatesView version={version} toast={toast} /></div>;
   else if (view === "activity") main = <ActivityView scan={scan} version={version} bump={bump} toast={toast} health={health} />;
   else if (view === "crates") main = <CratesView crates={crates} version={version} bump={bump} toast={toast} setView={setView} onNewCrate={() => setCrateDialog({ crate: null })} />;

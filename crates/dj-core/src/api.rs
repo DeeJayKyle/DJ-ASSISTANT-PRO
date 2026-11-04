@@ -328,6 +328,12 @@ impl App {
                 json!({"ok": true})
             }
             "health" => json!(health::health(&lock(&self.conn))?),
+            "health_fix_list" => json!(health::fix_list(
+                &lock(&self.conn),
+                &arg::<String>(a, "category")?,
+                arg::<Option<i64>>(a, "limit")?.unwrap_or(100),
+                arg::<Option<i64>>(a, "offset")?.unwrap_or(0),
+            )?),
             "get_settings" => {
                 let conn = lock(&self.conn);
                 json!({

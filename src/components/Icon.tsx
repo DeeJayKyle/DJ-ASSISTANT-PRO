@@ -11,6 +11,7 @@ const MAP: Record<string, L.LucideIcon> = {
   thumbdown: L.ThumbsDown, clock: L.Clock, template: L.LayoutTemplate, palette: L.Palette, key: L.KeyRound, cloudoff: L.CloudOff,
   cloud: L.Cloud, download: L.Download, export: L.FileOutput, party: L.PartyPopper, wave: L.AudioWaveform, minus: L.Minus, square: L.Square,
   grip: L.GripVertical, arrowUp: L.ArrowUp, arrowDown: L.ArrowDown, shuffle: L.Shuffle, headphones: L.Headphones, calendar: L.CalendarDays,
+  back: L.ChevronLeft, film: L.Film, video: L.Clapperboard, wrench: L.Wrench,
 };
 
 export function Icon({ name, size = 18, title, strokeWidth = 1.9 }: { name: string; size?: number; title?: string; strokeWidth?: number }) {

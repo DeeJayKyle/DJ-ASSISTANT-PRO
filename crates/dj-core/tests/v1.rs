@@ -1152,3 +1152,111 @@ fn keys_match_in_either_notation() {
         )
         .is_err());
 }
+
+#[test]
+fn health_fix_list_offers_local_hints_and_saves_to_catalogue() {
+    let e = env();
+    let app = e.app();
+    add_and_scan(&app, &e.music);
+    let before = snapshot(&e.music);
+    let h = call(&app, "health", json!({}));
+    let mut counts = std::collections::HashMap::new();
+    for it in h["items"].as_array().unwrap() {
+        counts.insert(
+            it["id"].as_str().unwrap().to_string(),
+            it["count"].as_i64().unwrap(),
+        );
+    }
+    let list = |c: &str| call(&app, "health_fix_list", json!({"category": c}));
+    for c in [
+        "missing_core",
+        "missing_genre",
+        "missing_year",
+        "missing_album",
+        "missing_bpm",
+        "missing_key",
+    ] {
+        let l = list(c);
+        assert_eq!(l["total"].as_i64(), counts.get(c).copied(), "{c}");
+        assert!(!l["fields"].as_array().unwrap().is_empty());
+    }
+    let row = |l: &Value, f: &str| -> Value {
+        l["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["track"]["file_name"] == f)
+            .cloned()
+            .unwrap_or_else(|| panic!("{f} not listed"))
+    };
+    // Title from the file name for an untagged file.
+    let core = list("missing_core");
+    let r = row(&core, "untagged recording.wav");
+    assert!(
+        r["hints"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|h| h["field"] == "title"
+                && h["value"] == "untagged recording"
+                && h["source"] == "file name"),
+        "{r}"
+    );
+    // Genre from a folder named after a genre already in the library.
+    let g = list("missing_genre");
+    let r = row(&g, "Roller Rink.opus");
+    let first = &r["hints"][0];
+    assert_eq!(first["value"], "House", "{r}");
+    assert_eq!(first["source"], "folder name");
+    assert!(first["evidence"].as_str().unwrap().contains("House"));
+    // Saving fills the catalogue only and the track leaves the list.
+    let id = r["track"]["id"].as_i64().unwrap();
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": [id], "patch": {"genre": "House"}}),
+    );
+    assert_eq!(
+        list("missing_genre")["total"].as_i64().unwrap(),
+        counts["missing_genre"] - 1
+    );
+    // Bulk: set one year on several tracks at once.
+    let y = list("missing_year");
+    let ids: Vec<i64> = y["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .take(2)
+        .map(|r| r["track"]["id"].as_i64().unwrap())
+        .collect();
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": ids, "patch": {"year": 2020}}),
+    );
+    assert_eq!(
+        list("missing_year")["total"].as_i64().unwrap(),
+        counts["missing_year"] - 2
+    );
+    // Stored suggestions appear with their id so they can be accepted.
+    call(&app, "generate_suggestions", json!({}));
+    let any_id = ["missing_core", "missing_genre", "missing_year"]
+        .iter()
+        .any(|c| {
+            list(c)["rows"].as_array().unwrap().iter().any(|r| {
+                r["hints"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|h| h["suggestion_id"].is_i64())
+            })
+        });
+    assert!(any_id, "stored suggestions should be offered as hints");
+    assert!(app
+        .dispatch("health_fix_list", json!({"category": "read_errors"}))
+        .is_err());
+    assert!(app
+        .dispatch("health_fix_list", json!({"category": "nope"}))
+        .is_err());
+    assert_eq!(before, snapshot(&e.music));
+}

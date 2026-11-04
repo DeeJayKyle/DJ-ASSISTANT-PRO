@@ -202,7 +202,7 @@ pub fn parse_filename(stem: &str) -> Option<(String, String)> {
     None
 }
 
-fn year_in(s: &str) -> Option<i64> {
+pub(crate) fn year_in(s: &str) -> Option<i64> {
     let b = s.as_bytes();
     for i in 0..b.len().saturating_sub(5) {
         if (b[i] == b'(' || b[i] == b'[')

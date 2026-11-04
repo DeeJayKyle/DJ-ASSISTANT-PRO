@@ -3,12 +3,15 @@ import { api } from "../api";
 import type { Health, HealthItem } from "../types";
 import { dateTime, plural } from "../lib/format";
 import { Icon } from "./Icon";
+import { HealthFixView } from "./HealthFixView";
 
-export function HealthView({ version, onOpen }: { version: number; onOpen: (item: HealthItem) => void }) {
+export function HealthView({ version, onOpen, toast, bump }: { version: number; onOpen: (item: HealthItem) => void; toast: (m: string, e?: boolean) => void; bump: () => void }) {
   const [h, setH] = useState<Health | null>(null);
+  const [fixing, setFixing] = useState<string | null>(null);
   useEffect(() => {
     api.health().then(setH).catch(() => setH(null));
   }, [version]);
+  if (fixing) return <HealthFixView category={fixing} onBack={() => setFixing(null)} toast={toast} bump={bump} />;
   if (!h) return <div className="view-body">Loading…</div>;
   const warn = new Set(["read_errors", "low_bitrate", "missing", "unsupported"]);
   return (
@@ -16,17 +19,29 @@ export function HealthView({ version, onOpen }: { version: number; onOpen: (item
       <div className="view-head">
         <div className="grow">
           <h1>Library health</h1>
-          <div className="sub">Problems found by reading your files. Nothing is fixed automatically — open a card to review the tracks.</div>
+          <div className="sub">Problems found by reading your files. Nothing is fixed automatically — fill in missing details with “Fix”, or open a card to review the tracks.</div>
         </div>
       </div>
       <div className="view-body">
         <div className="grid-cards">
           {h.items.map((it) => (
-            <button key={it.id} className={`card health-card${it.count === 0 ? " zero" : warn.has(it.id) ? " warn" : ""}`} onClick={() => onOpen(it)} disabled={it.count === 0} aria-label={`${it.label}: ${it.count}. Open in library`}>
+            <div key={it.id} className={`card health-card${it.count === 0 ? " zero" : warn.has(it.id) ? " warn" : ""}`}>
               <span className="n">{it.count.toLocaleString()}</span>
               <strong>{it.label}</strong>
               <p>{it.explanation}</p>
-            </button>
+              {it.count > 0 && (
+                <div className="row wrap health-actions">
+                  {it.fix_fields.length > 0 && (
+                    <button className="btn primary small" onClick={() => setFixing(it.id)} aria-label={`Fix ${it.label.toLowerCase()} (${it.count})`}>
+                      <Icon name="wrench" size={14} /> Fix
+                    </button>
+                  )}
+                  <button className="btn ghost small" onClick={() => onOpen(it)} aria-label={`${it.label}: ${it.count}. Open in library`}>
+                    Show in library <Icon name="right" size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
 

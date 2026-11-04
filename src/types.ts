@@ -160,6 +160,29 @@ export interface HealthItem {
   count: number;
   filters: RuleSet;
   include_missing: boolean;
+  fix_fields: string[];
+}
+
+export interface FixHint {
+  field: string;
+  value: string;
+  source: string;
+  evidence: string;
+  suggestion_id: number | null;
+}
+
+export interface FixRow {
+  track: TrackRow;
+  folder: string;
+  hints: FixHint[];
+}
+
+export interface FixList {
+  category: string;
+  label: string;
+  fields: string[];
+  total: number;
+  rows: FixRow[];
 }
 
 export interface Health {

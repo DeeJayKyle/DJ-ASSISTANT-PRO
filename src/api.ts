@@ -2,6 +2,7 @@
 // The HTTP bridge is compiled in ONLY for development/e2e builds
 // (VITE_DEV_BRIDGE=1) and talks to 127.0.0.1 — release builds never contain it.
 import type {
+  FixList,
   ChangeLogEntry, CrateGaps, CrateTemplate, DiscoveryItem, DocHit, DocsReport, Gig, GigRecap, JobState, Labels, Overplayed, PackPlan,
   PlannedChange, Preferences, Recommendation, SavedSet, Service, SetParams, SetPlan, Suggestion, TracklistMatch, WatchItem,
   AssistantReply, Crate, DupGroup, FieldInfo, HashProgress, Health, Root, RuleSet,
@@ -118,6 +119,7 @@ export const api = {
   duplicates: () => call<DupGroup[]>("duplicates"),
   setDupDecision: (key: string, decision: string | null) => call("set_dup_decision", { key, decision }),
   health: () => call<Health>("health"),
+  healthFixList: (category: string, limit = 100, offset = 0) => call<FixList>("health_fix_list", { category, limit, offset }),
   getSettings: () => call<Settings>("get_settings"),
   setSetting: (key: string, value: unknown) => call("set_setting", { key, value }),
   assistant: (message: string) => call<AssistantReply>("assistant", { message }),
