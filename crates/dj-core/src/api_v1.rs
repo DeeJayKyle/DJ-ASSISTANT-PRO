@@ -152,11 +152,18 @@ impl App {
             }
             "lookup_catalogs" => {
                 let ids = self.resolve_ids(a)?;
-                suggest::require_service(&lock(&self.conn), "catalogs")?;
-                let (db, online) = (self.db_path.clone(), self.online.clone());
+                if !suggest::catalog_sources_on(&lock(&self.conn), self.secrets.as_ref())? {
+                    return invalid("Turn on Deezer & Apple Music, Spotify, GetSongBPM or YouTube in Settings → Online services first.");
+                }
+                let (db, online, secrets) = (
+                    self.db_path.clone(),
+                    self.online.clone(),
+                    self.secrets.clone(),
+                );
                 self.start_job("catalogs", move |ctl, p| {
                     let conn = db::open(&db)?;
-                    suggest::catalog_lookup(&conn, online.as_ref(), &ids, ctl, p).map(|_| ())
+                    suggest::catalog_lookup(&conn, online.as_ref(), secrets.as_ref(), &ids, ctl, p)
+                        .map(|_| ())
                 })?
             }
             "lookup_acoustid" => {
@@ -286,7 +293,15 @@ impl App {
                     } else {
                         enabled
                     };
-                    let needs_key = ["acoustid", "lastfm", "anthropic"].contains(id);
+                    let needs_key = [
+                        "acoustid",
+                        "lastfm",
+                        "anthropic",
+                        "spotify",
+                        "getsongbpm",
+                        "youtube",
+                    ]
+                    .contains(id);
                     out.push(json!({"id": id, "name": name, "provides": provides, "sends": sends, "enabled": enabled, "needs_key": needs_key, "has_key": needs_key && self.secrets.get(id).is_some()}));
                 }
                 json!(out)
@@ -319,8 +334,21 @@ impl App {
                 let ai_key = svc
                     .strip_prefix("ai_")
                     .is_some_and(|id| crate::agent::ai_service(id).is_some());
-                if !["acoustid", "lastfm", "anthropic"].contains(&svc.as_str()) && !ai_key {
+                if ![
+                    "acoustid",
+                    "lastfm",
+                    "anthropic",
+                    "spotify",
+                    "getsongbpm",
+                    "youtube",
+                ]
+                .contains(&svc.as_str())
+                    && !ai_key
+                {
                     return invalid("unknown service");
+                }
+                if svc == "spotify" && !v.trim().contains(':') {
+                    return invalid("enter the Spotify Client ID and Client secret");
                 }
                 if svc == "anthropic" && !v.trim().starts_with("sk-ant-") {
                     return invalid("Anthropic API keys start with sk-ant-");
@@ -739,8 +767,9 @@ impl App {
             "run_auto_prep" => {
                 let db = self.db_path.clone();
                 let online = self.online.clone();
+                let secrets = self.secrets.clone();
                 self.start_job("auto_prep", move |ctl, p| {
-                    crate::autoprep::run(&db, online.as_ref(), ctl, p)
+                    crate::autoprep::run(&db, online.as_ref(), secrets.as_ref(), ctl, p)
                 })?
             }
             "bad_files" => {

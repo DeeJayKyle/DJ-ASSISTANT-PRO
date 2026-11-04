@@ -42,7 +42,7 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 
 **Audio analysis (local)** — BPM with half/double-time alternatives, key with Camelot code, energy (scaled to your library), loudness (LUFS), peak, clipping, silence, intro/outro length, cue ideas (first sound, mix-in, drop, mix-out), waveform, tempo-drift warning and an audio fingerprint. All shown as estimates with method and version; your values always win.
 
-**Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz, AcoustID and the free Deezer & Apple Music catalogues (exact BPM checked against the audio, release year, genre, label — applied automatically only when the sources agree). Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
+**Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz, AcoustID, the free Deezer & Apple Music catalogues, Spotify, YouTube & YouTube Music and GetSongBPM (BPM and key checked against the audio analysis; release year, genre, album, label and artist credits — applied automatically only when the sources or the audio agree). Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
 
 **Duplicates & health** — exact (full-file hash) vs possible vs alternate versions, with reasons and review notes; library health for missing metadata (with a **Fix** list that offers evidence-based suggestions and bulk editing, saved to the catalogue only), unreadable/unsupported files, low bitrate (configurable, default 128 kbps, never applied to lossless or unknown), offline drives and missing files.
 
@@ -79,7 +79,7 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 ## Privacy
 
 - No online account and no telemetry; accounts are local to this computer. The core library has no network code; CI traces system calls during scanning, analysis, Set Studio, gig packs, tag writing and personal-file indexing to prove no internet sockets are opened.
-- Online services (MusicBrainz, Deezer & Apple Music catalogues, AcoustID, Last.fm, the AI assistant, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
+- Online services (MusicBrainz, Deezer & Apple Music catalogues, Spotify, YouTube & YouTube Music, GetSongBPM, AcoustID, Last.fm, the AI assistant, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
 - Logs record command names and errors only.
 
 ## Install (Windows 10/11, 64-bit)

@@ -30,8 +30,8 @@ export function SuggestionsView({ version, bump, toast }: { version: number; bum
         <button className="btn" onClick={() => run(api.lookupMusicBrainz({ query: { filters: { match: "any", rules: [{ kind: "condition", field: "original_year", op: "is_empty" }, { kind: "condition", field: "album", op: "is_empty" }] } } }), "MusicBrainz lookup started (one request per second).")}>
           <Icon name="cloud" size={16} /> MusicBrainz lookup
         </button>
-        <button className="btn" onClick={() => run(api.lookupCatalogs({ query: { filters: { match: "any", rules: [{ kind: "condition", field: "bpm", op: "is_empty" }, { kind: "condition", field: "year", op: "is_empty" }, { kind: "condition", field: "genre", op: "is_empty" }] } } }), "Checking BPM, year and genre on Deezer and Apple Music…")} title="Free, no key: turn on “Deezer & Apple Music catalogues” in Settings → Online services">
-          <Icon name="cloud" size={16} /> Check BPM, year &amp; genre online
+        <button className="btn" onClick={() => run(api.lookupCatalogs({ query: { filters: { match: "any", rules: [{ kind: "condition", field: "bpm", op: "is_empty" }, { kind: "condition", field: "year", op: "is_empty" }, { kind: "condition", field: "genre", op: "is_empty" }] } } }), "Checking BPM, key, year, genre and credits online…")} title="BPM, key, release year, genre, artist and album from Deezer & Apple Music (free), Spotify and GetSongBPM — turn them on in Settings → Online services">
+          <Icon name="cloud" size={16} /> Check song info online
         </button>
         <button className="btn" onClick={() => setConsent(true)}><Icon name="headphones" size={16} /> AcoustID lookup…</button>
       </div>

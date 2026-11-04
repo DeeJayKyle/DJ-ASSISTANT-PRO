@@ -181,8 +181,8 @@ export function HealthFixView({ category, onBack, toast, bump }: { category: str
             <Icon name="cloud" size={16} /> MusicBrainz lookup
           </button>
         )}
-        {(fields.includes("year") || fields.includes("genre") || fields.includes("bpm")) && (
-          <button className="btn" disabled={busy || !ids.length} title="Exact BPM, release year and genre from Deezer and Apple Music (free, no key)" onClick={() => run(api.lookupCatalogs({ ids: sel.size ? [...sel] : ids }), "Checking Deezer and Apple Music. Press Refresh in a moment to see what they found.", false)}>
+        {(fields.includes("year") || fields.includes("genre") || fields.includes("bpm") || fields.includes("key") || fields.includes("album")) && (
+          <button className="btn" disabled={busy || !ids.length} title="BPM, key, release year and genre from the online catalogues you turned on" onClick={() => run(api.lookupCatalogs({ ids: sel.size ? [...sel] : ids }), "Checking Deezer and Apple Music. Press Refresh in a moment to see what they found.", false)}>
             <Icon name="cloud" size={16} /> Check online
           </button>
         )}

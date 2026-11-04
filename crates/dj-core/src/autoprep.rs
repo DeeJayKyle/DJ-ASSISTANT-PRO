@@ -49,7 +49,13 @@ fn missing_counts(conn: &Connection) -> Result<serde_json::Value> {
     )
 }
 
-pub fn run(db_path: &Path, online: &dyn Online, ctl: &ScanControl, p: &Progress) -> Result<()> {
+pub fn run(
+    db_path: &Path,
+    online: &dyn Online,
+    secrets: &dyn crate::online::Secrets,
+    ctl: &ScanControl,
+    p: &Progress,
+) -> Result<()> {
     let conn = db::open(db_path)?;
     let before = missing_counts(&conn)?;
     let pending_analysis = crate::analysis_store::pending_ids(&conn, None, false)?.len();
@@ -95,7 +101,7 @@ pub fn run(db_path: &Path, online: &dyn Online, ctl: &ScanControl, p: &Progress)
 
     // Exact BPM, year and genre from the free music catalogues, for tracks not checked yet.
     let mut catalog_checked = 0usize;
-    if crate::suggest::service_enabled(&conn, "catalogs")? && !crate::jobs::wait_or_cancelled(ctl) {
+    if crate::suggest::catalog_sources_on(&conn, secrets)? && !crate::jobs::wait_or_cancelled(ctl) {
         let ids: Vec<i64> = conn
             .prepare(
                 "SELECT t.id FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id
@@ -110,12 +116,12 @@ pub fn run(db_path: &Path, online: &dyn Online, ctl: &ScanControl, p: &Progress)
             message(
                 p,
                 format!(
-                    "Checking BPM, year and genre of {} track(s) against Deezer and Apple Music…",
+                    "Checking BPM, key, year, genre and credits of {} track(s) against online music catalogues…",
                     ids.len()
                 ),
             );
             catalog_checked = ids.len();
-            crate::suggest::catalog_lookup(&conn, online, &ids, ctl, p)?;
+            crate::suggest::catalog_lookup(&conn, online, secrets, &ids, ctl, p)?;
         }
     }
 

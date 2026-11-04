@@ -668,30 +668,62 @@ fn norm_genre(g: &str) -> String {
         .join(" ")
 }
 
+/// Is at least one online music catalogue switched on (and keyed, where it needs a key)?
+pub fn catalog_sources_on(conn: &Connection, secrets: &dyn Secrets) -> Result<bool> {
+    Ok(service_enabled(conn, "catalogs")?
+        || (service_enabled(conn, "spotify")? && secrets.get("spotify").is_some())
+        || (service_enabled(conn, "getsongbpm")? && secrets.get("getsongbpm").is_some())
+        || (service_enabled(conn, "youtube")? && secrets.get("youtube").is_some()))
+}
+
+/// Spotify-style pitch class (0 = C) and mode (1 = major) as a key name.
+pub fn pitch_class_key(key: i64, mode: i64) -> Option<String> {
+    const N: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+    let n = N.get(usize::try_from(key).ok()?)?;
+    Some(format!("{n}{}", if mode == 1 { "" } else { "m" }))
+}
+
+fn camelot(k: &str) -> Option<String> {
+    crate::analysis::normalize_key(k).filter(|c| crate::analysis::parse_camelot(c).is_some())
+}
+
+/// Joins source names for evidence: "Deezer, Spotify and Apple Music".
+fn names(v: &[&str]) -> String {
+    match v {
+        [] => String::new(),
+        [a] => a.to_string(),
+        _ => format!("{} and {}", v[..v.len() - 1].join(", "), v[v.len() - 1]),
+    }
+}
+
 /// Record suggestions from catalogue matches of the same recording (same title and
-/// artist, length within 10 s). Values both catalogues agree on get high confidence,
-/// so auto-prep can correct them; a single source only fills empty fields.
+/// artist, length within 10 s, closest first). Values that several sources agree on
+/// (or that the audio analysis confirms) get high confidence, so auto-prep corrects
+/// them; one source alone only fills empty fields; genres, artists and albums the DJ
+/// already has are only ever suggested.
 pub fn apply_catalog(conn: &Connection, track_id: i64, found: &[CatalogMatch]) -> Result<usize> {
     #[allow(clippy::type_complexity)]
-    let (title, artist, genre, year, bpm, analysed, label, dur): (Option<String>, Option<String>, Option<String>, Option<i64>, Option<f64>, Option<f64>, Option<String>, Option<i64>) = conn.query_row(
-        "SELECT COALESCE(u.title,t.title), COALESCE(u.artist,t.artist), COALESCE(u.genre,t.genre), COALESCE(u.year,t.year),
-                COALESCE(u.bpm,t.bpm_tag,a.bpm), a.bpm, COALESCE(u.record_label,t.label), t.duration_ms
+    let (title, artist, album, genre, year, bpm, analysed, label, dur, key, a_key): (Option<String>, Option<String>, Option<String>, Option<String>, Option<i64>, Option<f64>, Option<f64>, Option<String>, Option<i64>, Option<String>, Option<String>) = conn.query_row(
+        "SELECT COALESCE(u.title,t.title), COALESCE(u.artist,t.artist), COALESCE(u.album,t.album), COALESCE(u.genre,t.genre), COALESCE(u.year,t.year),
+                COALESCE(u.bpm,t.bpm_tag,a.bpm), a.bpm, COALESCE(u.record_label,t.label), t.duration_ms,
+                keynorm(COALESCE(u.musical_key,t.key_tag,a.camelot)), a.camelot
          FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id LEFT JOIN analysis a ON a.track_id=t.id WHERE t.id=?1",
         params![track_id],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?)),
     )?;
     let (Some(title), Some(artist)) = (title, artist) else {
         return Ok(0);
     };
     let (want_t, want_a) = (base_title(&title), base_artist(&artist));
-    // Best match per catalogue: the same recording, and the same length when known.
-    let mut best: Vec<(&CatalogMatch, f64)> = vec![];
-    // closest in length first, so a remix or radio edit of the same title loses to the real match
     let mut found: Vec<&CatalogMatch> = found.iter().collect();
     found.sort_by_key(|m| match (dur, m.duration_ms) {
         (Some(a), Some(b)) => (a - b).abs(),
         _ => i64::MAX / 2,
     });
+    // Best match per source: the same recording, and the same length when known.
+    let mut best: Vec<(&CatalogMatch, f64)> = vec![];
     for m in found {
         if base_title(&m.title) != want_t || base_artist(&m.artist) != want_a {
             continue;
@@ -709,74 +741,52 @@ pub fn apply_catalog(conn: &Connection, track_id: i64, found: &[CatalogMatch]) -
     if best.is_empty() {
         return Ok(0);
     }
-    let sources = best
-        .iter()
-        .map(|(m, _)| m.source.as_str())
-        .collect::<Vec<_>>()
-        .join(" and ");
     let fit = best.iter().map(|(_, f)| *f).fold(0.0, f64::max);
     let mut n = 0;
 
-    // BPM (Deezer lists it): checked against the audio analysis.
-    if let Some((m, f)) = best.iter().find(|(m, _)| m.bpm.is_some_and(|b| b > 0.0)) {
-        if let Some((value, agrees)) = catalog_bpm(m.bpm.unwrap_or(0.0), analysed) {
-            if bpm.is_none_or(|b| (b - value).abs() > 0.4) {
-                let ev = if agrees {
-                    format!("{} lists \"{}\" by {} at {} BPM, and this file's audio analysis agrees ({:.1} BPM measured), so this is the exact tempo.", m.source, m.title, m.artist, m.bpm.unwrap_or(0.0), analysed.unwrap_or(0.0))
-                } else if let Some(a) = analysed {
-                    format!("{} lists {} BPM, but the audio analysis measured {a:.1} BPM. Check by ear before accepting.", m.source, m.bpm.unwrap_or(0.0))
-                } else {
-                    format!(
-                        "{} lists \"{}\" by {} at {} BPM. The file hasn't been analysed yet.",
-                        m.source,
-                        m.title,
-                        m.artist,
-                        m.bpm.unwrap_or(0.0)
-                    )
-                };
-                let conf = if agrees {
-                    0.93
-                } else if analysed.is_some() {
-                    0.45
-                } else {
-                    0.7
-                } * f;
-                insert(
-                    conn,
-                    track_id,
-                    "bpm",
-                    bpm.map(|b| format!("{b}")).as_deref(),
-                    &format!("{value}"),
-                    m.source.as_str(),
-                    &ev,
-                    conf,
-                )?;
-                n += 1;
-            }
-        }
-    }
-
-    // Release year: the earliest the catalogues list (reissues and compilations are later).
-    let years: Vec<(i64, &str)> = best
+    // BPM: every source's tempo, checked against the audio analysis.
+    let bpms: Vec<(f64, bool, &str, f64)> = best
         .iter()
-        .filter_map(|(m, _)| year_of(&m.release_date).map(|y| (y, m.source.as_str())))
+        .filter_map(|(m, f)| {
+            m.bpm
+                .and_then(|b| catalog_bpm(b, analysed))
+                .map(|(v, ok)| (v, ok, m.source.as_str(), *f))
+        })
         .collect();
-    if let Some(&(y, src)) = years.iter().min_by_key(|(y, _)| *y) {
-        let agree = years.len() >= 2 && years.iter().all(|(v, _)| *v == y);
-        if year != Some(y) {
-            let ev = if agree {
-                format!("{sources} both list this recording as released in {y}.")
-            } else {
-                format!("{src} lists this recording as released in {y}; other sources may differ (reissues and compilations show later years).")
-            };
-            let conf = if agree { 0.9 } else { 0.62 } * fit;
+    let confirmed: Vec<&(f64, bool, &str, f64)> = bpms.iter().filter(|b| b.1).collect();
+    let pick = if let Some(c) = confirmed.first() {
+        let srcs: Vec<&str> = confirmed.iter().map(|b| b.2).collect();
+        Some((c.0, (if confirmed.len() >= 2 { 0.95 } else { 0.93 }) * c.3,
+            format!("{} list{} {} BPM, and this file's audio analysis agrees ({:.1} BPM measured), so this is the exact tempo.",
+                names(&srcs), if srcs.len() == 1 { "s" } else { "" }, c.0, analysed.unwrap_or(0.0)), names(&srcs)))
+    } else if let Some(first) = bpms.first() {
+        let agree: Vec<&str> = bpms
+            .iter()
+            .filter(|b| (b.0 - first.0).abs() / first.0 <= 0.01)
+            .map(|b| b.2)
+            .collect();
+        let conf = match (analysed.is_some(), agree.len() >= 2) {
+            (true, _) => 0.45, // the audio says otherwise: review by ear
+            (false, true) => 0.88,
+            (false, false) => 0.7,
+        } * first.3;
+        let ev = match analysed {
+            Some(a) => format!("{} list{} {} BPM, but the audio analysis measured {a:.1} BPM. Check by ear before accepting.", names(&agree), if agree.len() == 1 { "s" } else { "" }, first.0),
+            None => format!("{} list{} {} BPM. The file hasn't been analysed yet.", names(&agree), if agree.len() == 1 { "s" } else { "" }, first.0),
+        };
+        Some((first.0, conf, ev, names(&agree)))
+    } else {
+        None
+    };
+    if let Some((value, conf, ev, src)) = pick {
+        if bpm.is_none_or(|b| (b - value).abs() > 0.4) {
             insert(
                 conn,
                 track_id,
-                "year",
-                year.map(|v| v.to_string()).as_deref(),
-                &y.to_string(),
-                if agree { "Deezer + Apple Music" } else { src },
+                "bpm",
+                bpm.map(|b| format!("{b}")).as_deref(),
+                &format!("{value}"),
+                &src,
                 &ev,
                 conf,
             )?;
@@ -784,39 +794,112 @@ pub fn apply_catalog(conn: &Connection, track_id: i64, found: &[CatalogMatch]) -
         }
     }
 
-    // Genre: Apple Music's is the more specific; agreement makes it certain.
-    let apple = best
+    // Musical key (GetSongBPM, some Spotify apps): checked against the audio analysis.
+    let keys: Vec<(String, &str, f64)> = best
         .iter()
-        .find(|(m, _)| m.source == "Apple Music")
-        .and_then(|(m, _)| m.genres.first());
-    let deezer: Vec<&String> = best
-        .iter()
-        .filter(|(m, _)| m.source == "Deezer")
-        .filter_map(|(m, _)| m.genres.first()) // the primary genre; the rest is a long list
+        .filter_map(|(m, f)| {
+            m.key
+                .as_deref()
+                .and_then(camelot)
+                .map(|k| (k, m.source.as_str(), *f))
+        })
         .collect();
-    let pick = apple.or(deezer.first().copied());
-    if let Some(g) = pick.filter(|g| {
-        !g.trim().is_empty() && !["music", "other", "unknown"].contains(&norm_genre(g).as_str())
-    }) {
-        let agree = apple.is_some() && deezer.iter().any(|d| norm_genre(d) == norm_genre(g));
+    if let Some((k, _, f)) = keys.first() {
+        let srcs: Vec<&str> = keys.iter().filter(|x| &x.0 == k).map(|x| x.1).collect();
+        let audio = a_key.as_deref().and_then(camelot);
+        let (conf, ev) = match audio.as_deref() {
+            Some(a) if a == k => (0.93, format!("{} list{} the key as {k}, and this file's audio analysis agrees.", names(&srcs), if srcs.len() == 1 { "s" } else { "" })),
+            Some(a) => (0.5, format!("{} list{} the key as {k}, but the audio analysis found {a}. Check by ear before accepting.", names(&srcs), if srcs.len() == 1 { "s" } else { "" })),
+            None if srcs.len() >= 2 => (0.86, format!("{} agree the key is {k}.", names(&srcs))),
+            None => (0.65, format!("{} lists the key as {k}.", srcs[0])),
+        };
+        if key.as_deref() != Some(k.as_str()) {
+            insert(
+                conn,
+                track_id,
+                "key",
+                key.as_deref(),
+                k,
+                &names(&srcs),
+                &ev,
+                conf * f,
+            )?;
+            n += 1;
+        }
+    }
+
+    // Release year: the earliest any source lists (reissues and compilations are later).
+    let years: Vec<(i64, &str)> = best
+        .iter()
+        .filter_map(|(m, _)| year_of(&m.release_date).map(|y| (y, m.source.as_str())))
+        .collect();
+    if let Some(&(y, _)) = years.iter().min_by_key(|(y, _)| *y) {
+        let srcs: Vec<&str> = years
+            .iter()
+            .filter(|(v, _)| *v == y)
+            .map(|(_, s)| *s)
+            .collect();
+        let agree = srcs.len() >= 2;
+        if year != Some(y) {
+            let ev = if agree {
+                format!(
+                    "{} {} list this recording as released in {y}.",
+                    names(&srcs),
+                    if srcs.len() == 2 { "both" } else { "all" }
+                )
+            } else {
+                format!("{} lists this recording as released in {y}; other sources may differ (reissues and compilations show later years).", srcs[0])
+            };
+            let conf = if agree { 0.9 } else { 0.62 } * fit;
+            let src = if agree {
+                srcs.join(" + ")
+            } else {
+                srcs[0].to_string()
+            };
+            insert(
+                conn,
+                track_id,
+                "year",
+                year.map(|v| v.to_string()).as_deref(),
+                &y.to_string(),
+                &src,
+                &ev,
+                conf,
+            )?;
+            n += 1;
+        }
+    }
+
+    // Genre: Apple Music's is the most specific, then Spotify's (artist), then Deezer's
+    // primary one. Agreement fills an empty genre confidently; an existing one is only suggested.
+    let order = ["Apple Music", "Spotify", "Deezer", "GetSongBPM"];
+    let mut genres: Vec<(&str, &str)> = vec![];
+    for o in order {
+        if let Some((m, _)) = best.iter().find(|(m, _)| m.source == o) {
+            if let Some(g) = m.genres.first().filter(|g| {
+                !g.trim().is_empty()
+                    && !["music", "other", "unknown"].contains(&norm_genre(g).as_str())
+            }) {
+                genres.push((g.as_str(), o));
+            }
+        }
+    }
+    if let Some(&(g, _)) = genres.first() {
+        let srcs: Vec<&str> = genres
+            .iter()
+            .filter(|(x, _)| norm_genre(x) == norm_genre(g))
+            .map(|(_, s)| *s)
+            .collect();
+        let agree = srcs.len() >= 2;
         if genre
             .as_deref()
             .is_none_or(|cur| norm_genre(cur) != norm_genre(g))
         {
             let ev = if agree {
-                format!("Apple Music and Deezer both file this recording under {g}.")
+                format!("{} file this recording under {g}.", names(&srcs))
             } else {
-                format!(
-                    "{} files this recording under {g}.",
-                    if apple.is_some() {
-                        "Apple Music"
-                    } else {
-                        "Deezer"
-                    }
-                )
+                format!("{} files this recording under {g}.", srcs[0])
             };
-            // Catalogue genres are broad ("Pop"), so a genre the DJ already has is
-            // only ever suggested for review, never replaced automatically.
             let conf = if genre.is_some() {
                 0.7
             } else if agree {
@@ -830,13 +913,7 @@ pub fn apply_catalog(conn: &Connection, track_id: i64, found: &[CatalogMatch]) -
                 "genre",
                 genre.as_deref(),
                 g,
-                if agree {
-                    "Deezer + Apple Music"
-                } else if apple.is_some() {
-                    "Apple Music"
-                } else {
-                    "Deezer"
-                },
+                &srcs.join(" + "),
                 &ev,
                 conf,
             )?;
@@ -844,7 +921,63 @@ pub fn apply_catalog(conn: &Connection, track_id: i64, found: &[CatalogMatch]) -
         }
     }
 
-    // Record label (Deezer): fills an empty field only.
+    // Artist credit and album: spelling/credit differences the sources agree on are suggested;
+    // an empty album is filled.
+    let credits: Vec<(&str, &str)> = best
+        .iter()
+        .map(|(m, _)| (m.artist.as_str(), m.source.as_str()))
+        .collect();
+    if let Some(&(c, _)) = credits.iter().find(|(c, _)| *c != artist) {
+        let srcs: Vec<&str> = credits
+            .iter()
+            .filter(|(x, _)| *x == c)
+            .map(|(_, s)| *s)
+            .collect();
+        if srcs.len() >= 2 {
+            insert(
+                conn,
+                track_id,
+                "artist",
+                Some(&artist),
+                c,
+                &srcs.join(" + "),
+                &format!("{} credit this recording to \"{c}\".", names(&srcs)),
+                0.7 * fit,
+            )?;
+            n += 1;
+        }
+    }
+    if album.is_none() {
+        let albums: Vec<(&str, &str)> = best
+            .iter()
+            .filter_map(|(m, _)| m.album.as_deref().map(|a| (a, m.source.as_str())))
+            .collect();
+        if let Some(&(al, _)) = albums.first() {
+            let srcs: Vec<&str> = albums
+                .iter()
+                .filter(|(x, _)| fold(x) == fold(al))
+                .map(|(_, s)| *s)
+                .collect();
+            let conf = if srcs.len() >= 2 { 0.85 } else { 0.65 } * fit;
+            insert(
+                conn,
+                track_id,
+                "album",
+                None,
+                al,
+                &srcs.join(" + "),
+                &format!(
+                    "{} list{} this recording on \"{al}\".",
+                    names(&srcs),
+                    if srcs.len() == 1 { "s" } else { "" }
+                ),
+                conf,
+            )?;
+            n += 1;
+        }
+    }
+
+    // Record label: fills an empty field only.
     if label.is_none() {
         if let Some((m, f)) = best
             .iter()
@@ -867,15 +1000,29 @@ pub fn apply_catalog(conn: &Connection, track_id: i64, found: &[CatalogMatch]) -
     Ok(n)
 }
 
-/// Look tracks up in the Deezer and Apple Music catalogues and record suggestions.
+/// Look tracks up in every switched-on catalogue (Deezer & Apple Music, Spotify,
+/// GetSongBPM) and record suggestions.
 pub fn catalog_lookup(
     conn: &Connection,
     online: &dyn Online,
+    secrets: &dyn Secrets,
     ids: &[i64],
     ctl: &crate::scanner::ScanControl,
     p: &crate::jobs::Progress,
 ) -> Result<usize> {
-    require_service(conn, "catalogs")?;
+    let free = service_enabled(conn, "catalogs")?;
+    let spotify = service_enabled(conn, "spotify")?
+        .then(|| secrets.get("spotify"))
+        .flatten();
+    let gsb = service_enabled(conn, "getsongbpm")?
+        .then(|| secrets.get("getsongbpm"))
+        .flatten();
+    let mut yt = service_enabled(conn, "youtube")?
+        .then(|| secrets.get("youtube"))
+        .flatten();
+    if !free && spotify.is_none() && gsb.is_none() && yt.is_none() {
+        return invalid("Turn on Deezer & Apple Music, Spotify, GetSongBPM or YouTube in Settings → Online services first.");
+    }
     crate::jobs::set_total(p, ids.len() as u64);
     let mut n = 0;
     for id in ids {
@@ -891,21 +1038,50 @@ pub fn catalog_lookup(
             crate::jobs::tick(p, false);
             continue;
         };
-        match online.catalog_lookup(&a, &t) {
-            Ok(found) => {
-                n += apply_catalog(conn, *id, &found)?;
-                conn.execute(
-                    "INSERT INTO catalog_checked(track_id, checked_at) VALUES (?1, ?2)
-                     ON CONFLICT(track_id) DO UPDATE SET checked_at=excluded.checked_at",
-                    params![id, now_ms()],
-                )?;
-                crate::jobs::tick(p, true);
-            }
-            Err(e) => {
-                crate::jobs::message(p, e);
-                crate::jobs::tick(p, false);
-            }
+        let mut all: Vec<CatalogMatch> = vec![];
+        let mut errors: Vec<String> = vec![];
+        let mut take = |r: std::result::Result<Vec<CatalogMatch>, String>| match r {
+            Ok(v) => all.extend(v),
+            Err(e) => errors.push(e),
+        };
+        if free {
+            take(online.catalog_lookup(&a, &t));
         }
+        if let Some(c) = &spotify {
+            take(online.spotify_lookup(c, &a, &t));
+        }
+        if let Some(k) = &gsb {
+            take(online.getsongbpm_lookup(k, &a, &t));
+        }
+        let had_yt = yt.is_some();
+        if let Some(k) = yt.clone() {
+            let r = online.youtube_lookup(&k, &a, &t);
+            if r.as_ref().is_err_and(|e| e.contains("quota")) {
+                // the free daily quota is used up: carry on without YouTube today
+                crate::jobs::message(
+                    p,
+                    "YouTube's free daily quota is used up; continuing with the other sources.",
+                );
+                yt = None;
+            }
+            take(r);
+        }
+        let sources = usize::from(free)
+            + usize::from(spotify.is_some())
+            + usize::from(gsb.is_some())
+            + usize::from(had_yt);
+        if errors.len() == sources {
+            crate::jobs::message(p, errors.join("; "));
+            crate::jobs::tick(p, false);
+            continue;
+        }
+        n += apply_catalog(conn, *id, &all)?;
+        conn.execute(
+            "INSERT INTO catalog_checked(track_id, checked_at) VALUES (?1, ?2)
+             ON CONFLICT(track_id) DO UPDATE SET checked_at=excluded.checked_at",
+            params![id, now_ms()],
+        )?;
+        crate::jobs::tick(p, true);
     }
     Ok(n)
 }
@@ -1020,6 +1196,7 @@ pub fn accept_bulk(conn: &Connection, min: f64, source: Option<&str>) -> Result<
 /// The fields auto-prep may fill in the catalogue.
 const AUTO_FIELDS: &[&str] = &[
     "bpm",
+    "key",
     "title",
     "artist",
     "album",
@@ -1065,6 +1242,15 @@ pub fn accept_recommended(conn: &Connection, min_fill: f64, min_replace: f64) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn spotify_pitch_classes_become_keys() {
+        assert_eq!(pitch_class_key(9, 0).as_deref(), Some("Am"));
+        assert_eq!(pitch_class_key(0, 1).as_deref(), Some("C"));
+        assert_eq!(pitch_class_key(-1, 1), None); // Spotify's "no key detected"
+        assert_eq!(camelot("Am").as_deref(), Some("8A"));
+        assert_eq!(camelot("F♯m").as_deref(), Some("11A"));
+        assert_eq!(camelot("1m").as_deref(), Some("8A")); // Open Key 1m = A minor
+    }
     #[test]
     fn catalogue_bpm_is_checked_against_the_audio() {
         // agrees: the catalogue's exact figure is used

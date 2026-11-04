@@ -30,6 +30,10 @@ pub struct Http {
     last_mb: Mutex<Option<Instant>>,
     last_deezer: Mutex<Option<Instant>>,
     last_itunes: Mutex<Option<Instant>>,
+    last_spotify: Mutex<Option<Instant>>,
+    last_gsb: Mutex<Option<Instant>>,
+    /// Spotify app token: (credentials it was made for, token, expiry).
+    spotify_token: Mutex<Option<(String, String, Instant)>>,
     call_seq: Mutex<u64>,
 }
 
@@ -80,6 +84,9 @@ impl Http {
             last_mb: Mutex::new(None),
             last_deezer: Mutex::new(None),
             last_itunes: Mutex::new(None),
+            last_spotify: Mutex::new(None),
+            last_gsb: Mutex::new(None),
+            spotify_token: Mutex::new(None),
             call_seq: Mutex::new(0),
         }
     }
@@ -188,6 +195,66 @@ impl Http {
         Ok(parse_itunes(&v))
     }
 
+    /// GET with a bearer token; Ok(None) for 403/404 (a feature this app may not have).
+    fn get_bearer(
+        &self,
+        url: &str,
+        query: &[(&str, &str)],
+        token: &str,
+    ) -> Result<Option<Value>, String> {
+        let mut req = self
+            .agent
+            .get(url)
+            .header("Accept", "application/json")
+            .header("Authorization", &format!("Bearer {token}"));
+        for (k, v) in query {
+            req = req.query(*k, *v);
+        }
+        let mut res = req.call().map_err(|e| format!("network error: {e}"))?;
+        let status = res.status().as_u16();
+        if status == 403 || status == 404 {
+            return Ok(None);
+        }
+        let body: Value = res.body_mut().read_json().unwrap_or(Value::Null);
+        match status {
+            401 => Err("Spotify rejected the app's Client ID or secret. Check them in Settings → Online services.".into()),
+            429 => Err("Spotify is rate limiting; try again in a minute".into()),
+            s if s >= 400 => Err(format!("Spotify error (HTTP {s})")),
+            _ => Ok(Some(body)),
+        }
+    }
+
+    /// A Spotify app token from the client credentials (cached until it expires).
+    fn spotify_token(&self, creds: &str) -> Result<String, String> {
+        let mut t = self.spotify_token.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((c, tok, exp)) = t.as_ref() {
+            if c == creds && Instant::now() < *exp {
+                return Ok(tok.clone());
+            }
+        }
+        let mut res = self
+            .agent
+            .post("https://accounts.spotify.com/api/token")
+            .header(
+                "Authorization",
+                &format!("Basic {}", base64(creds.trim().as_bytes())),
+            )
+            .send_form([("grant_type", "client_credentials")])
+            .map_err(|e| format!("Spotify sign-in failed: {e}"))?;
+        let status = res.status().as_u16();
+        let v: Value = res.body_mut().read_json().unwrap_or(Value::Null);
+        let Some(tok) = v["access_token"].as_str().filter(|_| status < 400) else {
+            return Err("Spotify rejected the app's Client ID or secret. Check them in Settings → Online services.".into());
+        };
+        let secs = v["expires_in"].as_u64().unwrap_or(3600).saturating_sub(60);
+        *t = Some((
+            creds.to_string(),
+            tok.to_string(),
+            Instant::now() + Duration::from_secs(secs),
+        ));
+        Ok(tok.to_string())
+    }
+
     fn mb_throttle(&self) {
         let mut l = self.last_mb.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(t) = *l {
@@ -282,7 +349,201 @@ pub fn parse_deezer(track: &Value, album: &Value) -> Option<CatalogMatch> {
         genres,
         label: text(&album["label"]),
         isrc: text(&track["isrc"]),
+        key: None,
     })
+}
+
+fn base64(b: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for c in b.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        for i in 0..4 {
+            if i <= c.len() {
+                out.push(T[((n >> (18 - 6 * i)) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// "afro house" -> "Afro House" (Spotify genres are lower case).
+fn title_case(g: &str) -> String {
+    g.split(' ')
+        .map(|w| {
+            let mut c = w.chars();
+            c.next()
+                .map(|f| f.to_uppercase().chain(c).collect())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+/// A Spotify search result as a catalogue match (genres, tempo and key are added separately).
+pub fn parse_spotify_track(t: &Value) -> CatalogMatch {
+    CatalogMatch {
+        source: "Spotify".into(),
+        title: t["name"].as_str().unwrap_or("").to_string(),
+        artist: t["artists"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| a["name"].as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+        album: t
+            .pointer("/album/name")
+            .and_then(|a| a.as_str())
+            .map(str::to_string),
+        duration_ms: t["duration_ms"].as_i64(),
+        bpm: None,
+        release_date: t
+            .pointer("/album/release_date")
+            .and_then(|d| d.as_str())
+            .filter(|d| !d.is_empty())
+            .map(str::to_string),
+        genres: vec![],
+        label: None,
+        isrc: t
+            .pointer("/external_ids/isrc")
+            .and_then(|i| i.as_str())
+            .map(str::to_string),
+        key: None,
+    }
+}
+
+/// Spotify audio features (tempo, key, mode), when the app is allowed them.
+pub fn apply_audio_features(m: &mut CatalogMatch, f: &Value) {
+    m.bpm = f["tempo"].as_f64().filter(|t| *t > 0.0);
+    if let (Some(k), Some(mode)) = (f["key"].as_i64(), f["mode"].as_i64()) {
+        m.key = dj_core::suggest::pitch_class_key(k, mode);
+    }
+}
+
+/// ISO 8601 duration ("PT4M8S", "PT1H2M") in milliseconds.
+fn iso_duration_ms(d: &str) -> Option<i64> {
+    let t = d.strip_prefix("PT")?;
+    let (mut total, mut num) = (0i64, String::new());
+    for c in t.chars() {
+        if c.is_ascii_digit() {
+            num.push(c);
+        } else {
+            let n: i64 = num.parse().ok()?;
+            num.clear();
+            total += n * match c {
+                'H' => 3_600_000,
+                'M' => 60_000,
+                'S' => 1000,
+                _ => return None,
+            };
+        }
+    }
+    Some(total)
+}
+
+/// A YouTube Music release (an auto-generated "Artist - Topic" video). Its description reads:
+/// "Provided to YouTube by <label>", "<title> · <artist> · …", "<album>", "℗ …", "Released on: YYYY-MM-DD".
+pub fn parse_youtube_release(v: &Value) -> Option<CatalogMatch> {
+    let sn = &v["snippet"];
+    let channel = sn["channelTitle"]
+        .as_str()?
+        .strip_suffix(" - Topic")?
+        .to_string();
+    let desc = sn["description"].as_str().unwrap_or("");
+    let label = desc
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("Provided to YouTube by "))
+        .map(|l| l.trim().to_string());
+    let released = desc
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("Released on: "))
+        .map(|d| d.trim().to_string());
+    // the paragraph after the "title · artist" line is the album
+    let paras: Vec<&str> = desc
+        .split("\n\n")
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    let credit = paras.iter().position(|p| p.contains(" · "));
+    let album = credit
+        .and_then(|i| paras.get(i + 1))
+        .filter(|p| !p.starts_with('℗') && !p.starts_with("Released on") && !p.contains('\n'))
+        .map(|p| p.to_string());
+    let artist = credit
+        .and_then(|i| paras[i].split(" · ").nth(1))
+        .map(str::to_string)
+        .unwrap_or(channel);
+    Some(CatalogMatch {
+        source: "YouTube Music".into(),
+        title: sn["title"].as_str()?.to_string(),
+        artist,
+        album,
+        duration_ms: v
+            .pointer("/contentDetails/duration")
+            .and_then(|d| d.as_str())
+            .and_then(iso_duration_ms),
+        bpm: None,
+        release_date: released,
+        genres: vec![],
+        label,
+        isrc: None,
+        key: None,
+    })
+}
+
+/// GetSongBPM search results as catalogue matches.
+pub fn parse_getsongbpm(v: &Value) -> Vec<CatalogMatch> {
+    v["search"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            Some(CatalogMatch {
+                source: "GetSongBPM".into(),
+                title: r["title"].as_str()?.to_string(),
+                artist: r
+                    .pointer("/artist/name")
+                    .and_then(|a| a.as_str())?
+                    .to_string(),
+                album: r
+                    .pointer("/album/title")
+                    .and_then(|a| a.as_str())
+                    .map(str::to_string),
+                duration_ms: None,
+                bpm: r["tempo"]
+                    .as_str()
+                    .and_then(|t| t.trim().parse().ok())
+                    .or(r["tempo"].as_f64())
+                    .filter(|b: &f64| *b > 0.0),
+                release_date: r.pointer("/album/year").and_then(|y| {
+                    y.as_str()
+                        .map(str::to_string)
+                        .or(y.as_i64().map(|y| y.to_string()))
+                }),
+                genres: r
+                    .pointer("/artist/genres")
+                    .and_then(|g| g.as_array())
+                    .map(|g| {
+                        g.iter()
+                            .filter_map(|x| x.as_str())
+                            .map(title_case)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                label: None,
+                isrc: None,
+                key: r["key_of"]
+                    .as_str()
+                    .filter(|k| !k.trim().is_empty())
+                    .map(str::to_string),
+            })
+        })
+        .collect()
 }
 
 /// iTunes Search API results as catalogue matches.
@@ -309,6 +570,7 @@ pub fn parse_itunes(v: &Value) -> Vec<CatalogMatch> {
                     .unwrap_or_default(),
                 label: None,
                 isrc: None,
+                key: None,
             })
         })
         .collect()
@@ -752,6 +1014,178 @@ impl Online for Http {
         }
     }
 
+    fn spotify_lookup(
+        &self,
+        creds: &str,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<CatalogMatch>, String> {
+        let token = self.spotify_token(creds)?;
+        let gap = Duration::from_millis(120);
+        Self::throttle(&self.last_spotify, gap);
+        let q = format!("track:{title} artist:{artist}");
+        let Some(v) = self.get_bearer(
+            "https://api.spotify.com/v1/search",
+            &[("q", &q), ("type", "track"), ("limit", "8")],
+            &token,
+        )?
+        else {
+            return Ok(vec![]);
+        };
+        let (want_t, want_a) = (
+            dj_core::text::base_title(title),
+            dj_core::text::base_artist(artist),
+        );
+        let items: Vec<&Value> = v
+            .pointer("/tracks/items")
+            .and_then(|i| i.as_array())
+            .into_iter()
+            .flatten()
+            .filter(|t| {
+                dj_core::text::base_title(t["name"].as_str().unwrap_or("")) == want_t
+                    && t.pointer("/artists/0/name")
+                        .and_then(|a| a.as_str())
+                        .is_some_and(|a| dj_core::text::base_artist(a) == want_a)
+            })
+            .take(3)
+            .collect();
+        let mut out = vec![];
+        for (i, t) in items.iter().enumerate() {
+            let mut m = parse_spotify_track(t);
+            if i == 0 {
+                // genres live on the artist; tempo and key on audio features (older apps only)
+                if let Some(aid) = t.pointer("/artists/0/id").and_then(|a| a.as_str()) {
+                    Self::throttle(&self.last_spotify, gap);
+                    if let Some(a) = self.get_bearer(
+                        &format!("https://api.spotify.com/v1/artists/{aid}"),
+                        &[],
+                        &token,
+                    )? {
+                        m.genres = a["genres"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|g| g.as_str())
+                            .map(title_case)
+                            .collect();
+                    }
+                }
+                if let Some(id) = t["id"].as_str() {
+                    Self::throttle(&self.last_spotify, gap);
+                    if let Some(f) = self
+                        .get_bearer(
+                            &format!("https://api.spotify.com/v1/audio-features/{id}"),
+                            &[],
+                            &token,
+                        )
+                        .unwrap_or(None)
+                    {
+                        apply_audio_features(&mut m, &f);
+                    }
+                }
+            }
+            out.push(m);
+        }
+        Ok(out)
+    }
+
+    fn youtube_lookup(
+        &self,
+        api_key: &str,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<CatalogMatch>, String> {
+        let q = format!("{artist} {title}");
+        let yt = |url: &str, query: &[(&str, &str)]| -> Result<Value, String> {
+            let mut req = self
+                .agent
+                .get(url)
+                .header("Accept", "application/json")
+                .query("key", api_key);
+            for (k, v) in query {
+                req = req.query(*k, *v);
+            }
+            let mut res = req.call().map_err(|e| format!("network error: {e}"))?;
+            let status = res.status().as_u16();
+            let v: Value = res.body_mut().read_json().unwrap_or(Value::Null);
+            if status >= 400 {
+                let reason = v
+                    .pointer("/error/errors/0/reason")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("");
+                return Err(match reason {
+                    "quotaExceeded" | "dailyLimitExceeded" => {
+                        "YouTube: the free daily quota is used up".to_string()
+                    }
+                    _ if status == 400 || status == 403 => {
+                        "YouTube rejected the API key. Check it in Settings → Online services."
+                            .to_string()
+                    }
+                    _ => format!("YouTube error (HTTP {status})"),
+                });
+            }
+            Ok(v)
+        };
+        // Official releases are uploaded to "Artist - Topic" channels in the Music category.
+        let found = yt(
+            "https://www.googleapis.com/youtube/v3/search",
+            &[
+                ("part", "snippet"),
+                ("q", &q),
+                ("type", "video"),
+                ("videoCategoryId", "10"),
+                ("maxResults", "5"),
+            ],
+        )?;
+        let ids: Vec<&str> = found["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|i| {
+                i.pointer("/snippet/channelTitle")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|c| c.ends_with(" - Topic"))
+            })
+            .filter_map(|i| i.pointer("/id/videoId").and_then(|v| v.as_str()))
+            .take(3)
+            .collect();
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let v = yt(
+            "https://www.googleapis.com/youtube/v3/videos",
+            &[("part", "snippet,contentDetails"), ("id", &ids.join(","))],
+        )?;
+        Ok(v["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(parse_youtube_release)
+            .collect())
+    }
+
+    fn getsongbpm_lookup(
+        &self,
+        api_key: &str,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<CatalogMatch>, String> {
+        Self::throttle(&self.last_gsb, Duration::from_millis(1300)); // 3000 requests per hour
+        let lookup = format!("song:{title} artist:{artist}");
+        let v = self.get_json(
+            "https://api.getsong.co/search/",
+            &[("api_key", api_key), ("type", "both"), ("lookup", &lookup)],
+        )?;
+        if let Some(e) = v.pointer("/search/error").and_then(|e| e.as_str()) {
+            return if e.to_ascii_lowercase().contains("no result") {
+                Ok(vec![])
+            } else {
+                Err(format!("GetSongBPM: {e}"))
+            };
+        }
+        Ok(parse_getsongbpm(&v))
+    }
+
     fn musicbrainz_artist_releases(&self, artist: &str) -> Result<Vec<ReleaseItem>, String> {
         self.mb_throttle();
         let v = self.get_json(
@@ -866,6 +1300,54 @@ impl Online for Http {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parses_youtube_music_releases() {
+        use serde_json::json;
+        assert_eq!(iso_duration_ms("PT4M8S"), Some(248_000));
+        assert_eq!(iso_duration_ms("PT1H2M"), Some(3_720_000));
+        let v = json!({"snippet": {"title": "Get Lucky", "channelTitle": "Daft Punk - Topic",
+            "description": "Provided to YouTube by Columbia\n\nGet Lucky · Daft Punk · Pharrell Williams · Nile Rodgers\n\nRandom Access Memories\n\n℗ 2013 Daft Life Limited\n\nReleased on: 2013-05-17\n\nAuto-generated by YouTube."},
+            "contentDetails": {"duration": "PT6M9S"}});
+        let m = parse_youtube_release(&v).unwrap();
+        assert_eq!(m.source, "YouTube Music");
+        assert_eq!(m.artist, "Daft Punk");
+        assert_eq!(m.album.as_deref(), Some("Random Access Memories"));
+        assert_eq!(m.label.as_deref(), Some("Columbia"));
+        assert_eq!(m.release_date.as_deref(), Some("2013-05-17"));
+        assert_eq!(m.duration_ms, Some(369_000));
+        // ordinary uploads are not official releases
+        assert!(parse_youtube_release(
+            &json!({"snippet": {"title": "x", "channelTitle": "Some Uploader"}})
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn parses_spotify_and_getsongbpm() {
+        use serde_json::json;
+        assert_eq!(base64(b"client:secret"), "Y2xpZW50OnNlY3JldA==");
+        assert_eq!(base64(b"ab"), "YWI=");
+        let mut m = parse_spotify_track(
+            &json!({"id": "x1", "name": "Get Lucky", "duration_ms": 248413,
+            "artists": [{"name": "Daft Punk", "id": "a1"}, {"name": "Pharrell Williams"}],
+            "album": {"name": "Random Access Memories", "release_date": "2013-05-17"}, "external_ids": {"isrc": "USQX91300108"}}),
+        );
+        assert_eq!(m.artist, "Daft Punk, Pharrell Williams");
+        assert_eq!(m.release_date.as_deref(), Some("2013-05-17"));
+        apply_audio_features(&mut m, &json!({"tempo": 116.047, "key": 9, "mode": 0}));
+        assert_eq!((m.bpm, m.key.as_deref()), (Some(116.047), Some("Am")));
+        assert_eq!(title_case("afro house"), "Afro House");
+        let g = parse_getsongbpm(
+            &json!({"search": [{"id": "1", "title": "Get Lucky", "tempo": "116", "key_of": "F♯m", "open_key": "4m",
+            "artist": {"name": "Daft Punk", "genres": ["electronic", "house"]}, "album": {"title": "Random Access Memories", "year": "2013"}}]}),
+        );
+        assert_eq!(g[0].bpm, Some(116.0));
+        assert_eq!(g[0].key.as_deref(), Some("F♯m"));
+        assert_eq!(g[0].genres, vec!["Electronic", "House"]);
+        assert_eq!(g[0].release_date.as_deref(), Some("2013"));
+        assert!(parse_getsongbpm(&json!({"search": {"error": "no result"}})).is_empty());
+    }
+
     #[test]
     fn parses_deezer_and_apple_music_catalogue_entries() {
         use serde_json::json;

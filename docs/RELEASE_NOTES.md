@@ -1,3 +1,25 @@
+DJ Assistant 1.8.0
+
+**More online sources for exact song information** (Settings → Online services; each one is opt-in)
+- **Spotify:** release date, artist credits, album, and genres from the artist's profile.
+  - Needs a free Spotify developer app; paste its Client ID and Client secret.
+  - Spotify no longer gives tempo and key to new apps. If yours still has them, they're used.
+- **YouTube & YouTube Music:** the official release of each track (its "Artist - Topic" video) lists the exact release date, label and album.
+  - Needs a free YouTube Data API key.
+  - The free quota covers about 100 tracks a day. When it runs out, the other sources carry on.
+- **GetSongBPM:** tempo and **musical key**. Needs a free key.
+- These join Deezer & Apple Music (free, no key) and MusicBrainz.
+
+**Every source is cross-checked** before anything changes:
+- **BPM and key:** checked against this computer's audio analysis, including half- and double-time mistakes. Applied automatically when they agree; otherwise left for you to check by ear.
+- **Release year:** corrected when two or more sources agree. A single source only fills an empty year.
+- **Genre, album and label:** fill empty fields. A genre you already have is only suggested.
+- **Artist credits:** suggested when two sources agree on a different spelling.
+- Only the same recording counts: same title and artist, same length within 10 seconds. Every change shows which sources said what, and can be undone.
+- *Check song info online* (Suggestions, the library's track menu, Library Health) runs all the sources you turned on. Auto-prep does it for new music.
+
+---
+
 DJ Assistant 1.7.0
 
 **Choose any AI for the assistant** (Settings → AI assistant, or Online services)

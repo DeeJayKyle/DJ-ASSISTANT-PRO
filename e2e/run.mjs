@@ -768,12 +768,20 @@ await step("Online catalogues: Deezer & Apple Music can be turned on and checked
   await sw.locator("xpath=..").click();
   await page.waitForTimeout(300);
   expect((await bridge("services")).ok.some((s) => s.id === "catalogs" && s.enabled), "catalogues not enabled");
+  // Spotify takes an app's Client ID and secret; GetSongBPM a key.
+  await page.getByLabel("Spotify Client ID").fill("e2e-client");
+  await page.getByLabel("Spotify Client secret").fill("e2e-secret");
+  await page.getByLabel("Spotify Client secret").press("Enter");
+  await page.getByText("Spotify app saved to Credential Manager.").waitFor();
+  expect((await bridge("services")).ok.some((s) => s.id === "spotify" && s.has_key), "spotify key not saved");
+  await page.getByLabel("GetSongBPM API key").waitFor();
+  await page.getByLabel("YouTube & YouTube Music API key").waitFor();
   await nav("Suggestions").click();
   // the Studio (visited earlier) stays mounted but must be hidden on other pages
   expect(!(await page.getByRole("heading", { name: "Studio", exact: true }).isVisible()), "Studio page shows through on Suggestions");
   await page.screenshot({ path: path.join(shots, "17-suggestions.png") });
-  await page.getByRole("button", { name: /Check BPM, year & genre online/ }).click();
-  await page.getByText(/Checking BPM, year and genre on Deezer and Apple Music/).first().waitFor();
+  await page.getByRole("button", { name: /Check song info online/ }).click();
+  await page.getByText(/Checking BPM, key, year, genre and credits online/).first().waitFor();
   // the test build has no network: turn it back off so later steps stay offline
   expect(!(await bridge("set_service", { service: "catalogs", enabled: false })).error, "turn off");
 });

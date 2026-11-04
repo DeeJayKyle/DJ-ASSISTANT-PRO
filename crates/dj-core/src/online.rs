@@ -62,6 +62,9 @@ pub struct CatalogMatch {
     pub genres: Vec<String>,
     pub label: Option<String>,
     pub isrc: Option<String>,
+    /// Musical key in any notation ("Am", "8A", "1m"); GetSongBPM and some Spotify apps.
+    #[serde(default)]
+    pub key: Option<String>,
 }
 
 pub trait Online: Send + Sync {
@@ -88,6 +91,33 @@ pub trait Online: Send + Sync {
     /// Search the free Deezer and Apple Music catalogues (no key) for a track.
     fn catalog_lookup(&self, _artist: &str, _title: &str) -> Result<Vec<CatalogMatch>, String> {
         Err("music catalogue lookups are not available in this build".into())
+    }
+    /// Spotify Web API (client-credentials app: "client_id:client_secret").
+    fn spotify_lookup(
+        &self,
+        _creds: &str,
+        _artist: &str,
+        _title: &str,
+    ) -> Result<Vec<CatalogMatch>, String> {
+        Err("Spotify lookups are not available in this build".into())
+    }
+    /// GetSongBPM API (free key): tempo and musical key.
+    fn getsongbpm_lookup(
+        &self,
+        _api_key: &str,
+        _artist: &str,
+        _title: &str,
+    ) -> Result<Vec<CatalogMatch>, String> {
+        Err("GetSongBPM lookups are not available in this build".into())
+    }
+    /// YouTube Data API (free key): official "Artist - Topic" releases, i.e. YouTube Music.
+    fn youtube_lookup(
+        &self,
+        _api_key: &str,
+        _artist: &str,
+        _title: &str,
+    ) -> Result<Vec<CatalogMatch>, String> {
+        Err("YouTube lookups are not available in this build".into())
     }
     /// One model turn for the AI assistant. `messages` and the returned value
     /// use the Anthropic Messages format ({"content": [...], "stop_reason", "model"}).
@@ -212,6 +242,24 @@ pub const SERVICES: &[(&str, &str, &str, &str)] = &[
         "Deezer & Apple Music catalogues",
         "Exact BPM, release year, genre and label for your tracks from two free music catalogues (no key needed). Auto-prep checks new music against them and fixes values the catalogues agree on.",
         "The artist and title text of tracks being looked up. Never audio, file paths or listening history.",
+    ),
+    (
+        "spotify",
+        "Spotify",
+        "Release date, artist credits, album and genres for your tracks (and BPM and key where Spotify still allows it). Checked together with the other catalogues.",
+        "The artist and title text of tracks being looked up. Never audio, file paths or listening history. Needs a free Spotify developer app (developer.spotify.com/dashboard): its Client ID and Client secret.",
+    ),
+    (
+        "getsongbpm",
+        "GetSongBPM",
+        "Tempo and musical key for your tracks, checked against this computer's audio analysis. Data from GetSongBPM.com.",
+        "The artist and title text of tracks being looked up. Never audio, file paths or listening history. Needs a free GetSongBPM API key (getsongbpm.com/api).",
+    ),
+    (
+        "youtube",
+        "YouTube & YouTube Music",
+        "Exact release date, label and album from the official YouTube Music release of each track (its \"Artist - Topic\" video). The free quota covers about 100 tracks a day.",
+        "The artist and title text of tracks being looked up. Never audio, file paths or listening history. Needs a free YouTube Data API key (console.cloud.google.com → APIs → YouTube Data API v3 → Credentials).",
     ),
     (
         "acoustid",

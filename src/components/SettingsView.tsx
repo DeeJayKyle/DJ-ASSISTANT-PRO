@@ -251,6 +251,21 @@ export function AiPicker({ st, onPick, online = false }: { st: AiStatus; onPick:
   );
 }
 
+/** Spotify needs an app's Client ID and Client secret (stored together as one secret). */
+function SpotifyKeys({ has, toast, onSaved }: { has: boolean; toast: (m: string, e?: boolean) => void; onSaved: () => void }) {
+  const [id, setId] = useState("");
+  const [secret, setSecret] = useState("");
+  return (
+    <form className="row wrap" style={{ marginTop: 6, gap: 8 }} onSubmit={(e) => { e.preventDefault(); api.setSecret("spotify", `${id.trim()}:${secret.trim()}`).then(() => { toast("Spotify app saved to Credential Manager."); setId(""); setSecret(""); onSaved(); }).catch((er) => toast(er.message, true)); }}>
+      <input className="input" autoComplete="off" style={{ width: 220 }} aria-label="Spotify Client ID" placeholder={has ? "Saved — enter new ones to replace" : "Client ID"} value={id} onChange={(e) => setId(e.target.value)} />
+      <input className="input" type="password" autoComplete="off" style={{ width: 220 }} aria-label="Spotify Client secret" placeholder="Client secret" value={secret} onChange={(e) => setSecret(e.target.value)} />
+      <button className="btn small" type="submit" disabled={!id.trim() || !secret.trim()}>Save Spotify app</button>
+      {has && <button className="btn small ghost danger" type="button" onClick={() => api.deleteSecret("spotify").then(onSaved)}>Remove</button>}
+      <span className="small muted" style={{ flexBasis: "100%" }}>Create a free app at <a href="#" onClick={(e) => { e.preventDefault(); openUrl("https://developer.spotify.com/dashboard").catch(() => {}); }}>developer.spotify.com/dashboard</a> (any name, redirect URI http://127.0.0.1), then copy its Client ID and secret here. Spotify no longer gives tempo and key to new apps, so BPM and key come from GetSongBPM and the audio analysis.</span>
+    </form>
+  );
+}
+
 /** The Online services row for the AI assistant: pick the service, paste its key. */
 function OnlineAiCard({ toast, onChanged }: { toast: (m: string, e?: boolean) => void; onChanged: () => void }) {
   const [st, setSt] = useState<AiStatus | null>(null);
@@ -499,7 +514,8 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
                 <strong>{s.name}</strong> <span className="small muted">— {s.provides}</span>
                 <div className="small"><span className="muted">Sends:</span> {s.sends}</div>
                 {s.id === "anthropic" && <OnlineAiCard toast={toast} onChanged={load} />}
-                {s.needs_key && s.id !== "anthropic" && (
+                {s.id === "spotify" && <SpotifyKeys has={s.has_key} toast={toast} onSaved={load} />}
+                {s.needs_key && s.id !== "anthropic" && s.id !== "spotify" && (
                   <form className="row" style={{ marginTop: 6 }} onSubmit={(e) => { e.preventDefault(); api.setSecret(s.id, keys[s.id] ?? "").then(() => { toast("Key saved to Credential Manager."); setKeys({ ...keys, [s.id]: "" }); load(); }).catch((er) => toast(er.message, true)); }}>
                     <input className="input" type="password" autoComplete="off" style={{ width: 280 }} aria-label={`${s.name} API key`} placeholder={s.has_key ? "Key saved — enter a new one to replace" : "Paste your API key"} value={keys[s.id] ?? ""} onChange={(e) => setKeys({ ...keys, [s.id]: e.target.value })} />
                     <button className="btn small" type="submit" disabled={!(keys[s.id] ?? "").trim()}>Save key</button>

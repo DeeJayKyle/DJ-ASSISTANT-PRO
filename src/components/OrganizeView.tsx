@@ -149,7 +149,7 @@ export function OrganizeView({ settings, crates, toast, bump, onSettings, onRevi
               <div><strong>{result.fixes_applied}</strong><span className="small muted">fixes applied</span></div>
               <div><strong>{result.left_to_review}</strong><span className="small muted">left to review</span></div>
               {result.musicbrainz_lookups > 0 && <div><strong>{result.musicbrainz_lookups}</strong><span className="small muted">MusicBrainz lookups</span></div>}
-              {(result.catalog_checked ?? 0) > 0 && <div><strong>{result.catalog_checked}</strong><span className="small muted">checked on Deezer &amp; Apple Music</span></div>}
+              {(result.catalog_checked ?? 0) > 0 && <div><strong>{result.catalog_checked}</strong><span className="small muted">checked online</span></div>}
             </div>
           )}
           <div className="row wrap" style={{ gap: 8 }}>

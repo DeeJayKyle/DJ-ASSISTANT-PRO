@@ -186,6 +186,7 @@ impl App {
         let c2 = ctl.clone();
         let jobs = self.jobs.clone();
         let online = self.online.clone();
+        let secrets = self.secrets.clone();
         let handle = std::thread::Builder::new()
             .name("dj-scan".into())
             .spawn(move || {
@@ -208,7 +209,7 @@ impl App {
                 let gig = crate::gig::active(&conn).unwrap_or(false);
                 drop(conn);
                 let _ = jobs.start("auto_prep", gig, move |ctl, p| {
-                    crate::autoprep::run(&db_path, online.as_ref(), ctl, p)
+                    crate::autoprep::run(&db_path, online.as_ref(), secrets.as_ref(), ctl, p)
                 });
             })?;
         job.ctl = ctl;

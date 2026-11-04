@@ -12,6 +12,58 @@ use std::sync::Arc;
 struct FakeOnline;
 static LLM_SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 impl Online for FakeOnline {
+    fn youtube_lookup(
+        &self,
+        key: &str,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<dj_core::online::CatalogMatch>, String> {
+        assert_eq!(key, "yt-key");
+        Ok(vec![dj_core::online::CatalogMatch {
+            source: "YouTube Music".into(),
+            title: title.split(" (").next().unwrap_or(title).into(),
+            artist: artist.into(),
+            album: Some("Coastline".into()),
+            duration_ms: Some(2000),
+            release_date: Some("2014-02-01".into()),
+            label: Some("Harbour Records".into()),
+            ..Default::default()
+        }])
+    }
+    fn spotify_lookup(
+        &self,
+        creds: &str,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<dj_core::online::CatalogMatch>, String> {
+        assert_eq!(creds, "id123:secret456");
+        Ok(vec![dj_core::online::CatalogMatch {
+            source: "Spotify".into(),
+            title: title.split(" (").next().unwrap_or(title).into(),
+            artist: artist.into(),
+            album: Some("Coastline".into()),
+            duration_ms: Some(2500),
+            release_date: Some("2014-02-01".into()),
+            genres: vec!["Amapiano".into()],
+            ..Default::default()
+        }])
+    }
+    fn getsongbpm_lookup(
+        &self,
+        key: &str,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<dj_core::online::CatalogMatch>, String> {
+        assert_eq!(key, "gsb-key");
+        Ok(vec![dj_core::online::CatalogMatch {
+            source: "GetSongBPM".into(),
+            title: title.split(" (").next().unwrap_or(title).into(),
+            artist: artist.into(),
+            bpm: Some(122.0),
+            key: Some("Dm".into()),
+            ..Default::default()
+        }])
+    }
     fn catalog_lookup(
         &self,
         artist: &str,
@@ -37,6 +89,7 @@ impl Online for FakeOnline {
                 None
             },
             isrc: None,
+            key: None,
         };
         Ok(vec![
             m("Deezer", "Amapiano"),
@@ -2626,7 +2679,10 @@ fn catalogues_fix_bpm_year_and_genre_when_they_agree() {
     assert!(year["confidence"].as_f64().unwrap() >= 0.85, "{year}");
     let genre = find("genre").unwrap_or_else(|| panic!("genre suggestion: {s}"));
     assert_eq!(genre["suggested_value"], "Amapiano");
-    assert!(genre["evidence"].as_str().unwrap().contains("both"));
+    assert!(genre["evidence"]
+        .as_str()
+        .unwrap()
+        .contains("Apple Music and Deezer"));
     let bpm = find("bpm").expect("bpm suggestion");
     assert_eq!(bpm["source"], "Deezer");
     // The unrelated "Something Else" result was ignored.
@@ -2639,4 +2695,85 @@ fn catalogues_fix_bpm_year_and_genre_when_they_agree() {
     // the file already had a genre: the catalogue's is suggested, not forced
     assert_eq!(row["genre"], "Afrobeats", "{row}");
     assert!(genre["confidence"].as_f64().unwrap() < 0.85, "{genre}");
+}
+
+#[test]
+fn spotify_and_getsongbpm_add_key_and_corroborate() {
+    let e = env();
+    let app = app_with_fake(&e);
+    add_and_scan(&app, &e.music);
+    let id = id_of(&app, "Lagos Lights - Sunrise Groove.mp3");
+    // Spotify on but no app credentials: nothing to look up with.
+    call(
+        &app,
+        "set_service",
+        json!({"service": "spotify", "enabled": true}),
+    );
+    assert!(app
+        .dispatch("lookup_catalogs", json!({"ids": [id]}))
+        .is_err());
+    assert!(app
+        .dispatch(
+            "set_secret",
+            json!({"service": "spotify", "value": "no-colon"})
+        )
+        .is_err());
+    call(
+        &app,
+        "set_secret",
+        json!({"service": "spotify", "value": "id123:secret456"}),
+    );
+    call(
+        &app,
+        "set_service",
+        json!({"service": "getsongbpm", "enabled": true}),
+    );
+    call(
+        &app,
+        "set_secret",
+        json!({"service": "getsongbpm", "value": "gsb-key"}),
+    );
+    call(
+        &app,
+        "set_service",
+        json!({"service": "youtube", "enabled": true}),
+    );
+    call(
+        &app,
+        "set_secret",
+        json!({"service": "youtube", "value": "yt-key"}),
+    );
+    let svc = call(&app, "services", json!({}));
+    assert!(svc
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["id"] == "spotify" && s["needs_key"] == true && s["has_key"] == true));
+    call(&app, "lookup_catalogs", json!({"ids": [id]}));
+    assert_eq!(wait_job(&app, "catalogs")["state"], "completed");
+    let s = call(&app, "suggestions", json!({"track_id": id}));
+    let find = |f: &str| {
+        s.as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["field"] == f && x["status"] == "pending")
+            .cloned()
+    };
+    let key = find("key").unwrap_or_else(|| panic!("key suggestion: {s}"));
+    assert_eq!(key["suggested_value"], "7A"); // D minor
+    assert_eq!(key["source"], "GetSongBPM");
+    let year = find("year").unwrap_or_else(|| panic!("year: {s}"));
+    assert_eq!(year["suggested_value"], "2014");
+    // Spotify and the official YouTube Music release agree, so the year is certain
+    let src = year["source"].as_str().unwrap();
+    assert!(
+        src.contains("Spotify") && src.contains("YouTube Music"),
+        "{src}"
+    );
+    assert!(year["confidence"].as_f64().unwrap() >= 0.85, "{year}");
+    let genre = find("genre").unwrap_or_else(|| panic!("genre: {s}"));
+    assert_eq!(genre["suggested_value"], "Amapiano");
+    assert!(genre["evidence"].as_str().unwrap().contains("Spotify"));
+    let bpm = find("bpm").unwrap_or_else(|| panic!("bpm: {s}"));
+    assert_eq!(bpm["suggested_value"], "122");
 }
