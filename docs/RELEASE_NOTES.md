@@ -1,3 +1,12 @@
+DJ Assistant 1.3.1
+
+**Maintenance release**
+- Updates are now signed automatically by the release build, so every new version arrives through the in-app updater with no manual step.
+- Release workflow: can also publish to a separate public update repository if the source is ever made private again; re-running a release replaces its files as one matching set.
+- No changes to the app's features or behaviour since 1.3.0.
+
+---
+
 DJ Assistant 1.3.0
 
 **New in 1.3: Quick Prep and local accounts**
