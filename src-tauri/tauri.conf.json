@@ -64,7 +64,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3Qjc4RDg3ODk1Q0REMjMKUldRajNWeUpoNDIzSnlBNW5HZHRqa05jUlN5QWU3R2ZlUFY0MEFYYlg4OTA1bzl0Y2Z4MGFVOTAK",
       "endpoints": [
-        "https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/latest/download/latest.json"
+        "https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/latest/download/latest.json",
+        "https://github.com/DeeJayKyle/dj-assistant-releases/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

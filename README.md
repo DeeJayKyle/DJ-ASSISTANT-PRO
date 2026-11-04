@@ -1,103 +1,85 @@
 # DJ Assistant
 
-A local-first Windows desktop app that helps a working DJ organise, search and check a music library — **without ever changing the music files or Serato's data**.
+A local-first Windows app that helps a working DJ organise, analyse, plan and prepare — **without risking the music library**. Built for Herbie, who plays out with Serato DJ.
 
-Version 0.1 is deliberately small and safe: it catalogues the folders you choose, lets you search and filter, build virtual crates, spot low-bitrate files, and review possible duplicates. Everything stays on your computer.
+![Music Library](docs/screenshots/library.png)
 
-![Library view](docs/screenshots/03-library.png)
+## What it does (v1.0)
 
-## What v0.1 does
+**Library** — choose music folders and drives; read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; fast accent-insensitive search; Genre / Decade / Format / Quality filters plus a full rule builder; offline drives kept, never treated as deleted; folder watcher that notices new music.
 
-| Feature | Notes |
-|---|---|
-| Choose music folders and external drives | Only folders you add are scanned. Nested/duplicate folders are refused so a file is never catalogued twice. |
-| Read-only background scan | Bounded worker pool, progress, **pause / resume / cancel**. Unchanged files are skipped on rescan. Symlinks/junctions are not followed (no loops). |
-| Persistent local catalogue | SQLite file in your app-data folder (`%APPDATA%\com.deejaykyle.djassistant\catalogue.sqlite3`), never inside your music folders. |
-| Tags and technical properties | Title, artist, album, album artist, genre, date/year, original year, track/disc, composer, label, comment, ISRC, BPM and key tags, format, codec, lossless/lossy, duration, bitrate, sample rate, bit depth, channels, size. Unknown values are shown as **—**, never guessed. |
-| Formats | MP3, FLAC, WAV, AIFF, M4A (AAC and ALAC), Ogg Vorbis, Opus, APE, WavPack, Musepack (via [lofty](https://crates.io/crates/lofty)). WMA, DSF/DFF and others are listed as **unsupported** in Library health rather than ignored. |
-| Search and filters | Accent- and case-insensitive search across title, artist, album, genre, label, file name, tags and notes. Filters on artist, title, genre, year, decade, BPM, key, energy, rating, mood, colour, tags, version, clean/explicit, quality, bitrate, format, location and more. |
-| Your own catalogue values | Energy (1–10 LED meter), rating, colour, mood, tags, notes, and overrides for genre, year, BPM, key, version and clean/explicit. Stored only in the app; **never written to files**. Original file values remain visible separately. |
-| Virtual crates | Manual crates and smart (rule-based) crates with AND/OR, ranges, exclusions, manual additions and a **live preview before saving**. A track can be in many crates. Rules are data compiled with a whitelist; user text is always a bound parameter. |
-| Low-bitrate warnings | Lossy files with a known average bitrate below a configurable threshold (default **128 kbps**). Lossless and unknown-bitrate files are never flagged by this rule. |
-| Duplicate review | **Exact** (full-file BLAKE3 hash), **possible** (same normalised artist + title, same version label, length within 2 s) and **alternate versions** (same title, different labels such as Remix/Live/Clean) are kept separate, each with its reason. You record a decision; nothing is deleted or merged. |
-| Library health | Missing title/artist/genre/year, unreadable or corrupt files, unsupported formats, low bitrate, unknown quality, offline drives, missing files, and the last scan's problems. |
-| Offline drives | If a folder/drive is unavailable, it is marked **offline** and its tracks are kept. Tracks are only marked **missing** after a completed scan of an available folder — never deleted. |
-| Assistant sidebar | A **rule-based helper, not an AI model**. It turns requests like “afrobeats 2010s energy 6-8 no live” into the same filters the UI uses, says what it understood, and can open views. It cannot change anything. Open by default; hide with ✕ or **Ctrl+J**, or expand to full screen. |
-| Privacy / safety notice | Shown on first run and always available in Settings. |
+**Your catalogue** — energy (1–10 LED meter), star ratings, colour, mood, tags, notes and overrides for title, artist, genre, year, BPM, key and more. Stored in DJ Assistant only; the file’s own tags stay visible separately.
 
-## Safety model
+**Virtual crates** — manual and smart crates (AND/OR, ranges, exclusions, manual additions, live preview), nested folders, and one-click templates from the *Crate & Playlist Cheat Sheet*: genres, energy (Peak Time 9–10 → Cool Down 1–2), utility (openers, closers, bangers, acapellas…), events, ratings (Guaranteed → Archive), decades and genre-by-energy folders. Crate-hygiene warnings for vague or oversized crates. Export any crate or selection as M3U8 or CSV.
 
-- The app **only reads** music files. CI runs `scripts/check-read-only.sh`, which fails the build if any file-writing, renaming, copying or deleting API appears in the core library or desktop shell (the only exception is the app's own log file).
-- It does **not** read or write Serato databases, crates, cues, beatgrids, history or settings.
-- Removing a folder or deleting a crate only removes catalogue rows. Files are untouched.
-- Scans write to the catalogue in short transactions. A cancelled, interrupted or crashed scan leaves the catalogue consistent; interrupted scans are labelled as such on next start.
-- File changes (tag edits, renames, replacements) are **not in this version**. When added they will require a preview, conflict checks, a verified backup, your approval and a change log — see [ROADMAP.md](ROADMAP.md).
+**Audio analysis (local)** — BPM with half/double-time alternatives, key with Camelot code, energy (scaled to your library), loudness (LUFS), peak, clipping, silence, intro/outro length, cue ideas (first sound, mix-in, drop, mix-out), waveform, tempo-drift warning and an audio fingerprint. All shown as estimates with method and version; your values always win.
+
+**Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz and AcoustID. Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
+
+**Duplicates & health** — exact (full-file hash) vs possible vs alternate versions, with reasons and review notes; library health for missing metadata, unreadable/unsupported files, low bitrate (configurable, default 128 kbps, never applied to lossless or unknown), offline drives and missing files.
+
+**Discovery** — tracks that fit a crate (with reasons), gaps, alternatives to overplayed tracks, version-aware tracklist matching (owned / possibly owned / missing / unknown), Last.fm similar artists and tracks (opt-in), new releases from artists you follow (MusicBrainz, opt-in), store search links (Beatport, Bandcamp, Traxsource, Juno, Apple, Amazon, YouTube preview). “What I’ve learned” can be inspected, switched off and reset.
+
+**Set Studio** — event, audience, length, genres, must-plays, exclusions, clean-only, BPM range, energy journey (journey, warm-up, peak, wedding, lounge) → an editable running order with tempo/key transition notes, alternatives per slot, reordering, emergency floor-fillers; save, export M3U8, save as crate.
+
+**Gig Mode & Gig Pack** — offline set list, request queue, DJ notes and play log with background work paused; post-gig recap. Gig packs copy a crate or set to a USB drive into a new folder, verify every copy by hash, and write a manifest, playlist and missing-file report.
+
+**Serato & history** — read-only import of Serato crates and Serato history CSV exports.
+
+**Safe tag writing (opt-in, off by default)** — write catalogue values to MP3/FLAC/M4A tags with an exact preview, change detection, a verified backup, checks that the audio data and every other tag frame (including Serato’s cue/beatgrid frames) are preserved, a change log and exact-byte rollback.
+
+**Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
+
+**Assistant** — a local, rule-based helper (not an AI model) in a sidebar you can hide (Ctrl+J) or expand. “afrobeats 2010s energy 6-8 no live”, “low bitrate”, “plan a 2 hour wedding set”, “gig pack”… It says exactly what it understood and can only search, filter and open views.
+
+**Auto-update** — signed updates install in place from GitHub releases (see [docs/UPDATES.md](docs/UPDATES.md)). Can be turned off in Settings.
+
+## Safety
+
+- Music files are only read, except by the opt-in tag writer (above). CI fails the build if any other module gains a file-writing API (`scripts/check-read-only.sh`).
+- Serato’s databases, crates, cues, beatgrids, history and settings are never written.
+- Nothing is ever deleted or merged; duplicate decisions are notes.
+- Scans and analysis commit in short transactions; cancelled or crashed runs leave the catalogue consistent.
 
 ## Privacy
 
-- No account, no telemetry, no analytics, no online services in v0.1.
-- The core library (`crates/dj-core`) has no network dependencies; CI checks the dependency tree and, on Linux, traces system calls during scanning to confirm no internet sockets are opened.
-- The window's Content Security Policy only allows the app's own IPC channel.
-- Logs (`%LOCALAPPDATA%\com.deejaykyle.djassistant\logs\dj-assistant.log`) record command names and errors only — not your search text or arguments.
-- Future online features (MusicBrainz, AcoustID, Last.fm) will be off by default, will explain exactly what they send before you enable them, and will keep credentials in Windows Credential Manager.
+- No account, no telemetry. The core library has no network code; CI traces system calls during scanning, analysis, Set Studio, gig packs, tag writing and personal-file indexing to prove no internet sockets are opened.
+- Online services (MusicBrainz, AcoustID, Last.fm, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
+- Logs record command names and errors only.
 
 ## Install (Windows 10/11, 64-bit)
 
-1. Download the installer (`DJ.Assistant_0.1.0_x64-setup.exe` for v0.1.0; later releases use `DJ-Assistant_<version>_x64-setup.exe`) and `SHA256SUMS.txt` from the [Releases](../../releases) page.
-2. Recommended — verify the download in PowerShell:
-   ```powershell
-   Get-FileHash ".\DJ.Assistant_0.1.0_x64-setup.exe" -Algorithm SHA256
-   ```
-   The hash must equal the one in `SHA256SUMS.txt` (for v0.1.0: `2fb1525473aecd4685504965d6edd7b0766172dbc6876034c475d408314eefb9`). In v0.1.0 the file name inside `SHA256SUMS.txt` shows a space instead of the dot GitHub added; the hash is what matters.
-3. Run the installer. It installs for the current user (no admin needed).
-
-**The installer is not code-signed.** Windows SmartScreen will probably show “Windows protected your PC”. Choose **More info → Run anyway** only if the checksum matches. The app uses Microsoft Edge WebView2, which is built into Windows 11 and current Windows 10; if it is missing the installer downloads it from Microsoft.
-
-## Using it
-
-1. **Folders → Choose folders…** (or type a path) — a read-only scan starts.
-2. **Library** — search (press **/**), use preset chips or **Filters**, click a track for details, set energy/rating/tags, multi-select (Ctrl/Shift-click, Space, Ctrl+A) to add to crates.
-3. **+ next to Crates** — create a manual or smart crate. Filters in the library can be saved as a smart crate.
-4. **Duplicates → Check for exact duplicates** — compares full file contents of same-size files.
-5. **Library health** — click a card to see the affected tracks.
-6. **Settings** — low-bitrate threshold, theme, safety and privacy information.
+1. Download `DJ-Assistant_<version>_x64-setup.exe` and `SHA256SUMS.txt` from Releases.
+2. Verify: `Get-FileHash .\DJ-Assistant_1.0.0_x64-setup.exe -Algorithm SHA256` and compare with `SHA256SUMS.txt`.
+3. Run it (per-user install, no admin needed). The installer is **not code-signed**, so SmartScreen will warn — choose *More info → Run anyway* if the checksum matches.
+4. Later versions arrive through **Settings → Updates** (or the banner on start-up); no need to download again.
 
 ## Build from source
 
-Requirements: Rust 1.97 (pinned in `rust-toolchain.toml`), Node 22, and on Windows the MSVC build tools + WebView2.
+Rust 1.97 (`rust-toolchain.toml`), Node 22, and on Windows the MSVC build tools + WebView2.
 
 ```bash
 npm ci
-cargo test -p dj-core          # core tests
-npm test                       # front-end unit tests
-npx tauri dev                  # run the desktop app
-npx tauri build                # Windows installer in target/release/bundle/nsis
+cargo test -p dj-core -p dj-online
+npm test
+npm run e2e          # real UI + real backend + real audio fixtures (dev-only loopback bridge)
+npx tauri dev
+npx tauri build --config src-tauri/tauri.ci.conf.json   # installer without updater signing
 ```
 
-Browser-based development and the e2e test use a **development-only** bridge (`crates/dj-devbridge`, loopback only, never shipped):
+Other checks: `scripts/check-no-network.sh`, `scripts/check-read-only.sh`, `python scripts/check-licenses.py`. `scripts/make-demo-library.sh <dir>` generates a 20-track synthetic demo library for trying the app.
 
-```bash
-npm run e2e                    # real UI + real backend + real fixture audio files
-```
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTING.md), [ROADMAP.md](ROADMAP.md) and [docs/UPDATES.md](docs/UPDATES.md).
 
-Other checks: `scripts/check-no-network.sh`, `scripts/check-read-only.sh`, `python scripts/check-licenses.py`.
+## Known limitations
 
-## Tech stack
-
-Tauri 2 + Rust + React/TypeScript + SQLite. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for why, and [docs/TESTING.md](docs/TESTING.md) for what is tested automatically and what still needs manual Windows/Serato testing.
-
-A code knowledge graph can be generated locally with [Graphify](https://github.com/Graphify-Labs/graphify): `graphify update .` (output in `graphify-out/`, not committed).
-
-## Current limitations
-
-- Windows build is produced and tested in CI, but **has not yet been hand-tested on a real Windows PC with a real library or alongside Serato** (see [docs/TESTING.md](docs/TESTING.md)).
-- Installer is unsigned (SmartScreen warning).
-- BPM and key come **only from existing file tags**; there is no audio analysis yet.
-- Bitrate is the value reported by the file (an average for VBR). It does not prove audio quality.
-- “Year” is the file's date tag; the app cannot tell whether that is an original, remix or reissue year.
-- Folder watching, metadata suggestions, discovery, set planning, gig mode and online services are **not implemented** — see the in-app “Coming later” page and the roadmap.
-- Very large libraries (100k+ tracks) have not been benchmarked yet.
+- **Not yet hand-tested on a real Windows PC, a real library or alongside Serato** — automated tests run on Windows CI. Please work through the manual checklist in docs/TESTING.md, starting with copies of your music.
+- Installer unsigned (SmartScreen warning).
+- Analysis is estimation: half/double tempo and relative/modal key confusion happen; energy is relative to your own library.
+- Online services were verified with recorded responses and fakes in tests; live calls could not be made from the build environment.
+- Stem separation and cloud AI are not included. Physical file moves/renames are deliberately not offered (they break Serato links).
+- Serato crate parsing follows the community-documented format; it is read-only and may need updates if Serato changes it.
 
 ## Licence
 
-MIT. Third-party licences: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+MIT. Third-party licences: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (includes Symphonia under MPL-2.0; its source is published on crates.io).

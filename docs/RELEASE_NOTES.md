@@ -1,21 +1,18 @@
-First release of DJ Assistant: a local-first, **read-only** music library assistant for Windows.
+DJ Assistant 1.0.0 — the full first release.
 
-**What's in v0.1.0**
-- Add music folders/drives and scan them read-only (pause, resume, cancel)
-- Persistent local catalogue with tags and technical properties (MP3, FLAC, WAV, AIFF, M4A AAC/ALAC, Ogg, Opus, and more)
-- Fast accent-insensitive search and filters (genre, year/decade, BPM, key, energy, rating, tags, quality, location…)
-- Your own energy (1–10), rating, colour, mood, tags and notes — stored in the app, never written to files
-- Manual and smart crates with AND/OR rules, ranges, exclusions and live preview
-- Configurable low-bitrate warning (default 128 kbps; lossless and unknown never flagged)
-- Conservative duplicate review: exact (full-file hash) vs possible vs alternate versions — nothing is deleted
-- Library health: missing metadata, unreadable/unsupported files, offline drives, missing files
-- Rule-based assistant sidebar (not AI) that turns requests into filters
+**New in 1.0**
+- Redesigned glass interface with a mint accent, custom title bar, Assistant panel and smooth motion (reduced-motion option)
+- Local audio analysis: BPM (+ half/double-time), key + Camelot, energy, loudness, clipping, silence, intro/outro, cue ideas, waveform
+- Suggestions with source, evidence and confidence; optional MusicBrainz, AcoustID and Last.fm (all off by default)
+- Crate templates from the Crate & Playlist Cheat Sheet, nested crates, energy/rating/colour labels, crate hygiene, M3U8/CSV export
+- Discovery: crate fit, gaps, overplayed alternatives, tracklist matching, similar artists, new releases, inspectable learning
+- Set Studio: energy journeys, tempo/key transition notes, alternatives, emergency tracks, save/export
+- Gig Mode (set list, requests, notes, recap) and Gig Pack (verified copies to USB with manifest)
+- Read-only Serato crate and history import
+- Opt-in safe tag writing with verified backups, Serato-data preservation checks and rollback
+- Opt-in personal files search; folder watcher
+- Signed in-app updates
 
-**Safety and privacy**
-- Never edits, renames, moves or deletes music files. Never touches Serato data.
-- No account, no telemetry, no online services. Works offline.
+**Safety:** music files are only read unless you turn on tag writing; Serato data is never written; nothing is deleted.
 
-**Please note**
-- The installer is **not code-signed**; Windows SmartScreen will warn. Verify `SHA256SUMS.txt` first.
-- Built and tested automatically on Windows CI; **not yet hand-tested on a real Windows PC or alongside Serato** — see docs/TESTING.md.
-- No audio analysis yet: BPM/key come only from existing tags.
+**Please note:** the installer is not code-signed (SmartScreen warning). The app has passed automated tests on Windows CI but has not yet been hand-tested on a real library or alongside Serato — start with copies.

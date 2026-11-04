@@ -42,15 +42,17 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Rust lint (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Core tests (scanner, catalogue, search, crates, duplicates)
+      - name: Core tests (scanner, catalogue, search, crates, duplicates, analysis, v1 features)
         run: cargo test -p dj-core --locked
+      - name: Online service parser tests
+        run: cargo test -p dj-online --locked
       - name: Licence check
         run: python scripts/check-licenses.py
       - name: Read-only guard (no file-modifying APIs in shipped code)
         shell: bash
         run: ./scripts/check-read-only.sh
-      - name: Build Windows installer (NSIS, unsigned)
-        run: npx tauri build --ci
+      - name: Build Windows installer (NSIS; updater signing happens in the release workflow)
+        run: npx tauri build --ci --config src-tauri/tauri.ci.conf.json
       - name: SHA-256 checksums
         shell: pwsh
         run: |

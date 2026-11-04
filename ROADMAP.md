@@ -1,82 +1,46 @@
 # Roadmap
 
-Status key: **Tested** = implemented and covered by automated tests · **Implemented** = built, needs more testing · **Planned** = not built yet.
-“Manual Windows test pending” means it has passed automated tests (including on a Windows CI runner where noted) but nobody has yet tried it by hand on a real Windows PC with a real library.
+**Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
+Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
-## Phase 1 — v0.1 safe foundation
+## v1.0 (this release)
 
-| Feature | Status |
-|---|---|
-| Select music folders / external drives (picker + typed path) | Tested (automated); manual Windows test pending |
-| Read-only recursive scan, unchanged-file skip | Tested |
-| Pause / resume / cancel scan; interruption recovery | Tested |
-| Symlink loops avoided; Unicode and spaces in paths | Tested (Linux CI); Windows path tests run in Windows CI |
-| Windows case-insensitive path identity | Tested (unit) |
-| Missing folders / disconnected drives → offline, not deleted | Tested |
-| Locked, corrupt, empty and unsupported files reported, not fatal | Tested (corrupt/empty/unsupported); locked files: manual Windows test pending |
-| Persistent SQLite catalogue with migrations | Tested |
-| Tag + technical property extraction (MP3, FLAC, WAV, AIFF, M4A AAC/ALAC, Ogg, Opus) | Tested |
-| APE, WavPack, Musepack | Implemented (library support; no fixtures yet) |
-| Search and filters, sort, decade, ranges | Tested |
-| SQL injection resistance (search, rules, crate names, assistant) | Tested |
-| Catalogue-only values: energy, rating, colour, mood, tags, notes, overrides | Tested |
-| Manual crates, smart crates (AND/OR, ranges, exclusions, manual additions), preview | Tested |
-| Configurable low-bitrate warning (lossless/unknown never flagged) | Tested |
-| Duplicate review: exact (full hash) vs possible vs alternate; review notes | Tested |
-| Library health view | Tested |
-| Rule-based assistant sidebar (hide / full screen) — not AI | Tested |
-| Privacy/read-only notice | Tested (e2e) |
-| No network during scanning | Tested (dependency audit + strace on Linux) |
-| Windows NSIS installer (unsigned) + SHA-256 | Built in Windows CI |
-| Keyboard navigation (/ search, arrows, Space, Enter, Ctrl+A, Ctrl+J) | Implemented; partial e2e |
+| Area | Feature | Status |
+|---|---|---|
+| Library | Folder/drive selection, read-only scan, pause/resume/cancel, offline drives, missing files, Unicode/symlinks | Tested |
+| Library | Search, quick filters (genre/decade/format/quality), rule builder, sorting, virtualised table | Tested |
+| Library | Folder watcher with organisation suggestions (never moves files) | Tested |
+| Catalogue | Energy, rating, colour, mood, tags, notes, overrides (title, artist, album, genre, year, original year, BPM, key, label, version, clean/explicit) | Tested |
+| Crates | Manual + smart crates, nesting, manual additions/exclusions, preview | Tested |
+| Crates | Cheat-sheet templates (genres, energy, utility, events, ratings, decades, genre-by-energy), labels, colour-by-energy, hygiene | Tested |
+| Export | M3U8 and CSV export of crates, sets and selections | Tested |
+| Analysis | BPM (+alt), key/Camelot, energy (library-relative), LUFS, peak, clipping, silence, intro/outro, cues, waveform, tempo drift, fingerprint | Tested (synthetic audio; accuracy on real music to be validated) |
+| Suggestions | Local heuristics, analysis, accept/edit/reject, bulk accept | Tested |
+| Suggestions | MusicBrainz (original year, album, label, genre), AcoustID fingerprint lookup | Tested with fakes; live calls not yet verified |
+| Duplicates | Exact (full hash) vs possible vs alternate, review notes | Tested |
+| Quality | Configurable low-bitrate rule (lossless/unknown never flagged) | Tested |
+| Health | Missing metadata, unreadable, unsupported, offline, missing, last-scan problems | Tested |
+| Discovery | Crate fit, gaps, overplayed alternatives, version-aware tracklist matching, learning inspect/disable/reset, store links | Tested |
+| Discovery | Last.fm similar artists/tracks, MusicBrainz new releases for followed artists | Tested with fakes; live calls not yet verified |
+| Set Studio | Planner with energy curves, transition notes, alternatives, emergency tracks, save/export/crate | Tested |
+| Gig | Gig mode (requests, notes, play log, background pause), recap + export | Tested |
+| Gig | Gig pack: preview, free-space check, verified copy, manifest, playlist, missing report | Tested |
+| Serato | Read-only crate import, history CSV import | Tested (synthetic crate files; real Serato files to be validated) |
+| Safety | Opt-in tag writing with preview, change check, verified backup, audio + Serato GEOB preservation, atomic replace, rollback | Tested (MP3 GEOB case); FLAC/M4A writing implemented, lighter coverage |
+| Personal files | Opt-in index, text search (txt/md/csv/json/docx/odt…), duplicates, encrypted/unreadable flags, organisation ideas | Tested |
+| Assistant | Rule-based search/filter/navigation incl. set planning requests | Tested |
+| App | Glass UI per mock-up, RxPos motion, light/dark, glass/solid, reduced motion, custom title bar | Implemented (visual e2e screenshots) |
+| App | Signed auto-update via GitHub releases | Implemented; needs public release hosting + signing secret (docs/UPDATES.md) |
+| Privacy | No network in core (dependency audit + syscall trace), Credential Manager for keys | Tested (Linux); Credential Manager on Windows not yet hand-tested |
 
-## Phase 2 — knowledge and suggestions
-
-| Feature | Status |
-|---|---|
-| Folder watching with organisation suggestions | Planned |
-| Suggestions model (existing vs suggested value, source, evidence, confidence; accept/reject/edit) | Planned |
-| MusicBrainz lookup (opt-in, rate-limited, attributed) | Planned |
-| Chromaprint/AcoustID fingerprint candidates (opt-in, per-lookup consent) | Planned |
-| Distinguish original / remix / reissue / edition year | Planned |
-| Last.fm similar artists/tracks (opt-in) | Planned |
-| Windows Credential Manager for API keys | Planned |
-| Read-only Serato crate/history import (tested on disposable library copy first) | Planned |
-
-## Phase 3 — audio analysis
+## Later
 
 | Feature | Status |
 |---|---|
-| BPM with half/double-time ambiguity, key, energy, mood estimates (versioned, overridable) | Planned |
-| Waveforms, intro/outro, cue/mix point suggestions | Planned |
-| Loudness, silence, clipping, beatgrid issue hints | Planned |
-| Fingerprint-assisted duplicate candidates | Planned |
-
-## Phase 4 — discovery and sets
-
-| Feature | Status |
-|---|---|
-| Crate-fit recommendations, gaps, related artists/labels — each explained with source and date | Planned |
-| Tracklist import and owned / possibly owned / missing matching | Planned |
-| Inspect, disable and reset learned preferences | Planned |
-| Legitimate purchase/download source links (no ripping, no DRM bypass) | Planned |
-| Set studio: event, duration, energy journey, editable running order, alternatives | Planned |
-| Gig mode (offline essentials, pause background work) | Planned |
-| Gig pack: preview, disk-space check, copy, verify, manifest, missing-file report | Planned |
-| Request queue, DJ notes, play-history import, post-gig recap | Planned |
-| Local stem separation (if technically and legally feasible) | Planned |
-
-## Phase 5 — safe file changes
-
-| Feature | Status |
-|---|---|
-| Tag writes / renames / moves with exact preview, conflict check, verified backup, approval, change log, rollback | Planned |
-| Warnings for Serato link, cue, beatgrid and crate impacts | Planned |
-| Replacement workflow for low-quality files | Planned |
-
-## Phase 6 — personal files (separate, opt-in)
-
-| Feature | Status |
-|---|---|
-| Index selected folders, search names and supported document contents locally | Planned |
-| Duplicate / unreadable / encrypted document flags, organisation suggestions | Planned |
+| Accuracy validation of analysis on Herbie's real library; tuning | Planned |
+| Waveform zoom and beatgrid view; Serato cue comparison (read-only) | Planned |
+| Charts / radio-show / festival tracklist sources (permitted APIs only) | Planned |
+| Request queue from phones on the same network | Planned |
+| Local stem separation (only if a permissively licensed, offline model is practical) | Planned |
+| Code-signed installer | Planned (needs a certificate) |
+| Physical folder organisation (moves/renames) | Not planned by default — breaks Serato links; would need the full safety process |

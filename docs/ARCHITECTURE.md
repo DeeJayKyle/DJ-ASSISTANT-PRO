@@ -27,6 +27,17 @@ crates/dj-core/        core library (no network, no Tauri)
   src/assistant.rs     rule-based request parser (not AI)
   src/api.rs           App: JSON command dispatcher + background jobs
   tests/               integration tests on copies of tests/fixtures/library
+  src/analysis.rs      decode (Symphonia) + BPM/key/energy/loudness/cues/waveform/fingerprint
+  src/analysis_store.rs  analysis persistence, background job, library-relative energy
+  src/suggest.rs       suggestions (local heuristics, MusicBrainz, AcoustID) — catalogue-only accept
+  src/online.rs        traits for online services and secrets (no network code here)
+  src/templates.rs     cheat-sheet crate templates, labels, crate hygiene
+  src/discovery.rs     crate fit, gaps, overplayed, tracklists, Last.fm/MusicBrainz items, learning
+  src/sets.rs          Set Studio planner; src/gig.rs gig mode; src/gigpack.rs verified USB copies
+  src/safe_write.rs    the only module that edits music files (opt-in, backed up, reversible)
+  src/serato.rs        read-only Serato crate + history CSV import
+  src/docs.rs          personal files index; src/watcher.rs folder watcher; src/jobs.rs job manager
+crates/dj-online/      the only networked crate: MusicBrainz, AcoustID, Last.fm (ureq + rustls)
 crates/dj-devbridge/   DEV ONLY loopback HTTP bridge for browser e2e tests
 src-tauri/             desktop shell: one `api` command → App::dispatch
 src/                   React UI
@@ -51,8 +62,20 @@ scripts/               fixture generator, read-only guard, no-network check, lic
 5. Pause/cancel flags are checked between files. On cancel nothing is marked missing.
 6. After a completed walk, if the folder is **still** available, tracks not seen are marked missing (never deleted).
 
+## Online services
+
+`dj-core` defines `Online` and `Secrets` traits; the desktop shell injects `dj_online::Http` and a Windows Credential Manager store (`keyring`). Every online command first checks that the DJ enabled the service (`svc_*` settings). MusicBrainz is rate-limited to one request per second with a descriptive User-Agent; AcoustID requires explicit confirmation per batch and sends only the compressed Chromaprint fingerprint and duration.
+
+## Updates
+
+`tauri-plugin-updater` with a minisign public key in `tauri.conf.json`; see docs/UPDATES.md.
+
+## UI
+
+React + TypeScript, Inter (bundled), Lucide icons. Design tokens in `src/styles.css`: dark glass with a mint accent per the mock-up; motion system adapted from RxPos (spring/out easing tokens, page/card entrances, light beam via `@property --beam`, success tick, row flash). Everything respects reduced motion (OS setting or Settings → Motion).
+
 ## Security notes
 
 - Every SQL statement uses bound parameters. Dynamic SQL is assembled only from whitelisted field expressions/operators/sort columns; integers like the bitrate threshold are validated before inlining. `trusted_schema=OFF`.
-- The Tauri window CSP: `default-src 'self'; connect-src ipc: http://ipc.localhost`. Capabilities: core defaults + folder-open dialog. No shell, filesystem, HTTP or updater plugins.
+- The Tauri window CSP: `default-src 'self'; connect-src ipc: http://ipc.localhost`. Capabilities: core defaults, window controls for the custom title bar, open/save dialogs, opening https URLs, process restart and the updater. No shell, filesystem or HTTP plugins are exposed to the web view; all network traffic happens in Rust (`dj-online`, updater).
 - The production front-end bundle is checked to contain no dev-bridge code (the bridge is compiled in only with `VITE_DEV_BRIDGE=1`).
