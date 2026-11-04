@@ -343,8 +343,8 @@ impl Online for Http {
             }
             "local" => {
                 let url = format!("{}/api/chat", cfg.local_url.trim_end_matches('/'));
-                let send = |tools: &[Value]| -> Result<(u16, Value), String> {
-                    let body = llm::ollama_body(&cfg.model, system, tools, messages);
+                let send = |tools: &[Value], ctx: Option<u64>| -> Result<(u16, Value), String> {
+                    let body = llm::ollama_body(&cfg.model, system, tools, messages, ctx);
                     let mut res = self
                         .local_agent
                         .post(&url)
@@ -359,10 +359,23 @@ impl Online for Http {
                         .map_err(|e| format!("unexpected response ({status}): {e}"))?;
                     Ok((status, v))
                 };
-                let (mut status, mut v) = send(tools)?;
-                // Many local models can't call tools: answer as a plain chat instead.
-                if status == 400 && !tools.is_empty() && llm::ollama_no_tools(&v) {
-                    (status, v) = send(&[])?;
+                let mut tools = tools;
+                let mut ctx = None;
+                let (mut status, mut v) = send(tools, ctx)?;
+                for _ in 0..2 {
+                    if status != 400 {
+                        break;
+                    }
+                    if !tools.is_empty() && llm::ollama_no_tools(&v) {
+                        // Many local models can't call tools: answer as a plain chat instead.
+                        tools = &[];
+                    } else if let Some(n) = llm::ollama_too_long(&v).filter(|_| ctx.is_none()) {
+                        // Still too long for the window we asked for: ask for one that fits.
+                        ctx = Some(llm::fit_context(n));
+                    } else {
+                        break;
+                    }
+                    (status, v) = send(tools, ctx)?;
                 }
                 if status == 404 {
                     return Err(format!(

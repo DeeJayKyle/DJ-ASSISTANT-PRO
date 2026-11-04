@@ -223,3 +223,42 @@ fn models_without_tools_still_answer() {
     assert!(s[0].1.get("tools").is_some());
     assert!(s[1].1.get("tools").is_none(), "the retry is a plain chat");
 }
+
+#[test]
+fn asks_for_a_bigger_context_when_the_request_does_not_fit() {
+    let (url, seen) = serve(vec![
+        (
+            400,
+            json!({"error": "request (40000 tokens) exceeds the available context size (16384 tokens), try increasing it"}),
+        ),
+        (
+            200,
+            json!({"model": "dj-assistant-brain:latest", "message": {"role": "assistant", "content": "Hello."}, "done_reason": "stop"}),
+        ),
+    ]);
+    let http = dj_online::Http::new();
+    let cfg = LlmConfig {
+        provider: "local".into(),
+        model: "dj-assistant-brain:latest".into(),
+        api_key: None,
+        local_url: url,
+    };
+    let tools = dj_core::agent::tool_specs();
+    let r = http
+        .llm_chat(
+            &cfg,
+            "GUIDE",
+            &tools,
+            &[json!({"role": "user", "content": "hi"})],
+        )
+        .unwrap();
+    assert_eq!(r["content"][0]["text"], "Hello.");
+    let s = seen.lock().unwrap();
+    // the first request already asks for more than Ollama's 4096 default
+    assert!(s[0].1["options"]["num_ctx"].as_u64().unwrap() >= 8192);
+    assert_eq!(
+        s[1].1["options"]["num_ctx"], 65536,
+        "retried with a window that fits"
+    );
+    assert!(s[1].1.get("tools").is_some(), "tools are kept");
+}

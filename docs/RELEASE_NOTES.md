@@ -1,3 +1,11 @@
+DJ Assistant 1.6.1
+
+**Fix: local models in Ollama work out of the box**
+- The assistant failed with "request exceeds the available context size (4096 tokens)" on local models. Ollama gives models a small working memory unless asked for more, and the assistant's knowledge of the app plus its tools needs about 7,000 tokens.
+- DJ Assistant now asks Ollama for a window that fits each request (8,192 to 32,768 tokens). If a request still doesn't fit, it retries once with a window big enough for it.
+
+---
+
 DJ Assistant 1.6.0
 
 **The Studio, faster and deeper**

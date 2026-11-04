@@ -152,14 +152,46 @@ pub fn from_ollama(v: &Value, call_seq: &mut u64) -> Value {
     json!({"content": content, "stop_reason": stop, "model": v["model"]})
 }
 
-pub fn ollama_body(model: &str, system: &str, tools: &[Value], messages: &[Value]) -> Value {
+/// Ollama runs models with a small context window (often 4096 tokens) unless asked for more,
+/// and the app guide plus tools alone are several thousand tokens. Ask for enough room.
+pub fn ollama_body(
+    model: &str,
+    system: &str,
+    tools: &[Value],
+    messages: &[Value],
+    num_ctx: Option<u64>,
+) -> Value {
     let mut body =
         json!({"model": model, "messages": to_ollama_messages(system, messages), "stream": false});
     // models without tool support reject any "tools" field, even an empty one
     if !tools.is_empty() {
         body["tools"] = json!(to_ollama_tools(tools));
     }
+    let ctx = num_ctx.unwrap_or_else(|| context_for(&body));
+    body["options"] = json!({ "num_ctx": ctx });
     body
+}
+
+/// A context window for a request: its estimated size (about 3 characters per token) plus
+/// room for the reply, rounded up to a power of two, between 8192 and 32768 tokens.
+pub fn context_for(body: &Value) -> u64 {
+    let est = body.to_string().len() as u64 / 3;
+    fit_context(est).min(32768)
+}
+
+/// The smallest power-of-two window (at least 8192) that holds `tokens` plus 2048 for the reply.
+pub fn fit_context(tokens: u64) -> u64 {
+    (tokens + 2048).next_power_of_two().clamp(8192, 131072)
+}
+
+/// Ollama's "request (7010 tokens) exceeds the available context size (4096 tokens)": the request size.
+pub fn ollama_too_long(v: &Value) -> Option<u64> {
+    let e = v["error"].as_str()?;
+    if !e.contains("exceeds the available context size") && !e.contains("context length") {
+        return None;
+    }
+    let after = &e[e.find('(')? + 1..];
+    after.split_whitespace().next()?.parse().ok()
 }
 
 /// Ollama's reply when a model has no tool support (e.g. "gemma2 does not support tools").
@@ -249,18 +281,41 @@ mod tests {
     }
 
     #[test]
+    fn asks_ollama_for_a_big_enough_context() {
+        // a small request still gets 8192, well above Ollama's usual 4096 default
+        assert_eq!(
+            ollama_body("m", "hi", &[], &[], None)["options"]["num_ctx"],
+            8192
+        );
+        // the real app guide + every tool is several thousand tokens: the window grows to fit
+        let big = "x".repeat(30_000);
+        let b = ollama_body("m", &big, &[], &[], None);
+        assert_eq!(b["options"]["num_ctx"], 16384);
+        assert_eq!(
+            ollama_body("m", "hi", &[], &[], Some(65536))["options"]["num_ctx"],
+            65536
+        );
+        assert_eq!(fit_context(7010), 16384);
+        assert_eq!(fit_context(1), 8192);
+        let e = json!({"error": "request (7010 tokens) exceeds the available context size (4096 tokens), try increasing it"});
+        assert_eq!(ollama_too_long(&e), Some(7010));
+        assert_eq!(ollama_too_long(&json!({"error": "model not found"})), None);
+    }
+
+    #[test]
     fn plain_chat_for_models_without_tools() {
         assert!(ollama_no_tools(
             &json!({"error": "registry.ollama.ai/library/gemma2:2b does not support tools"})
         ));
         assert!(!ollama_no_tools(&json!({"error": "model not found"})));
-        let b = ollama_body("gemma2:2b", "sys", &[], &[]);
+        let b = ollama_body("gemma2:2b", "sys", &[], &[], None);
         assert!(b.get("tools").is_none());
         let b = ollama_body(
             "qwen2.5:7b",
             "sys",
             &[json!({"name": "t", "description": "d", "input_schema": {}})],
             &[],
+            None,
         );
         assert_eq!(b["tools"].as_array().unwrap().len(), 1);
     }
