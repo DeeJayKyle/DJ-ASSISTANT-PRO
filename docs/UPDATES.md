@@ -9,12 +9,12 @@ v1.0.0 checks, in order:
 1. `https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/latest/download/latest.json`
 2. `https://github.com/DeeJayKyle/dj-assistant-releases/releases/latest/download/latest.json`
 
-The updater downloads anonymously, so **the release files must be publicly downloadable**. While DJ-ASSISTANT-PRO is private, update checks find nothing (the app keeps working normally). Choose one:
+The updater downloads anonymously, so **the release files must be publicly downloadable**. **DJ-ASSISTANT-PRO is public (option A, chosen 2026-11-04)**, so updates are served straight from its releases. Option B remains available if the source should ever go private again:
 
-- **A. Make DJ-ASSISTANT-PRO public** — no other change needed; the next release is picked up automatically.
-- **B. Keep the source private (chosen)** — a public repository `DeeJayKyle/dj-assistant-releases` holds only the installers, checksums, signatures and `latest.json`. The Release workflow publishes there automatically when the `RELEASES_TOKEN` secret is set (see below), and `latest.json` then points at that repository's downloads.
+- **A. Make DJ-ASSISTANT-PRO public (current)** — no other change needed; each release's `latest.json` is picked up automatically.
+- **B. Keep the source private** — a public repository `DeeJayKyle/dj-assistant-releases` holds only the installers, checksums, signatures and `latest.json`. The Release workflow publishes there automatically when the `RELEASES_TOKEN` secret is set (see below), and `latest.json` then points at that repository's downloads.
 
-### Setting up option B (once)
+### Setting up option B (only if the source goes private)
 
 1. On GitHub, create a **public** repository named `dj-assistant-releases` under `DeeJayKyle`, ticking "Add a README" (a release needs at least one commit to attach its tag to). No code goes in it.
 2. Create a fine-grained personal access token (GitHub → Settings → Developer settings → Fine-grained tokens): repository access **only** `dj-assistant-releases`, permission **Contents: Read and write**, with an expiry date you will remember to renew.
