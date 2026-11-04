@@ -162,6 +162,182 @@ CREATE TABLE settings (
     value TEXT NOT NULL
 );
 "#,
+    // 2: v1.0 features
+    r#"
+-- Local analysis estimates (never treated as facts; method + version kept).
+CREATE TABLE analysis (
+    track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+    method TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    analysed_at INTEGER NOT NULL,
+    file_size INTEGER,
+    file_mtime INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('ok','error')),
+    error TEXT,
+    bpm REAL, bpm_confidence REAL, bpm_alt REAL,
+    musical_key TEXT, camelot TEXT, key_confidence REAL,
+    energy INTEGER,
+    loudness_lufs REAL, peak_dbfs REAL, clipped_runs INTEGER,
+    silence_start_ms INTEGER, silence_end_ms INTEGER,
+    intro_end_ms INTEGER, outro_start_ms INTEGER,
+    tempo_stable INTEGER,
+    cues_json TEXT, warnings_json TEXT,
+    waveform BLOB,
+    fingerprint BLOB,
+    fingerprint_encoded TEXT,
+    duration_ms INTEGER
+);
+
+-- Suggestions from local heuristics, analysis or online sources. Accepting one
+-- writes to track_user only; music files are never changed by this.
+CREATE TABLE suggestions (
+    id INTEGER PRIMARY KEY,
+    track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    field TEXT NOT NULL,
+    current_value TEXT,
+    suggested_value TEXT NOT NULL,
+    source TEXT NOT NULL,
+    evidence TEXT,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected')),
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    UNIQUE (track_id, field, suggested_value, source)
+);
+CREATE INDEX idx_suggestions_status ON suggestions(status);
+
+-- Every change made to a file (opt-in tag writing) with its verified backup.
+CREATE TABLE change_log (
+    id INTEGER PRIMARY KEY,
+    track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
+    path TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('tag_write','rollback')),
+    changes_json TEXT NOT NULL,
+    backup_path TEXT,
+    before_hash TEXT,
+    after_hash TEXT,
+    status TEXT NOT NULL CHECK (status IN ('done','failed','rolled_back')),
+    error TEXT,
+    at INTEGER NOT NULL
+);
+
+CREATE TABLE set_plans (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    params_json TEXT NOT NULL,
+    slots_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE gigs (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    set_plan_id INTEGER REFERENCES set_plans(id) ON DELETE SET NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER
+);
+CREATE TABLE gig_events (
+    id INTEGER PRIMARY KEY,
+    gig_id INTEGER NOT NULL REFERENCES gigs(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('played','request','note')),
+    track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
+    text TEXT,
+    status TEXT,
+    at INTEGER NOT NULL
+);
+
+CREATE TABLE play_history (
+    id INTEGER PRIMARY KEY,
+    source TEXT NOT NULL,
+    session TEXT,
+    track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
+    artist TEXT,
+    title TEXT,
+    played_at INTEGER,
+    imported_at INTEGER NOT NULL
+);
+CREATE INDEX idx_play_history_track ON play_history(track_id);
+
+CREATE TABLE followed (
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('artist','label')),
+    name TEXT NOT NULL,
+    mbid TEXT,
+    added_at INTEGER NOT NULL,
+    UNIQUE (kind, name)
+);
+
+CREATE TABLE discovery (
+    id INTEGER PRIMARY KEY,
+    source TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    artist TEXT,
+    title TEXT,
+    detail TEXT,
+    reason TEXT,
+    url TEXT,
+    released TEXT,
+    fetched_at INTEGER NOT NULL,
+    owned_track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
+    ownership TEXT NOT NULL DEFAULT 'missing' CHECK (ownership IN ('owned','possibly_owned','missing')),
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','wishlist','dismissed')),
+    UNIQUE (source, kind, artist, title)
+);
+
+-- Explicit likes/dislikes the DJ gives to recommendations (inspectable, resettable).
+CREATE TABLE pref_feedback (
+    id INTEGER PRIMARY KEY,
+    subject_kind TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+    at INTEGER NOT NULL,
+    UNIQUE (subject_kind, subject)
+);
+
+-- Files noticed by the folder watcher, waiting for a scan.
+CREATE TABLE watch_events (
+    id INTEGER PRIMARY KEY,
+    root_id INTEGER REFERENCES library_roots(id) ON DELETE CASCADE,
+    path TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,
+    at INTEGER NOT NULL
+);
+
+-- Personal files module (opt-in, separate from music).
+CREATE TABLE doc_roots (
+    id INTEGER PRIMARY KEY,
+    path TEXT NOT NULL,
+    path_key TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    added_at INTEGER NOT NULL,
+    last_scan_at INTEGER
+);
+CREATE TABLE documents (
+    id INTEGER PRIMARY KEY,
+    root_id INTEGER NOT NULL REFERENCES doc_roots(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    path_key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    folder TEXT NOT NULL,
+    ext TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    mtime INTEGER,
+    content_status TEXT NOT NULL,
+    content TEXT,
+    search_text TEXT NOT NULL DEFAULT '',
+    hash TEXT,
+    presence TEXT NOT NULL DEFAULT 'present',
+    last_seen_at INTEGER NOT NULL
+);
+CREATE INDEX idx_documents_size ON documents(size);
+
+ALTER TABLE track_user ADD COLUMN title TEXT;
+ALTER TABLE track_user ADD COLUMN artist TEXT;
+ALTER TABLE track_user ADD COLUMN album TEXT;
+ALTER TABLE track_user ADD COLUMN original_year INTEGER CHECK (original_year IS NULL OR (original_year BETWEEN 1000 AND 9999));
+ALTER TABLE track_user ADD COLUMN record_label TEXT;
+"#,
 ];
 
 pub fn now_ms() -> i64 {

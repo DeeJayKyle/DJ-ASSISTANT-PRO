@@ -41,30 +41,71 @@ impl<P: Default> Job<P> {
 }
 
 pub struct App {
-    db_path: PathBuf,
-    conn: Mutex<Connection>,
+    pub(crate) db_path: PathBuf,
+    pub(crate) conn: Mutex<Connection>,
     scan: Mutex<Job<ScanProgress>>,
     hash: Mutex<Job<HashProgress>>,
+    pub(crate) jobs: Arc<crate::jobs::Jobs>,
+    pub(crate) online: Arc<dyn crate::online::Online>,
+    pub(crate) secrets: Arc<dyn crate::online::Secrets>,
+    pub(crate) watcher: Mutex<Option<crate::watcher::FolderWatcher>>,
+    pub(crate) write_previews:
+        Mutex<std::collections::HashMap<String, Vec<crate::safe_write::PlannedChange>>>,
+    pub(crate) pack_previews: Mutex<std::collections::HashMap<String, crate::gigpack::PackPlan>>,
 }
 
-fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T> {
+pub(crate) fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T> {
     let v = args.get(key).cloned().unwrap_or(Value::Null);
     serde_json::from_value(v).map_err(|e| Error::Invalid(format!("argument '{key}': {e}")))
 }
 
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(crate) fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 impl App {
     pub fn open(db_path: &Path) -> Result<Self> {
+        Self::open_with(
+            db_path,
+            Arc::new(crate::online::NoOnline),
+            Arc::new(crate::online::MemorySecrets::default()),
+        )
+    }
+
+    /// Open with online-service and credential implementations injected by
+    /// the host (the desktop app). The core itself never touches the network.
+    pub fn open_with(
+        db_path: &Path,
+        online: Arc<dyn crate::online::Online>,
+        secrets: Arc<dyn crate::online::Secrets>,
+    ) -> Result<Self> {
         let conn = db::open(db_path)?;
-        Ok(App {
+        let app = App {
             db_path: db_path.to_path_buf(),
             conn: Mutex::new(conn),
             scan: Mutex::new(Job::new()),
             hash: Mutex::new(Job::new()),
-        })
+            jobs: Arc::new(crate::jobs::Jobs::default()),
+            online,
+            secrets,
+            watcher: Mutex::new(None),
+            write_previews: Mutex::new(Default::default()),
+            pack_previews: Mutex::new(Default::default()),
+        };
+        app.restart_watcher();
+        Ok(app)
+    }
+
+    /// Directory holding the catalogue, backups and other app data.
+    pub fn data_dir(&self) -> PathBuf {
+        self.db_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default()
+    }
+
+    pub fn jobs(&self) -> &crate::jobs::Jobs {
+        &self.jobs
     }
 
     pub fn db_path(&self) -> &Path {
@@ -294,6 +335,14 @@ impl App {
                     "theme": db::get_setting(&conn, "theme")?.unwrap_or_else(|| "dark".into()),
                     "chat_open": db::get_setting(&conn, "chat_open")?.map(|v| v == "1").unwrap_or(true),
                     "privacy_acknowledged": db::get_setting(&conn, "privacy_acknowledged")?.map(|v| v == "1").unwrap_or(false),
+                    "allow_file_changes": crate::safe_write::enabled(&conn)?,
+                    "docs_enabled": crate::docs::enabled(&conn)?,
+                    "watch_enabled": crate::watcher::enabled(&conn)?,
+                    "learning_enabled": crate::discovery::learning_enabled(&conn)?,
+                    "gig_mode": crate::gig::active(&conn)?,
+                    "auto_update": db::get_setting(&conn, "auto_update")?.map(|v| v == "1").unwrap_or(true),
+                    "surface": db::get_setting(&conn, "surface")?.unwrap_or_else(|| "glass".into()),
+                    "motion": db::get_setting(&conn, "motion")?.unwrap_or_else(|| "full".into()),
                 })
             }
             "set_setting" => {
@@ -317,7 +366,27 @@ impl App {
                         }
                         db::set_setting(&conn, &key, v)?;
                     }
-                    "chat_open" | "privacy_acknowledged" => {
+                    "surface" => {
+                        let v = value.as_str().unwrap_or("");
+                        if !["glass", "solid"].contains(&v) {
+                            return invalid("unknown surface style");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "motion" => {
+                        let v = value.as_str().unwrap_or("");
+                        if !["full", "reduced"].contains(&v) {
+                            return invalid("unknown motion setting");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "chat_open"
+                    | "privacy_acknowledged"
+                    | "allow_file_changes"
+                    | "docs_enabled"
+                    | "learning_enabled"
+                    | "auto_update"
+                    | "watch_enabled" => {
                         db::set_setting(
                             &conn,
                             &key,
@@ -330,13 +399,17 @@ impl App {
                     }
                     _ => return invalid("unknown setting"),
                 }
+                drop(conn);
+                if key == "watch_enabled" {
+                    self.restart_watcher();
+                }
                 json!({"ok": true})
             }
             "assistant" => json!(assistant::handle(
                 &lock(&self.conn),
                 &arg::<String>(a, "message")?
             )?),
-            _ => return invalid(format!("unknown command '{cmd}'")),
+            _ => return self.dispatch_v1(cmd, a),
         })
     }
 }
@@ -352,5 +425,6 @@ impl Drop for App {
         }
         self.wait_for_scan();
         self.wait_for_hash();
+        self.jobs.shutdown();
     }
 }

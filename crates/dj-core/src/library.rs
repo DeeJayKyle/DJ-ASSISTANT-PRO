@@ -130,15 +130,24 @@ pub struct TrackRow {
     pub path: String,
     pub file_size: i64,
     pub tags: Vec<String>,
+    pub bpm_source: Option<String>,
+    pub key_source: Option<String>,
+    pub energy_source: Option<String>,
+    pub analysis: Option<String>,
+    pub original_year: Option<i64>,
 }
 
-const ROW_COLS: &str = "t.id, t.uid, t.title, t.artist, t.album, COALESCE(u.genre, t.genre), COALESCE(u.year, t.year),
-  COALESCE(u.bpm, t.bpm_tag), COALESCE(u.musical_key, t.key_tag), u.energy, u.rating, u.mood, u.color,
+const ROW_COLS: &str = "t.id, t.uid, COALESCE(u.title, t.title), COALESCE(u.artist, t.artist), COALESCE(u.album, t.album), COALESCE(u.genre, t.genre), COALESCE(u.year, t.year),
+  COALESCE(u.bpm, t.bpm_tag, a.bpm), COALESCE(u.musical_key, t.key_tag, a.camelot), COALESCE(u.energy, a.energy), u.rating, u.mood, u.color,
   COALESCE(u.version_label, t.version_hint), COALESCE(u.clean_explicit, t.clean_hint), t.duration_ms, t.bitrate_kbps,
   t.format, t.lossless, QUALITY_EXPR, STATUS_EXPR, t.file_name, t.path, t.file_size,
-  (SELECT GROUP_CONCAT(g.name, char(31)) FROM track_tags tt JOIN tags g ON g.id=tt.tag_id WHERE tt.track_id=t.id)";
+  (SELECT GROUP_CONCAT(g.name, char(31)) FROM track_tags tt JOIN tags g ON g.id=tt.tag_id WHERE tt.track_id=t.id),
+  CASE WHEN u.bpm IS NOT NULL THEN 'you' WHEN t.bpm_tag IS NOT NULL THEN 'tag' WHEN a.bpm IS NOT NULL THEN 'analysis' END,
+  CASE WHEN u.musical_key IS NOT NULL THEN 'you' WHEN t.key_tag IS NOT NULL THEN 'tag' WHEN a.camelot IS NOT NULL THEN 'analysis' END,
+  CASE WHEN u.energy IS NOT NULL THEN 'you' WHEN a.energy IS NOT NULL THEN 'analysis' END,
+  a.status, COALESCE(u.original_year, t.original_year)";
 
-const FROM: &str = "FROM tracks t LEFT JOIN track_user u ON u.track_id = t.id LEFT JOIN library_roots r ON r.id = t.root_id";
+pub const FROM: &str = "FROM tracks t LEFT JOIN track_user u ON u.track_id = t.id LEFT JOIN library_roots r ON r.id = t.root_id LEFT JOIN analysis a ON a.track_id = t.id";
 
 fn row_cols(low: u32) -> String {
     let q = format!(
@@ -180,6 +189,11 @@ fn map_row(r: &Row) -> rusqlite::Result<TrackRow> {
         tags: tags
             .map(|s| s.split('\u{1f}').map(|x| x.to_string()).collect())
             .unwrap_or_default(),
+        bpm_source: r.get(25)?,
+        key_source: r.get(26)?,
+        energy_source: r.get(27)?,
+        analysis: r.get(28)?,
+        original_year: r.get(29)?,
     })
 }
 
@@ -214,14 +228,15 @@ pub struct TrackPage {
 
 fn sort_expr(s: &str) -> Option<&'static str> {
     Some(match s {
-        "title" => "fold(t.title)",
-        "artist" => "fold(t.artist)",
-        "album" => "fold(t.album)",
+        "title" => "fold(COALESCE(u.title, t.title))",
+        "artist" => "fold(COALESCE(u.artist, t.artist))",
+        "album" => "fold(COALESCE(u.album, t.album))",
         "genre" => "fold(COALESCE(u.genre, t.genre))",
         "year" => "COALESCE(u.year, t.year)",
-        "bpm" => "COALESCE(u.bpm, t.bpm_tag)",
-        "key" => "COALESCE(u.musical_key, t.key_tag)",
-        "energy" => "u.energy",
+        "bpm" => "COALESCE(u.bpm, t.bpm_tag, a.bpm)",
+        "key" => "COALESCE(u.musical_key, t.key_tag, a.camelot)",
+        "energy" => "COALESCE(u.energy, a.energy)",
+        "loudness" => "a.loudness_lufs",
         "rating" => "u.rating",
         "duration" => "t.duration_ms",
         "bitrate" => "t.bitrate_kbps",
@@ -256,7 +271,7 @@ pub fn where_clause(conn: &Connection, q: &TrackQuery) -> Result<(String, Vec<Va
             params.push(Value::Text(format!("%{}%", like_escape(&tok))));
             let p = params.len();
             parts.push(format!(
-                "(t.search_text LIKE ?{p} ESCAPE '\\' OR fold(COALESCE(u.genre,'') || ' ' || COALESCE(u.mood,'') || ' ' || COALESCE(u.notes,'') || ' ' || COALESCE(u.version_label,'')) LIKE ?{p} ESCAPE '\\'
+                "(t.search_text LIKE ?{p} ESCAPE '\\' OR fold(COALESCE(u.genre,'') || ' ' || COALESCE(u.mood,'') || ' ' || COALESCE(u.notes,'') || ' ' || COALESCE(u.version_label,'') || ' ' || COALESCE(u.title,'') || ' ' || COALESCE(u.artist,'') || ' ' || COALESCE(u.album,'')) LIKE ?{p} ESCAPE '\\'
                   OR EXISTS (SELECT 1 FROM track_tags tt JOIN tags g ON g.id=tt.tag_id WHERE tt.track_id=t.id AND g.name_fold LIKE ?{p} ESCAPE '\\'))"
             ));
         }
@@ -295,7 +310,7 @@ pub fn search(conn: &Connection, q: &TrackQuery) -> Result<TrackPage> {
             if q.desc { "DESC" } else { "ASC" }
         ),
         Some(None) => return invalid("unknown sort column"),
-        None => "fold(t.artist) IS NULL, fold(t.artist), fold(t.title), t.id".into(),
+        None => "fold(COALESCE(u.artist, t.artist)) IS NULL, fold(COALESCE(u.artist, t.artist)), fold(COALESCE(u.title, t.title)), t.id".into(),
     };
     let sql = format!(
         "SELECT {} {FROM} WHERE {w} ORDER BY {order} LIMIT {limit} OFFSET {offset}",
@@ -334,6 +349,8 @@ pub struct TrackDetail {
     pub technical: serde_json::Value,
     pub crates: Vec<(i64, String)>,
     pub read_error: Option<String>,
+    pub analysis: Option<serde_json::Value>,
+    pub plays: i64,
 }
 
 pub fn track_detail(conn: &Connection, id: i64) -> Result<TrackDetail> {
@@ -373,7 +390,7 @@ pub fn track_detail(conn: &Connection, id: i64) -> Result<TrackDetail> {
     )?;
     let mine = conn
         .query_row(
-            "SELECT genre, year, bpm, musical_key, energy, rating, mood, color, notes, version_label, clean_explicit, updated_at FROM track_user WHERE track_id=?1",
+            "SELECT genre, year, bpm, musical_key, energy, rating, mood, color, notes, version_label, clean_explicit, updated_at, title, artist, album, original_year, record_label FROM track_user WHERE track_id=?1",
             params![id],
             |r| {
                 Ok(serde_json::json!({
@@ -381,6 +398,8 @@ pub fn track_detail(conn: &Connection, id: i64) -> Result<TrackDetail> {
                     "key": r.get::<_, Option<String>>(3)?, "energy": r.get::<_, Option<i64>>(4)?, "rating": r.get::<_, Option<i64>>(5)?,
                     "mood": r.get::<_, Option<String>>(6)?, "color": r.get::<_, Option<String>>(7)?, "notes": r.get::<_, Option<String>>(8)?,
                     "version_label": r.get::<_, Option<String>>(9)?, "clean_explicit": r.get::<_, Option<String>>(10)?, "updated_at": r.get::<_, i64>(11)?,
+                    "title": r.get::<_, Option<String>>(12)?, "artist": r.get::<_, Option<String>>(13)?, "album": r.get::<_, Option<String>>(14)?,
+                    "original_year": r.get::<_, Option<i64>>(15)?, "record_label": r.get::<_, Option<String>>(16)?,
                 }))
             },
         )
@@ -390,6 +409,12 @@ pub fn track_detail(conn: &Connection, id: i64) -> Result<TrackDetail> {
     let crates = stmt
         .query_map(params![id], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
+    let analysis = crate::analysis_store::get(conn, id)?;
+    let plays: i64 = conn.query_row(
+        "SELECT (SELECT COUNT(*) FROM play_history WHERE track_id=?1) + (SELECT COUNT(*) FROM gig_events WHERE track_id=?1 AND kind='played')",
+        params![id],
+        |r| r.get(0),
+    )?;
     Ok(TrackDetail {
         row,
         file,
@@ -397,6 +422,8 @@ pub fn track_detail(conn: &Connection, id: i64) -> Result<TrackDetail> {
         technical,
         crates,
         read_error,
+        analysis,
+        plays,
     })
 }
 
@@ -425,6 +452,16 @@ pub struct UserFieldsPatch {
     pub version_label: Option<Option<String>>,
     #[serde(default, with = "patch")]
     pub clean_explicit: Option<Option<String>>,
+    #[serde(default, with = "patch")]
+    pub title: Option<Option<String>>,
+    #[serde(default, with = "patch")]
+    pub artist: Option<Option<String>>,
+    #[serde(default, with = "patch")]
+    pub album: Option<Option<String>>,
+    #[serde(default, with = "patch")]
+    pub original_year: Option<Option<i64>>,
+    #[serde(default, with = "patch")]
+    pub record_label: Option<Option<String>>,
 }
 
 mod patch {
@@ -502,6 +539,19 @@ pub fn update_user_fields(conn: &Connection, ids: &[i64], p: &UserFieldsPatch) -
         .as_ref()
         .map(|v| norm_text(v, 80))
         .transpose()?;
+    if let Some(Some(y)) = p.original_year {
+        if !(1000..=9999).contains(&y) {
+            return invalid("original year must be four digits");
+        }
+    }
+    let title = p.title.as_ref().map(|v| norm_text(v, 300)).transpose()?;
+    let artist = p.artist.as_ref().map(|v| norm_text(v, 300)).transpose()?;
+    let album = p.album.as_ref().map(|v| norm_text(v, 300)).transpose()?;
+    let rlabel = p
+        .record_label
+        .as_ref()
+        .map(|v| norm_text(v, 200))
+        .transpose()?;
 
     let tx = conn.unchecked_transaction()?;
     let now = now_ms();
@@ -536,6 +586,11 @@ pub fn update_user_fields(conn: &Connection, ids: &[i64], p: &UserFieldsPatch) -
         set!("notes", &notes);
         set!("version_label", &ver);
         set!("clean_explicit", &p.clean_explicit);
+        set!("title", &title);
+        set!("artist", &artist);
+        set!("album", &album);
+        set!("original_year", &p.original_year);
+        set!("record_label", &rlabel);
     }
     tx.commit()?;
     Ok(n)
@@ -591,10 +646,11 @@ pub fn set_tags(conn: &Connection, ids: &[i64], add: &[String], remove: &[String
 pub fn facet(conn: &Connection, field: &str, limit: i64) -> Result<Vec<(String, i64)>> {
     let expr = match field {
         "genre" => "COALESCE(u.genre, t.genre)",
-        "artist" => "t.artist",
+        "artist" => "COALESCE(u.artist, t.artist)",
         "format" => "t.format",
-        "key" => "COALESCE(u.musical_key, t.key_tag)",
+        "key" => "COALESCE(u.musical_key, t.key_tag, a.camelot)",
         "mood" => "u.mood",
+        "label" => "COALESCE(u.record_label, t.label)",
         "decade" => "CAST((COALESCE(u.year, t.year)/10)*10 AS TEXT)",
         "version" => "COALESCE(u.version_label, t.version_hint)",
         _ => return invalid("unknown facet"),

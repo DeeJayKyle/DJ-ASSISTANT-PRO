@@ -173,7 +173,7 @@ fn count(conn: &Connection, id: i64) -> Result<i64> {
     };
     let (w, params) = library::where_clause(conn, &q)?;
     Ok(conn.query_row(
-        &format!("SELECT COUNT(*) FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id LEFT JOIN library_roots r ON r.id=t.root_id WHERE {w}"),
+        &format!("SELECT COUNT(*) {} WHERE {w}", library::FROM),
         rusqlite::params_from_iter(params.iter()),
         |r| r.get(0),
     )?)
