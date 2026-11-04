@@ -2,7 +2,7 @@
 // The HTTP bridge is compiled in ONLY for development/e2e builds
 // (VITE_DEV_BRIDGE=1) and talks to 127.0.0.1 — release builds never contain it.
 import type {
-  FixList,
+  AiStatus, AiTurn, FixList,
   ChangeLogEntry, CrateGaps, CrateTemplate, DiscoveryItem, DocHit, DocsReport, Gig, GigRecap, JobState, Labels, Overplayed, PackPlan,
   PlannedChange, Preferences, Recommendation, SavedSet, Service, SetParams, SetPlan, Suggestion, TracklistMatch, WatchItem,
   AssistantReply, Crate, DupGroup, FieldInfo, HashProgress, Health, Root, RuleSet,
@@ -142,6 +142,11 @@ export const api = {
   lookupAcoustid: (sel: Selection) => call("lookup_acoustid", { ...sel, confirmed: true }),
   services: () => call<Service[]>("services"),
   setService: (service: string, enabled: boolean) => call("set_service", { service, enabled }),
+  aiStatus: () => call<AiStatus>("ai_status"),
+  aiChat: (message: string, conversation_id?: string | null) => call<AiTurn>("ai_chat", { message, conversation_id: conversation_id ?? null }),
+  aiConfirm: (conversation_id: string, decisions: Record<string, boolean>) => call<AiTurn>("ai_confirm", { conversation_id, decisions }),
+  aiReset: (conversation_id: string) => call("ai_reset", { conversation_id }),
+  aiLocalModels: () => call<string[]>("ai_local_models"),
   setSecret: (service: string, value: string) => call("set_secret", { service, value }),
   deleteSecret: (service: string) => call("delete_secret", { service }),
   crateTemplates: () => call<CrateTemplate[]>("crate_templates"),

@@ -184,6 +184,27 @@ impl App {
                 })?
             }
 
+            // ---------- AI assistant ----------
+            "ai_status" => crate::agent::status(self)?,
+            "ai_chat" => json!(crate::agent::chat(
+                self,
+                arg::<Option<String>>(a, "conversation_id")?,
+                &arg::<String>(a, "message")?
+            )?),
+            "ai_confirm" => json!(crate::agent::confirm(
+                self,
+                &arg::<String>(a, "conversation_id")?,
+                &arg::<std::collections::HashMap<String, bool>>(a, "decisions")?
+            )?),
+            "ai_reset" => {
+                crate::agent::reset(self, &arg::<String>(a, "conversation_id")?);
+                json!({"ok": true})
+            }
+            "ai_local_models" => {
+                let url = crate::agent::config(self)?.local_url;
+                json!(self.online.llm_local_models(&url).map_err(Error::Invalid)?)
+            }
+
             // ---------- online services & credentials ----------
             "services" => {
                 let conn = lock(&self.conn);
@@ -196,7 +217,12 @@ impl App {
                     } else {
                         suggest::service_enabled(&conn, id)?
                     };
-                    let needs_key = ["acoustid", "lastfm"].contains(id);
+                    let enabled = if *id == "anthropic" {
+                        db::get_setting(&conn, "ai_provider")?.as_deref() == Some("claude")
+                    } else {
+                        enabled
+                    };
+                    let needs_key = ["acoustid", "lastfm", "anthropic"].contains(id);
                     out.push(json!({"id": id, "name": name, "provides": provides, "sends": sends, "enabled": enabled, "needs_key": needs_key, "has_key": needs_key && self.secrets.get(id).is_some()}));
                 }
                 json!(out)
@@ -206,6 +232,14 @@ impl App {
                 let on: bool = arg(a, "enabled")?;
                 if !SERVICES.iter().any(|s| s.0 == svc) {
                     return invalid("unknown service");
+                }
+                if svc == "anthropic" {
+                    db::set_setting(
+                        &lock(&self.conn),
+                        "ai_provider",
+                        if on { "claude" } else { "off" },
+                    )?;
+                    return Ok(json!({"ok": true}));
                 }
                 let key = if svc == "updates" {
                     "auto_update".to_string()
@@ -218,8 +252,11 @@ impl App {
             "set_secret" => {
                 let svc: String = arg(a, "service")?;
                 let v: String = arg(a, "value")?;
-                if !["acoustid", "lastfm"].contains(&svc.as_str()) {
+                if !["acoustid", "lastfm", "anthropic"].contains(&svc.as_str()) {
                     return invalid("unknown service");
+                }
+                if svc == "anthropic" && !v.trim().starts_with("sk-ant-") {
+                    return invalid("Anthropic API keys start with sk-ant-");
                 }
                 let v = v.trim();
                 if v.is_empty()

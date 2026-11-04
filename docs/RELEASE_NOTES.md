@@ -1,6 +1,20 @@
-DJ Assistant 1.1.0
+DJ Assistant 1.2.0
 
-**New in 1.1**
+**New in 1.2: the AI assistant**
+- The Assistant panel can now be an **AI model that already knows the whole app**. A built-in guide covers every screen, feature and safety rule, plus DJ know-how (Camelot wheel, energy scale, crate cheat sheet).
+- It **works through the app's own commands**:
+  - It looks things up by itself: library overview, search, track details, crates, health, duplicates, suggestions, jobs, set previews and settings.
+  - It shows you results by filtering the Library or opening a screen.
+  - It proposes changes as **action cards you approve with Run**: create crates (smart or manual), add or remove tracks, set energy, rating, genre and key, tag tracks, apply crate templates, scan, analyse, find suggestions, save a set, start or end gig mode, and change preferences.
+  - Nothing changes until you press Run. It has no way to change, move or delete music files, or to touch Serato.
+- **Choose your model** in Settings → AI assistant:
+  - **Claude** (online, your own Anthropic API key, kept in Windows Credential Manager). Opus 5.5 by default; Sonnet 5.5 or Haiku 5.5 to lower cost.
+  - **A local model through Ollama**, which keeps everything on your computer.
+  - Off by default. Settings says exactly what is sent, and file paths are never sent.
+- **/commands** work with or without the AI: /scan, /analyse, /suggest, /find, /fix genre|year|…, /health, /dupes, /crate, /set 120 wedding clean, /gig start|end, /keys camelot|musical, /premium on|off, /theme, /clear, /help.
+- Fixed: library rows could briefly share keys with loading placeholders while refreshing.
+
+**Also in this release (from 1.1)**
 - **Key notation:** choose Camelot (8A) or musical names (Am) in Settings. Search, filters and the Assistant accept either form ("key Am", "A minor", "8A", Open Key "1m").
 - **Fix missing details from Library Health:** missing title/artist, genre, year, album, BPM and key cards now have a Fix button. You get a list of the affected tracks with inline inputs, suggestions with evidence (file and folder names, same album, same artist, stored suggestions), bulk set for selected tracks, and shortcuts to analysis and MusicBrainz. Saving changes DJ Assistant's catalogue only, never the files.
 - **Video files:** music videos and visuals in MP4, M4V, MOV, MKV, WebM and AVI are catalogued with resolution, codec and frame rate. Only file headers are read; videos are never written to. There are media and resolution filters, a Video badge, and the Assistant understands "music videos", "house videos" and "1080p videos". Audio inside MP4/MOV/WebM/MKV can be analysed where the codec is supported (not Opus or AVI). WMV, FLV, MPEG and similar formats are listed as unsupported. You can turn video scanning off in Settings.

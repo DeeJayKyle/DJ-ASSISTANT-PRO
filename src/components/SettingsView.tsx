@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, isDesktop, pickFile, pickFolder } from "../api";
-import type { ChangeLogEntry, Labels, Service, Settings } from "../types";
+import type { AiStatus, ChangeLogEntry, Labels, Service, Settings } from "../types";
 import { checkForUpdate, type UpdateInfo } from "../lib/updater";
 import { dateTime } from "../lib/format";
 import { Dialog } from "./ui";
@@ -21,6 +21,93 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} aria-label={label} />
       <span className="knob" />
     </label>
+  );
+}
+
+
+function AiSettings({ toast, onProvider }: { toast: (m: string, e?: boolean) => void; onProvider: () => void }) {
+  const [st, setSt] = useState<AiStatus | null>(null);
+  const [key, setKey] = useState("");
+  const [local, setLocal] = useState<string[] | null>(null);
+  const [localErr, setLocalErr] = useState<string | null>(null);
+  const [modelName, setModelName] = useState("");
+  const [testing, setTesting] = useState<string | null>(null);
+  const load = () => api.aiStatus().then((s) => { setSt(s); if (s.provider === "local") setModelName(s.model); }).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const changed = () => { load(); onProvider(); window.dispatchEvent(new Event("dj-ai-changed")); };
+  const run = (p: Promise<unknown>, msg?: string) => p.then(() => { if (msg) toast(msg); changed(); }).catch((e) => toast(e.message, true));
+  const findLocal = () => { setLocalErr(null); api.aiLocalModels().then(setLocal).catch((e) => { setLocal(null); setLocalErr(e.message); }); };
+  useEffect(() => { if (st?.provider === "local") findLocal(); }, [st?.provider]);
+  const test = async () => {
+    setTesting("Asking…");
+    try {
+      const t = await api.aiChat("Reply with one short sentence confirming you can see my library, and say how many tracks it has.");
+      api.aiReset(t.conversation_id).catch(() => {});
+      setTesting(t.text || "(no reply)");
+    } catch (e) {
+      setTesting(`Failed: ${(e as Error).message}`);
+    }
+  };
+  if (!st) return null;
+  return (
+    <section className="panel">
+      <div className="row" style={{ marginBottom: 6 }}>
+        <h2 style={{ flex: 1 }}>AI assistant</h2>
+        {st.ready && <span className="badge q-lossless">Ready</span>}
+      </div>
+      <p className="small muted" style={{ marginTop: 0 }}>An AI model in the Assistant panel that already knows every feature of DJ Assistant. It looks things up in your library and proposes actions — creating crates, setting energy or genre, planning sets, starting scans — that run only when you press Run. It can never change, move or delete your music files or touch Serato.</p>
+      <div className="seg" role="group" aria-label="AI provider" style={{ marginBottom: 12 }}>
+        {(["off", "claude", "local"] as const).map((p) => (
+          <button key={p} aria-pressed={st.provider === p} onClick={() => run(api.setSetting("ai_provider", p))}>
+            {p === "off" ? "Off" : p === "claude" ? "Claude (online)" : "Local model (private)"}
+          </button>
+        ))}
+      </div>
+      {st.provider === "claude" && (
+        <div className="col" style={{ gap: 10 }}>
+          <label className="field">
+            Model
+            <select className="select" value={st.model} onChange={(e) => run(api.setSetting("ai_model", e.target.value))} aria-label="Claude model">
+              {st.claude_models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </label>
+          <form className="row wrap" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); run(api.setSecret("anthropic", key.trim()), "API key saved in Windows Credential Manager.").then(() => setKey("")); }}>
+            <input className="input" style={{ flex: 1, minWidth: 220 }} type="password" autoComplete="off" placeholder={st.has_key ? "Key saved — paste a new one to replace it" : "Anthropic API key (sk-ant-…)"} value={key} onChange={(e) => setKey(e.target.value)} aria-label="Anthropic API key" />
+            <button className="btn" type="submit" disabled={!key.trim()}>Save API key</button>
+            {st.has_key && <button className="btn ghost" type="button" onClick={() => run(api.deleteSecret("anthropic"), "API key removed.")}>Remove API key</button>}
+          </form>
+          <p className="small muted" style={{ margin: 0 }}>Get a key at console.anthropic.com (usage is billed to your Anthropic account). The key is stored in Windows Credential Manager, never in DJ Assistant's files.</p>
+        </div>
+      )}
+      {st.provider === "local" && (
+        <div className="col" style={{ gap: 10 }}>
+          <p className="small muted" style={{ margin: 0 }}>Runs a model on this computer with <strong>Ollama</strong> (free, ollama.com). Install it, then run <code>ollama pull {st.default_local_model}</code> once. Nothing leaves your computer. Smaller local models are slower and less reliable than Claude at multi-step tasks.</p>
+          <div className="row wrap" style={{ gap: 8 }}>
+            {local && local.length > 0 ? (
+              <select className="select" value={st.model} onChange={(e) => run(api.setSetting("ai_local_model", e.target.value))} aria-label="Local model">
+                {!local.includes(st.model) && <option value={st.model}>{st.model} (not installed)</option>}
+                {local.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            ) : (
+              <form className="row" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); run(api.setSetting("ai_local_model", modelName.trim()), "Local model set."); }}>
+                <input className="input" value={modelName} onChange={(e) => setModelName(e.target.value)} aria-label="Local model name" style={{ width: 200 }} />
+                <button className="btn" type="submit">Use model</button>
+              </form>
+            )}
+            <button className="btn ghost" onClick={findLocal}><Icon name="refresh" size={15} /> Find installed models</button>
+          </div>
+          {localErr && <p className="s-error small" style={{ margin: 0 }}>{localErr}</p>}
+        </div>
+      )}
+      <p className="small" style={{ marginBottom: 0 }}><strong>What is sent:</strong> <span className="muted">{st.sends}</span></p>
+      {st.provider !== "off" && (
+        <div className="row wrap" style={{ gap: 10, marginTop: 10 }}>
+          <button className="btn" disabled={!st.ready || testing === "Asking…"} onClick={test}><Icon name="sparkles" size={15} /> Test the assistant</button>
+          {!st.ready && st.reason && <span className="small s-error">{st.reason}</span>}
+          {testing && <span className="small muted" style={{ flex: 1 }}>{testing}</span>}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -66,6 +153,8 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
           </div>
           {upd.info?.notes && upd.state === "available" && <pre className="small muted" style={{ whiteSpace: "pre-wrap", marginTop: 10 }}>{upd.info.notes}</pre>}
         </section>
+
+        <AiSettings toast={toast} onProvider={() => api.getSettings().then(onChange).catch(() => {})} />
 
         <section className="panel">
           <h2 style={{ marginBottom: 12 }}>Appearance</h2>
@@ -132,7 +221,7 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
                   <form className="row" style={{ marginTop: 6 }} onSubmit={(e) => { e.preventDefault(); api.setSecret(s.id, keys[s.id] ?? "").then(() => { toast("Key saved to Credential Manager."); setKeys({ ...keys, [s.id]: "" }); load(); }).catch((er) => toast(er.message, true)); }}>
                     <input className="input" type="password" autoComplete="off" style={{ width: 280 }} aria-label={`${s.name} API key`} placeholder={s.has_key ? "Key saved — enter a new one to replace" : "Paste your API key"} value={keys[s.id] ?? ""} onChange={(e) => setKeys({ ...keys, [s.id]: e.target.value })} />
                     <button className="btn small" type="submit" disabled={!(keys[s.id] ?? "").trim()}>Save key</button>
-                    {s.has_key && <button className="btn small ghost danger" type="button" onClick={() => api.deleteSecret(s.id).then(load)}>Remove key</button>}
+                    {s.has_key && <button className="btn small ghost danger" type="button" onClick={() => api.deleteSecret(s.id).then(load)}>Remove API key</button>}
                   </form>
                 )}
               </div>

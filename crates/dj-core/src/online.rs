@@ -67,6 +67,21 @@ pub trait Online: Send + Sync {
         artist: &str,
         title: &str,
     ) -> Result<Vec<SimilarItem>, String>;
+    /// One model turn for the AI assistant. `messages` and the returned value
+    /// use the Anthropic Messages format ({"content": [...], "stop_reason", "model"}).
+    fn llm_chat(
+        &self,
+        _cfg: &crate::agent::LlmConfig,
+        _system: &str,
+        _tools: &[serde_json::Value],
+        _messages: &[serde_json::Value],
+    ) -> Result<serde_json::Value, String> {
+        Err("AI models are not available in this build".into())
+    }
+    /// Models installed in the local model server (Ollama).
+    fn llm_local_models(&self, _url: &str) -> Result<Vec<String>, String> {
+        Err("AI models are not available in this build".into())
+    }
 }
 
 /// Used when no online implementation is installed.
@@ -134,6 +149,12 @@ pub const SERVICES: &[(&str, &str, &str, &str)] = &[
         "Last.fm",
         "Similar artists and tracks for discovery.",
         "Artist and track names from the crate or tracks you choose. Needs your Last.fm API key.",
+    ),
+    (
+        "anthropic",
+        "AI assistant (Claude)",
+        "Answers questions about your library and the app, and proposes actions you approve.",
+        "Your messages to the assistant and the catalogue details its tools look up (titles, artists, genres, ratings and similar). Never audio, file paths or personal documents. Needs your Anthropic API key.",
     ),
     (
         "updates",

@@ -3,7 +3,18 @@
 **Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
-## v1.1 (this release)
+## v1.2 (this release)
+
+| Area | Feature | Status |
+|---|---|---|
+| AI assistant | Built-in app knowledge (docs/ASSISTANT_GUIDE.md as the system prompt, cached) | Tested |
+| AI assistant | 31 tools over the app's commands: read (auto), screen (auto), actions (approval cards) | Tested (scripted model) |
+| AI assistant | Claude provider (Messages API, raw HTTPS, refusal fallback, prompt caching) | Implemented; request shape unit-tested, no live call possible here |
+| AI assistant | Local provider (Ollama, loopback only) | Tested against a fake server; not against a real Ollama |
+| AI assistant | No file paths in tool results; no file-changing tools | Tested |
+| Chat | /commands for app tasks, with or without AI | Tested (e2e) |
+
+## v1.1
 
 | Area | Feature | Status |
 |---|---|---|

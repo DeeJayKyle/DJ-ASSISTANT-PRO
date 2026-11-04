@@ -66,6 +66,16 @@ scripts/               fixture generator, read-only guard, no-network check, lic
 
 `dj-core` defines `Online` and `Secrets` traits; the desktop shell injects `dj_online::Http` and a Windows Credential Manager store (`keyring`). Every online command first checks that the DJ enabled the service (`svc_*` settings). MusicBrainz is rate-limited to one request per second with a descriptive User-Agent; AcoustID requires explicit confirmation per batch and sends only the compressed Chromaprint fingerprint and duration.
 
+## AI assistant
+
+`dj-core/src/agent.rs` runs the conversation; `dj-online/src/llm.rs` talks to the model (Claude over the Messages API, or Ollama on 127.0.0.1). The system prompt is `docs/ASSISTANT_GUIDE.md`, compiled into the app and cached by the API along with the tool list. Each tool maps onto an existing `App::dispatch` command and has a tier:
+
+- **read**: runs automatically;
+- **ui**: changes only the screen, applied by the front end;
+- **act**: becomes an action card and runs only after the DJ approves it (`ai_confirm`).
+
+Assistant turns are kept exactly as returned, so thinking blocks go back unchanged. Tool results are stripped of anything that looks like a file path before they reach the model. No tool can write, move or delete files or touch Serato data. The devbridge's `--demo-ai` flag swaps in a scripted model for the browser e2e test.
+
 ## Updates
 
 `tauri-plugin-updater` with a minisign public key in `tauri.conf.json`; see docs/UPDATES.md.

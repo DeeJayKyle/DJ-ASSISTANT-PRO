@@ -4,7 +4,7 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 ![Music Library](docs/screenshots/library.png)
 
-## What it does (v1.1)
+## What it does (v1.2)
 
 **Library** — choose music folders and drives; read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; fast accent-insensitive search; Genre / Decade / Format / Quality filters plus a full rule builder; offline drives kept, never treated as deleted; folder watcher that notices new music.
 
@@ -32,7 +32,7 @@ A local-first Windows app that helps a working DJ organise, analyse, plan and pr
 
 **Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
 
-**Assistant** — a local, rule-based helper (not an AI model) in a sidebar you can hide (Ctrl+J) or expand. “afrobeats 2010s energy 6-8 no live”, “low bitrate”, “plan a 2 hour wedding set”, “gig pack”… It says exactly what it understood and can only search, filter and open views.
+**Assistant** — an AI assistant that already knows every feature of the app (Claude with your own API key, or a private local model via Ollama; off by default). It looks things up in your library, filters views, and proposes actions (crates, energy/genre/key edits, tags, templates, scans, analysis, sets, gig mode, settings) as cards that run only when you press Run. It can never change music files or Serato data. Without AI, the built-in rule-based assistant and **/commands** (/scan, /fix genre, /set 120 wedding, /keys musical…) still work. Hide it with Ctrl+J.
 
 **Key notation** — show keys as Camelot (8A) or musical names (Am); search, filters and the Assistant accept either, including Open Key (1m).
 
@@ -83,7 +83,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTING
 - Installer unsigned (SmartScreen warning).
 - Video: WMV, FLV, MPEG, MTS/M2TS, 3GP and VOB are listed as unsupported. Opus audio (common in WebM) and AVI audio can't be analysed yet. Videos are never written to.
 - Analysis is estimation: half/double tempo and relative/modal key confusion happen; energy is relative to your own library.
-- Online services were verified with recorded responses and fakes in tests; live calls could not be made from the build environment.
+- Online services and the AI assistant were verified with recorded responses, a scripted model and a fake local model server in tests. Live calls to Anthropic, MusicBrainz, AcoustID, Last.fm or a real Ollama install could not be made from the build environment.
 - Stem separation and cloud AI are not included. Physical file moves/renames are deliberately not offered (they break Serato links).
 - Serato crate parsing follows the community-documented format; it is read-only and may need updates if Serato changes it.
 

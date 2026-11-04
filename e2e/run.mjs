@@ -44,7 +44,7 @@ const start = (cmd, args, env = {}) => {
 };
 const cleanup = () => procs.forEach((p) => p.kill());
 process.on("exit", cleanup);
-start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878"]);
+start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878", "--demo-ai"]);
 start("npx", ["vite", "--port", "5174", "--strictPort"], { VITE_DEV_BRIDGE: "1" });
 const waitFor = async (url, ms = 40000) => {
   const t0 = Date.now();
@@ -358,11 +358,61 @@ await step("premium UI switch repaints with the Midnight Pro palette and back", 
   expect((await page.evaluate(() => document.documentElement.dataset.palette)) === undefined, "palette not removed");
 });
 
+await step("AI assistant: turn on Claude with a key (scripted model in tests)", async () => {
+  await nav("Settings").click();
+  await page.getByRole("heading", { name: "AI assistant" }).waitFor();
+  await page.getByRole("button", { name: "Claude (online)" }).click();
+  await page.getByText(/Add your Anthropic API key/).first().waitFor();
+  await page.getByLabel("Anthropic API key").fill("sk-ant-e2e-demo");
+  await page.getByRole("button", { name: "Save API key" }).click();
+  await page.getByText("Ready", { exact: true }).waitFor();
+  await page.getByText(/sent to Anthropic/).first().waitFor();
+  await page.getByRole("contentinfo").getByText(/AI assistant \(Claude\)/).waitFor();
+});
+
+await step("AI assistant looks things up, filters the library and proposes a crate that runs only on approval", async () => {
+  const chat = page.getByLabel("Message the assistant");
+  await page.getByRole("heading", { name: /AI assistant/ }).first().waitFor();
+  await chat.fill("show me my afrobeats");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText(/Afrobeats tracks\. I can put them/).waitFor();
+  await page.getByText(/Looked up: search tracks/).waitFor();
+  await page.getByText(/Showing Afrobeats in the library/).waitFor();
+  const before = await page.getByRole("navigation", { name: "Main" }).getByText("Afrobeats (AI)").count();
+  expect(before === 0, "crate existed before approval");
+  await chat.fill("yes, make that a crate");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText(/Create smart crate “Afrobeats \(AI\)” — \d+ tracks? match now/).waitFor();
+  expect((await page.getByRole("navigation", { name: "Main" }).getByText("Afrobeats (AI)").count()) === 0, "crate created before Run");
+  await page.screenshot({ path: path.join(shots, "10-ai-action-card.png") });
+  await page.getByRole("button", { name: /^Run/ }).click();
+  await page.getByText(/All done\. The crate/).waitFor();
+  await page.getByRole("navigation", { name: "Main" }).getByText("Afrobeats (AI)").first().waitFor();
+});
+
+await step("slash commands run app tasks directly", async () => {
+  const chat = page.getByLabel("Message the assistant");
+  await chat.fill("/");
+  await page.getByRole("listbox", { name: "Commands" }).waitFor();
+  await chat.fill("/keys musical");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText("Keys now show in musical notation.").waitFor();
+  await chat.fill("/fix genre");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("heading", { name: "Fix: Missing genre" }).waitFor();
+  await chat.fill("/keys camelot");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText("Keys now show in camelot notation.").waitFor();
+  await chat.fill("/nope");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText(/Unknown command \/nope/).waitFor();
+});
+
 await step("data, crates and sets persist after restarting the backend", async () => {
   restarting = true;
   procs[0].kill();
   await new Promise((r) => setTimeout(r, 500));
-  procs[0] = start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878"]);
+  procs[0] = start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878", "--demo-ai"]);
   await waitFor("http://127.0.0.1:7878");
   await page.reload();
   restarting = false;

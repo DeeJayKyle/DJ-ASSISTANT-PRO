@@ -239,6 +239,37 @@ export interface Settings {
   key_notation: "camelot" | "musical";
   scan_video: boolean;
   premium_ui: boolean;
+  ai_provider: "off" | "claude" | "local";
+}
+
+export interface AiPending {
+  id: string;
+  tool: string;
+  summary: string;
+  input: Record<string, unknown>;
+}
+
+export interface AiTurn {
+  conversation_id: string;
+  text: string;
+  ui_actions: Array<{ type: "show_tracks" | "open_view"; [k: string]: unknown }>;
+  pending: AiPending[];
+  done: Array<{ tool: string; summary: string; ok: boolean; skipped?: boolean; error?: string }>;
+  looked_up: string[];
+  model: string;
+  provider: string;
+}
+
+export interface AiStatus {
+  provider: "off" | "claude" | "local";
+  model: string;
+  ready: boolean;
+  reason: string | null;
+  sends: string;
+  local_url: string;
+  has_key: boolean;
+  claude_models: Array<{ id: string; label: string }>;
+  default_local_model: string;
 }
 
 export interface FieldInfo {

@@ -5,9 +5,12 @@ import { dateTime, plural } from "../lib/format";
 import { Icon } from "./Icon";
 import { HealthFixView } from "./HealthFixView";
 
-export function HealthView({ version, onOpen, toast, bump }: { version: number; onOpen: (item: HealthItem) => void; toast: (m: string, e?: boolean) => void; bump: () => void }) {
+export function HealthView({ version, onOpen, toast, bump, startFix }: { version: number; onOpen: (item: HealthItem) => void; toast: (m: string, e?: boolean) => void; bump: () => void; startFix?: { category: string; n: number } | null }) {
   const [h, setH] = useState<Health | null>(null);
-  const [fixing, setFixing] = useState<string | null>(null);
+  const [fixing, setFixing] = useState<string | null>(startFix?.category ?? null);
+  useEffect(() => {
+    if (startFix) setFixing(startFix.category);
+  }, [startFix]);
   useEffect(() => {
     api.health().then(setH).catch(() => setH(null));
   }, [version]);

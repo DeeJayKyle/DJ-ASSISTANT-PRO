@@ -52,6 +52,7 @@ pub struct App {
     pub(crate) write_previews:
         Mutex<std::collections::HashMap<String, Vec<crate::safe_write::PlannedChange>>>,
     pub(crate) pack_previews: Mutex<std::collections::HashMap<String, crate::gigpack::PackPlan>>,
+    pub(crate) agent: Mutex<std::collections::HashMap<String, crate::agent::Conversation>>,
 }
 
 pub(crate) fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T> {
@@ -91,6 +92,7 @@ impl App {
             watcher: Mutex::new(None),
             write_previews: Mutex::new(Default::default()),
             pack_previews: Mutex::new(Default::default()),
+            agent: Mutex::new(Default::default()),
         };
         app.restart_watcher();
         Ok(app)
@@ -352,6 +354,7 @@ impl App {
                     "key_notation": db::get_setting(&conn, "key_notation")?.unwrap_or_else(|| "camelot".into()),
                     "scan_video": db::get_setting(&conn, "scan_video")?.map(|v| v == "1").unwrap_or(true),
                     "premium_ui": db::get_setting(&conn, "premium_ui")?.map(|v| v == "1").unwrap_or(false),
+                    "ai_provider": db::get_setting(&conn, "ai_provider")?.unwrap_or_else(|| "off".into()),
                 })
             }
             "set_setting" => {
@@ -386,6 +389,49 @@ impl App {
                         let v = value.as_str().unwrap_or("");
                         if !["full", "reduced"].contains(&v) {
                             return invalid("unknown motion setting");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "ai_provider" => {
+                        let v = value.as_str().unwrap_or("");
+                        if !["off", "claude", "local"].contains(&v) {
+                            return invalid("AI provider must be off, claude or local");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "ai_model" => {
+                        let v = value.as_str().unwrap_or("");
+                        if !crate::agent::CLAUDE_MODELS.iter().any(|m| m.0 == v) {
+                            return invalid("unknown Claude model");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "ai_local_model" => {
+                        let v = value.as_str().unwrap_or("").trim();
+                        if v.is_empty()
+                            || v.len() > 100
+                            || !v
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || ":._-/".contains(c))
+                        {
+                            return invalid(
+                                "that doesn't look like a model name (e.g. qwen2.5:7b)",
+                            );
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "ai_local_url" => {
+                        let v = value.as_str().unwrap_or("").trim().trim_end_matches('/');
+                        // Local means local: only this computer's model server.
+                        let ok = ["http://127.0.0.1:", "http://localhost:", "http://[::1]:"]
+                            .iter()
+                            .any(|p| {
+                                v.starts_with(p)
+                                    && v[p.len()..].chars().all(|c| c.is_ascii_digit())
+                                    && v.len() > p.len()
+                            });
+                        if !ok {
+                            return invalid("the local model server must be on this computer, e.g. http://127.0.0.1:11434");
                         }
                         db::set_setting(&conn, &key, v)?;
                     }
