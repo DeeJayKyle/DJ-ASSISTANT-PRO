@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { TrackQuery, TrackRow } from "../types";
-import { bpm, duration, keyHint, keyName, text } from "../lib/format";
+import { bpm, duration, keyHint, keyName, resLabel, text, videoSummary } from "../lib/format";
 import { EnergyMeter, Stars, StatusText } from "./ui";
 import { Icon } from "./Icon";
 
@@ -27,8 +27,8 @@ export const COLUMNS: Column[] = [
     width: "minmax(170px, 1.6fr)",
     sort: "title",
     render: (t) => (
-      <span className="title-cell" title={t.title ?? t.file_name}>
-        <Icon name="music" size={16} />
+      <span className={`title-cell${t.media_kind === "video" ? " is-video" : ""}`} title={t.title ?? t.file_name}>
+        <Icon name={t.media_kind === "video" ? "film" : "music"} size={16} title={t.media_kind === "video" ? "Video" : undefined} />
         <span className="cell">
           {t.title ?? <span className="faint">{t.file_name}</span>}
           {t.version && <> <span className="version">{t.version}</span></>}
@@ -46,14 +46,18 @@ export const COLUMNS: Column[] = [
   { id: "energy", label: "Energy", minTable: 560, width: "70px", sort: "energy", render: (t) => <EnergyMeter value={t.energy} estimate={t.energy_source === "analysis"} /> },
   { id: "rating", label: "Rating", minTable: 1180, width: "64px", sort: "rating", render: (t) => <Stars value={t.rating} /> },
   { id: "time", label: "Time", minTable: 980, width: "48px", sort: "duration", num: true, render: (t) => <span className="cell num">{duration(t.duration_ms)}</span> },
-  { id: "format", label: "Format", minTable: 880, width: "70px", sort: "format", render: (t) => <span className="cell">{(t.format ?? "—").replace("M4A (", "").replace(")", "")}</span> },
+  { id: "format", label: "Format", minTable: 880, width: "96px", sort: "format", render: (t) => <span className="cell" title={t.media_kind === "video" ? videoSummary(t) : undefined}>{(t.format ?? "—").replace("M4A (", "").replace(")", "")}{t.media_kind === "video" && t.height ? <span className="res-pill">{resLabel(t.height)}</span> : null}</span> },
   {
     id: "bitrate",
     label: "Bitrate",
     width: "104px",
     sort: "bitrate",
     render: (t) =>
-      t.quality === "low_bitrate" ? (
+      t.quality === "video" ? (
+        <span className="badge q-video" title={videoSummary(t)}>
+          <Icon name="film" size={13} /> Video
+        </span>
+      ) : t.quality === "low_bitrate" ? (
         <span className="badge q-low_bitrate" title="Lossy file under your low-bitrate threshold. Bitrate alone does not prove quality.">
           <Icon name="warn" size={13} /> {t.bitrate_kbps} kbps
         </span>

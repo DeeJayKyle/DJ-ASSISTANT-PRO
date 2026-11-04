@@ -52,6 +52,7 @@ export const QUALITY_LABEL: Record<string, string> = {
   lossy: "Lossy",
   low_bitrate: "Low bitrate",
   unknown: "Unknown",
+  video: "Video",
 };
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -118,4 +119,23 @@ export function keyHint(k: string | null | undefined): string | undefined {
   const c = musicalToCamelot(k);
   if (!c) return undefined;
   return `${c} = ${camelotToMusical(c)}`;
+}
+
+// ---- Video ---------------------------------------------------------------
+/** "1080p", "4K", "720p" from a frame height. */
+export function resLabel(height: number | null | undefined): string {
+  if (!height) return UNKNOWN;
+  if (height >= 2000) return "4K";
+  if (height >= 1400) return "1440p";
+  return `${height}p`;
+}
+
+/** "1920×1080 · H.264 · 29.97 fps" */
+export function videoSummary(t: { width: number | null; height: number | null; video_codec: string | null; frame_rate: number | null }): string {
+  const parts = [
+    t.width && t.height ? `${t.width}×${t.height}` : null,
+    t.video_codec,
+    t.frame_rate ? `${Math.round(t.frame_rate * 100) / 100} fps` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Video";
 }

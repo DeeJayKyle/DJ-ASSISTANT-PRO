@@ -522,3 +522,9 @@ label.field, div.field { display: flex; flex-direction: column; gap: 5px; font-s
 .tick-sm { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--mint-soft); color: var(--mint); animation: success-pop 420ms var(--ease-spring) both; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 900px) { .fix-row { grid-template-columns: 22px 1fr; } .fix-fields, .fix-act { grid-column: 2; } .fix-act { justify-content: flex-start; padding-top: 0; } }
+
+/* ---- Video tracks ---- */
+.title-cell.is-video > svg { color: var(--violet, #a78bfa); }
+.res-pill { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 5px; font-size: 10.5px; font-weight: 650; line-height: 16px; letter-spacing: 0.02em; background: color-mix(in srgb, #a78bfa 18%, transparent); color: #c4b5fd; vertical-align: 1px; }
+.badge.q-video { background: color-mix(in srgb, #a78bfa 16%, transparent); color: #c4b5fd; border-color: color-mix(in srgb, #a78bfa 35%, transparent); }
+:root[data-theme="light"] .res-pill, :root[data-theme="light"] .badge.q-video { color: #6d28d9; }

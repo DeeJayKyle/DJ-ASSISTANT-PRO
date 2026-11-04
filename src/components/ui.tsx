@@ -79,7 +79,9 @@ export function Stars({ value }: { value: number | null }) {
 
 export function QualityBadge({ t }: { t: Pick<TrackRow, "quality" | "bitrate_kbps"> }) {
   const title =
-    t.quality === "low_bitrate"
+    t.quality === "video"
+      ? "Video file — the audio bitrate rule does not apply."
+      : t.quality === "low_bitrate"
       ? `Lossy, average/nominal bitrate ${t.bitrate_kbps} kbps is under your threshold. Bitrate alone does not prove quality.`
       : t.quality === "unknown"
         ? "Bitrate or codec unknown — not flagged."

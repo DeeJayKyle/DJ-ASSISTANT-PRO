@@ -28,7 +28,7 @@ export interface TrackRow {
   bitrate_kbps: number | null;
   format: string | null;
   lossless: boolean | null;
-  quality: "lossless" | "lossy" | "low_bitrate" | "unknown";
+  quality: "lossless" | "lossy" | "low_bitrate" | "unknown" | "video";
   status: "ok" | "error" | "unsupported" | "missing" | "offline";
   file_name: string;
   path: string;
@@ -39,6 +39,11 @@ export interface TrackRow {
   energy_source: "you" | "analysis" | null;
   analysis: "ok" | "error" | null;
   original_year: number | null;
+  media_kind: "audio" | "video";
+  video_codec: string | null;
+  width: number | null;
+  height: number | null;
+  frame_rate: number | null;
 }
 
 export interface TrackPage {

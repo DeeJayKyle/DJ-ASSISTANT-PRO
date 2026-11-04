@@ -64,14 +64,24 @@ export function FilterDropdown({ label, facet, options, active, onPick }: {
   );
 }
 
-export const FORMAT_OPTIONS: QuickOption[] = ["MP3", "FLAC", "WAV", "AIFF", "M4A (AAC)", "M4A (ALAC)", "Ogg Vorbis", "Opus"].map((f) => ({
-  label: f,
-  node: { kind: "condition", field: "format", op: "equals", value: f },
-}));
+export const FORMAT_OPTIONS: QuickOption[] = [
+  ...["MP3", "FLAC", "WAV", "AIFF", "M4A (AAC)", "M4A (ALAC)", "Ogg Vorbis", "Opus"].map((f) => ({
+    label: f,
+    node: { kind: "condition", field: "format", op: "equals", value: f } as QuickOption["node"],
+  })),
+  { label: "All video", node: { kind: "condition", field: "media", op: "equals", value: "video" } },
+  { label: "Audio only", node: { kind: "condition", field: "media", op: "equals", value: "audio" } },
+  ...["MP4", "MOV", "MKV", "WebM", "AVI"].map((f) => ({
+    label: `${f} video`,
+    node: { kind: "condition", field: "format", op: "equals", value: f } as QuickOption["node"],
+  })),
+];
 
 export const QUALITY_OPTIONS: QuickOption[] = [
   { label: "Low bitrate", node: { kind: "condition", field: "quality", op: "equals", value: "low_bitrate" } },
   { label: "Lossy", node: { kind: "condition", field: "quality", op: "equals", value: "lossy" } },
   { label: "Lossless", node: { kind: "condition", field: "quality", op: "equals", value: "lossless" } },
   { label: "Unknown", node: { kind: "condition", field: "quality", op: "equals", value: "unknown" } },
+  { label: "Video (HD 720p+)", node: { kind: "group", match: "all", rules: [{ kind: "condition", field: "media", op: "equals", value: "video" }, { kind: "condition", field: "video_height", op: "gte", value: 720 }] } },
+  { label: "Video (below 720p)", node: { kind: "group", match: "all", rules: [{ kind: "condition", field: "media", op: "equals", value: "video" }, { kind: "condition", field: "video_height", op: "lt", value: 720 }] } },
 ];

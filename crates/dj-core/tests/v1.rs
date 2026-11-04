@@ -1365,6 +1365,19 @@ fn video_files_are_catalogued_read_only() {
         ),
         0
     );
+    // The Assistant understands video requests.
+    assert_eq!(
+        call(&app, "assistant", json!({"message": "music videos"}))["total"],
+        7
+    );
+    assert_eq!(
+        call(&app, "assistant", json!({"message": "house videos"}))["total"],
+        1
+    );
+    assert_eq!(
+        call(&app, "assistant", json!({"message": "1080p videos"}))["total"],
+        0
+    );
     // Turning video scanning off leaves video files out of new scans.
     call(
         &app,

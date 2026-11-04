@@ -355,6 +355,32 @@ pub fn handle(conn: &Connection, message: &str) -> Result<AssistantReply> {
             i += if t == "low" { 2 } else { 1 };
             continue;
         }
+        if matches!(t, "video" | "videos" | "clip" | "clips" | "visuals")
+            || (t == "music" && next.map(|n| n.starts_with("video")).unwrap_or(false))
+        {
+            rules.push(cond("media", "equals", json!("video")));
+            understood.push("video files".into());
+            i += if t == "music" { 2 } else { 1 };
+            continue;
+        }
+        if t == "audio" && next == Some("only") {
+            rules.push(cond("media", "equals", json!("audio")));
+            understood.push("audio files only".into());
+            i += 2;
+            continue;
+        }
+        if let Some(h) = match t {
+            "4k" | "2160p" | "uhd" => Some(2000),
+            "1080p" | "fullhd" | "fhd" => Some(1080),
+            "hd" | "720p" => Some(720),
+            _ => None,
+        } {
+            rules.push(cond("media", "equals", json!("video")));
+            rules.push(cond("video_height", "gte", json!(h)));
+            understood.push(format!("video {h}p or better"));
+            i += 1;
+            continue;
+        }
         if t == "lossless" {
             rules.push(cond("quality", "equals", json!("lossless")));
             understood.push("lossless files".into());

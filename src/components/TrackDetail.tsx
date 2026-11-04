@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, openUrl } from "../api";
 import type { Suggestion, TrackDetail as Detail } from "../types";
 import { Waveform } from "./Waveform";
-import { bpm, bytes, dateTime, duration, getKeyNotation, keyHint, keyName, text } from "../lib/format";
+import { bpm, bytes, dateTime, duration, getKeyNotation, keyHint, keyName, resLabel, text } from "../lib/format";
 import { ColorPicker, EnergyMeter, QualityBadge } from "./ui";
 import { Icon } from "./Icon";
 
@@ -272,7 +272,14 @@ export function TrackDetail({ id, onClose, onChanged, toast, onWrite }: { id: nu
           items={[
             ["Quality", <QualityBadge key="q" t={d.row} />],
             ["Format", text(t.format)],
-            ["Codec", text(t.codec)],
+            ...(d.row.media_kind === "video"
+              ? ([
+                  ["Video", `${d.row.width && d.row.height ? `${d.row.width}×${d.row.height} (${resLabel(d.row.height)})` : "Resolution unknown"}`],
+                  ["Video codec", text(d.row.video_codec)],
+                  ["Frame rate", d.row.frame_rate ? `${Math.round(d.row.frame_rate * 100) / 100} fps` : "Unknown"],
+                ] as [string, string][])
+              : []),
+            [d.row.media_kind === "video" ? "Audio codec" : "Codec", text(t.codec)],
             ["Lossless", t.lossless == null ? "Unknown" : t.lossless ? "Yes" : "No"],
             ["Bitrate", t.bitrate_kbps != null ? `${t.bitrate_kbps} kbps (reported average)` : "Unknown"],
             ["Sample rate", t.sample_rate != null ? `${(t.sample_rate as number) / 1000} kHz` : "Unknown"],

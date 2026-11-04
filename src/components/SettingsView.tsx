@@ -89,6 +89,15 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
         </section>
 
         <section className="panel">
+          <div className="row" style={{ marginBottom: 6 }}>
+            <h2 style={{ flex: 1 }}>Video files</h2>
+            <span className="small muted">Include in scans</span>
+            <Toggle label="Include video files in scans" checked={settings.scan_video} onChange={(v) => set("scan_video", v)} />
+          </div>
+          <p className="small muted" style={{ marginTop: 0 }}>Music videos and visuals (MP4, M4V, MOV, MKV, WebM, AVI) are catalogued alongside your audio with their resolution, codec and frame rate, so you can search, rate, tag and crate them. Only the file headers are read — videos are never changed, and tag writing is always off for them. WMV, FLV, MPEG and other formats are listed as unsupported. Takes effect at the next scan.</p>
+        </section>
+
+        <section className="panel">
           <h2 style={{ marginBottom: 10 }}>Audio quality warning</h2>
           <form className="row wrap" onSubmit={(e) => { e.preventDefault(); const v = Number(kbps); if (Number.isInteger(v)) set("low_bitrate_kbps", v); }}>
             <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>Flag lossy files below<input className="input" style={{ width: 90 }} inputMode="numeric" value={kbps} onChange={(e) => setKbps(e.target.value)} aria-label="Low bitrate threshold in kbps" />kbps</label>
