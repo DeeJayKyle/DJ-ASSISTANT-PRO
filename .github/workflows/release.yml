@@ -28,6 +28,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Check the update-signing key (fails fast, before the long build)
+        shell: pwsh
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PASS: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:KEY) { Write-Host "::warning::TAURI_SIGNING_PRIVATE_KEY is not set - the installer will not be signed for auto-update."; exit 0 }
+          # Pasted secrets often pick up line breaks or spaces; the key itself never contains any.
+          $k = $env:KEY -replace '\s', ''
+          $k += '=' * ((4 - $k.Length % 4) % 4)
+          try { $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($k)) } catch { throw "TAURI_SIGNING_PRIVATE_KEY is not valid base64 even after removing spaces/line breaks ($($k.Length) characters). Paste the single long line from the README again, including the == at the end." }
+          if (-not $text.StartsWith("untrusted comment:")) { throw "TAURI_SIGNING_PRIVATE_KEY decodes, but is not a Tauri/minisign secret key. Use the 'Private key' line from the README, not the public key." }
+          if (-not $env:PASS) { throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set." }
+          Write-Host "Signing key looks valid ($($k.Length) characters)."
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -56,6 +70,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            $k = $env:TAURI_SIGNING_PRIVATE_KEY -replace '\s', ''
+            $k += '=' * ((4 - $k.Length % 4) % 4)
+            Write-Host "::add-mask::$k"
+            $env:TAURI_SIGNING_PRIVATE_KEY = $k
+            $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD.Trim()
             npx tauri build --ci
           } else {
             Write-Host "::warning::TAURI_SIGNING_PRIVATE_KEY secret not set - building without updater signature. Sign and upload latest.json manually."
