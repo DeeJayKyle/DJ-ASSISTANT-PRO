@@ -2,6 +2,8 @@
 
 A local-first Windows app that helps a working DJ organise, analyse, plan and prepare — **without risking the music library**. Built for Herbie, who plays out with Serato DJ.
 
+BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
+
 ![Music Library](docs/screenshots/library.png)
 
 ## What it does (v1.3)
