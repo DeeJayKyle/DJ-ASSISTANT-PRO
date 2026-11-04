@@ -756,3 +756,78 @@ pub fn log(conn: &Connection, limit: i64) -> Result<Vec<Value>> {
         .collect::<std::result::Result<_, _>>()?;
     Ok(v)
 }
+
+/// Preview writing each track's catalogue values (your edits and accepted
+/// fixes) into its own file tags. With `include_estimates`, BPM and key from
+/// analysis are written where the file has none. Items with nothing to change
+/// are left out.
+pub fn preview_from_catalogue(
+    conn: &Connection,
+    ids: &[i64],
+    include_estimates: bool,
+) -> Result<Vec<PlannedChange>> {
+    if ids.is_empty() || ids.len() > 5000 {
+        return invalid("choose between 1 and 5000 tracks");
+    }
+    let mut out = vec![];
+    for id in ids {
+        let row: Option<(Option<String>, Option<String>, Option<String>, Option<String>, Option<i64>, Option<f64>, Option<String>, Option<f64>, Option<String>, Option<f64>, Option<String>)> = conn
+            .query_row(
+                "SELECT u.title, u.artist, u.album, u.genre, u.year, u.bpm, u.musical_key, t.bpm_tag, t.key_tag, a.bpm, a.camelot
+                 FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id LEFT JOIN analysis a ON a.track_id=t.id WHERE t.id=?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?)),
+            )
+            .optional()?;
+        let Some((title, artist, album, genre, year, bpm, key, bpm_tag, key_tag, a_bpm, a_key)) =
+            row
+        else {
+            continue;
+        };
+        let mut values: BTreeMap<String, Option<String>> = BTreeMap::new();
+        let mut put = |k: &str, v: Option<String>| {
+            if let Some(v) = v.map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) {
+                values.insert(k.to_string(), Some(v));
+            }
+        };
+        put("title", title);
+        put("artist", artist);
+        put("album", album);
+        put("genre", genre);
+        put("year", year.map(|y| y.to_string()));
+        let fmt_bpm = |b: f64| {
+            if (b - b.round()).abs() < 0.05 {
+                format!("{}", b.round() as i64)
+            } else {
+                format!("{b:.1}")
+            }
+        };
+        put(
+            "bpm",
+            bpm.map(fmt_bpm).or_else(|| {
+                if include_estimates && bpm_tag.is_none() {
+                    a_bpm.map(fmt_bpm)
+                } else {
+                    None
+                }
+            }),
+        );
+        put(
+            "key",
+            key.or_else(|| {
+                if include_estimates && key_tag.is_none() {
+                    a_key
+                } else {
+                    None
+                }
+            }),
+        );
+        if values.is_empty() {
+            continue;
+        }
+        let mut plan = preview(conn, &[*id], &values)?;
+        plan.retain(|pc| pc.blocked.is_some() || !pc.changes.is_empty());
+        out.extend(plan);
+    }
+    Ok(out)
+}

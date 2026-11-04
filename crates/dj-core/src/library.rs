@@ -158,7 +158,7 @@ fn row_cols(low: u32) -> String {
     let q = format!(
         "(CASE WHEN t.media_kind='video' THEN 'video' WHEN t.lossless=1 THEN 'lossless' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL AND t.bitrate_kbps < {low} THEN 'low_bitrate' WHEN t.lossless=0 AND t.bitrate_kbps IS NOT NULL THEN 'lossy' ELSE 'unknown' END)"
     );
-    let s = "(CASE WHEN t.presence='missing' THEN 'missing' WHEN r.status='offline' THEN 'offline' WHEN t.read_status<>'ok' THEN t.read_status ELSE 'ok' END)";
+    let s = "(CASE WHEN t.presence='missing' AND t.removed_at IS NOT NULL THEN 'removed' WHEN t.presence='missing' THEN 'missing' WHEN r.status='offline' THEN 'offline' WHEN t.read_status<>'ok' THEN t.read_status ELSE 'ok' END)";
     ROW_COLS
         .replace("QUALITY_EXPR", &q)
         .replace("STATUS_EXPR", s)

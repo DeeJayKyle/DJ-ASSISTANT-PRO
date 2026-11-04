@@ -353,6 +353,22 @@ CREATE INDEX idx_tracks_media ON tracks(media_kind);
 -- Re-read .mp4 files once so music videos are recognised as video.
 UPDATE tracks SET file_mtime = NULL WHERE extension = 'mp4';
 "#,
+    // 5: file organiser (opt-in renames and restorable removals)
+    r#"
+ALTER TABLE tracks ADD COLUMN removed_at INTEGER;
+CREATE TABLE file_ops (
+    id INTEGER PRIMARY KEY,
+    batch TEXT NOT NULL,
+    op TEXT NOT NULL CHECK (op IN ('rename','move','folder_rename','remove')),
+    track_id INTEGER REFERENCES tracks(id) ON DELETE SET NULL,
+    from_path TEXT NOT NULL,
+    to_path TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('done','undone','purged','failed')),
+    error TEXT,
+    at INTEGER NOT NULL
+);
+CREATE INDEX idx_file_ops_batch ON file_ops(batch);
+"#,
 ];
 
 pub fn now_ms() -> i64 {

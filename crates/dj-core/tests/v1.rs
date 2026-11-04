@@ -2050,3 +2050,392 @@ fn auto_prep_analyses_and_applies_recommended_fixes_after_a_scan() {
         .dispatch("set_setting", json!({"key": "auto_fix_min", "value": 2}))
         .is_err());
 }
+
+#[test]
+fn organiser_renames_moves_removes_and_undoes_with_previews() {
+    let e = env();
+    let app = app_with_fake(&e);
+    add_and_scan(&app, &e.music);
+    let total = search(&app, json!({"limit": 1}))["total"].as_i64().unwrap();
+    let a = id_of(&app, "Deep Tenant - Warehouse 94.mp3");
+    let b = id_of(&app, "Basement Hours.mp3");
+    // Off by default: nothing can change files.
+    let err = app
+        .dispatch("organize_preview", json!({"kind": "rename", "ids": [a]}))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("turned off"), "{err}");
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "allow_file_changes", "value": true}),
+    );
+
+    // Rename "{artist} - {title}".
+    let p = call(
+        &app,
+        "organize_preview",
+        json!({"kind": "rename", "ids": [a, b], "template": "{artist} - {title}"}),
+    );
+    assert!(p["plan"]["warning"].as_str().unwrap().contains("Serato"));
+    let ops = p["plan"]["ops"].as_array().unwrap();
+    assert!(
+        ops.iter().any(|o| o["to"]
+            .as_str()
+            .unwrap()
+            .ends_with("Deep Tenant - Basement Hours.mp3")),
+        "{p}"
+    );
+    // Applying needs explicit approval.
+    assert!(app
+        .dispatch("organize_apply", json!({"token": p["token"]}))
+        .is_err());
+    let p = call(
+        &app,
+        "organize_preview",
+        json!({"kind": "rename", "ids": [a, b], "template": "{artist} - {title}"}),
+    );
+    let r = call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    let batch = r["batch"].as_str().unwrap().to_string();
+    assert!(r["done"].as_i64().unwrap() >= 1, "{r}");
+    let old_school = e.music.join("House").join("Old School");
+    assert!(old_school
+        .join("Deep Tenant - Basement Hours.mp3")
+        .is_file());
+    assert!(!old_school.join("Basement Hours.mp3").exists());
+    assert_eq!(
+        find(
+            &search(&app, json!({"limit": 200})),
+            "Deep Tenant - Basement Hours.mp3"
+        )["id"],
+        b
+    );
+    // A rescan sees the renamed files as the same tracks (nothing new, nothing missing).
+    scan(&app);
+    assert_eq!(
+        search(&app, json!({"limit": 1}))["total"].as_i64().unwrap(),
+        total
+    );
+    // Undo puts names back.
+    call(&app, "organize_undo", json!({"batch": batch}));
+    assert!(old_school.join("Basement Hours.mp3").is_file());
+
+    // Move into "{genre}/{artist}" folders.
+    let p = call(
+        &app,
+        "organize_preview",
+        json!({"kind": "move", "ids": [a], "template": "{genre}/{artist}"}),
+    );
+    let r = call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    assert_eq!(r["done"], 1, "{r}");
+    let moved = call(&app, "track_detail", json!({"id": a}))["row"]["path"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        std::path::Path::new(&moved).is_file() && moved.contains("Deep Tenant"),
+        "{moved}"
+    );
+    call(&app, "organize_undo", json!({"batch": r["batch"]}));
+
+    // Rename a folder; its tracks follow.
+    let p = call(
+        &app,
+        "organize_preview",
+        json!({"kind": "folder_rename", "folder": old_school.to_str().unwrap(), "new_name": "Classics"}),
+    );
+    assert_eq!(p["plan"]["ops"][0]["tracks"], 2);
+    let r = call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    assert!(e
+        .music
+        .join("House")
+        .join("Classics")
+        .join("Basement Hours.mp3")
+        .is_file());
+    assert!(call(&app, "track_detail", json!({"id": b}))["row"]["path"]
+        .as_str()
+        .unwrap()
+        .contains("Classics"));
+    call(&app, "organize_undo", json!({"batch": r["batch"]}));
+    assert!(old_school.join("Basement Hours.mp3").is_file());
+    // A music folder itself can't be renamed.
+    assert!(app
+        .dispatch(
+            "organize_preview",
+            json!({"kind": "folder_rename", "folder": e.music.to_str().unwrap(), "new_name": "X"})
+        )
+        .is_err());
+
+    // Bad files go to the restorable "Removed files" area.
+    let bad = call(&app, "bad_files", json!({}));
+    let bad_n = bad["ids"].as_array().unwrap().len();
+    assert!(bad_n >= 2, "{bad}");
+    let p = call(&app, "organize_preview", json!({"kind": "bad_files"}));
+    let r = call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    assert_eq!(r["done"].as_i64().unwrap() as usize, bad_n, "{r}");
+    assert!(!e.music.join("Broken").join("corrupt.mp3").exists());
+    let removed = e.data.join("Removed files");
+    assert!(removed.is_dir());
+    assert_eq!(
+        call(&app, "removed_summary", json!({}))["files"]
+            .as_i64()
+            .unwrap() as usize,
+        bad_n
+    );
+    let st = find(
+        &search(&app, json!({"limit": 200, "include_missing": true})),
+        "corrupt.mp3",
+    )["status"]
+        .clone();
+    assert_eq!(st, "removed");
+    // Restore, then remove again and empty for good (needs confirmation).
+    call(&app, "organize_undo", json!({"batch": r["batch"]}));
+    assert!(e.music.join("Broken").join("corrupt.mp3").is_file());
+    let p = call(&app, "organize_preview", json!({"kind": "bad_files"}));
+    call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    assert!(app.dispatch("empty_removed", json!({})).is_err());
+    assert_eq!(
+        call(&app, "empty_removed", json!({"confirmed": true}))["deleted"]
+            .as_i64()
+            .unwrap() as usize,
+        bad_n
+    );
+    assert!(!e.music.join("Broken").join("corrupt.mp3").exists());
+
+    // Replace duplicates: crates follow the kept copy, the other is removed.
+    let keep = id_of(&app, "Lagos Lights - Sunrise Groove.mp3");
+    let other = id_of(&app, "Sunrise Groove (copy).mp3");
+    let c = call(
+        &app,
+        "create_crate",
+        json!({"input": {"name": "Dupes test", "kind": "manual"}}),
+    );
+    call(
+        &app,
+        "crate_add",
+        json!({"crate_id": c["id"], "ids": [other]}),
+    );
+    let p = call(
+        &app,
+        "organize_preview",
+        json!({"kind": "replace", "keep": keep, "others": [other]}),
+    );
+    call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    let in_crate = search(&app, json!({"crate_id": c["id"], "limit": 10}));
+    assert_eq!(
+        find(&in_crate, "Lagos Lights - Sunrise Groove.mp3")["id"],
+        keep
+    );
+    assert!(!e
+        .music
+        .join("Copies")
+        .join("Sunrise Groove (copy).mp3")
+        .exists());
+
+    // A file changed since the preview is skipped, not overwritten.
+    let p = call(
+        &app,
+        "organize_preview",
+        json!({"kind": "rename", "ids": [b], "template": "{artist} - {title}"}),
+    );
+    std::fs::write(old_school.join("Basement Hours.mp3"), b"changed").unwrap();
+    let r = call(
+        &app,
+        "organize_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    assert_eq!(r["done"], 0);
+    assert!(r["skipped"][0][1].as_str().unwrap().contains("changed"));
+
+    // Write catalogue fixes into tags (previewed, backed up).
+    call(
+        &app,
+        "update_user_fields",
+        json!({"ids": [a], "patch": {"genre": "Deep House"}}),
+    );
+    let p = call(&app, "fix_files_preview", json!({"ids": [a]}));
+    let plan = p["plan"].as_array().unwrap();
+    assert_eq!(plan.len(), 1);
+    assert_eq!(plan[0]["changes"]["genre"][1], "Deep House");
+    call(
+        &app,
+        "write_apply",
+        json!({"token": p["token"], "approved": true}),
+    );
+    app.wait_for_scan();
+    let meta = dj_core::metadata::read_audio_meta(std::path::Path::new(
+        call(&app, "track_detail", json!({"id": a}))["row"]["path"]
+            .as_str()
+            .unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(meta.genre.as_deref(), Some("Deep House"));
+    assert!(
+        call(&app, "organize_history", json!({}))
+            .as_array()
+            .unwrap()
+            .len()
+            >= 5
+    );
+}
+
+#[test]
+fn crates_export_to_serato_rekordbox_and_folders() {
+    let e = env();
+    let app = app_with_fake(&e);
+    add_and_scan(&app, &e.music);
+    let before = snapshot(&e.music);
+    let folder = call(
+        &app,
+        "create_crate",
+        json!({"input": {"name": "Gigs", "kind": "manual"}}),
+    );
+    let wed = call(
+        &app,
+        "create_crate",
+        json!({"input": {"name": "Wedding & Party", "kind": "manual", "parent_id": folder["id"]}}),
+    );
+    let a = id_of(&app, "Deep Tenant - Warehouse 94.mp3");
+    let b = id_of(&app, "Mirrorball.ogg");
+    call(
+        &app,
+        "crate_add",
+        json!({"crate_id": wed["id"], "ids": [a, b]}),
+    );
+    let afro = call(
+        &app,
+        "create_crate",
+        json!({"input": {"name": "Afro", "kind": "smart", "rules": {"match": "all", "rules": [{"kind": "condition", "field": "genre", "op": "equals", "value": "Afrobeats"}]}}}),
+    );
+    let afro_n = search(&app, json!({"crate_id": afro["id"], "limit": 1}))["total"]
+        .as_i64()
+        .unwrap();
+
+    // Serato: new .crate files, nested with %%, readable by our own importer.
+    let serato = e.data.parent().unwrap().join("Music").join("_Serato_");
+    std::fs::create_dir_all(serato.join("Subcrates")).unwrap();
+    std::fs::write(serato.join("Subcrates").join("Afro.crate"), b"existing").unwrap();
+    assert!(app
+        .dispatch(
+            "export_serato",
+            json!({"serato_dir": e.data.to_str().unwrap()})
+        )
+        .is_err());
+    let r = call(
+        &app,
+        "export_serato",
+        json!({"serato_dir": serato.to_str().unwrap(), "crate_ids": [folder["id"], afro["id"]]}),
+    );
+    println!("{r}");
+    let sub = serato.join("Subcrates");
+    assert!(sub.join("Gigs%%Wedding & Party.crate").is_file(), "{r}");
+    // The existing Afro.crate was not overwritten.
+    assert_eq!(std::fs::read(sub.join("Afro.crate")).unwrap(), b"existing");
+    assert!(sub.join("Afro (DJ Assistant).crate").is_file());
+    let paths = dj_core::serato::parse_crate(
+        &std::fs::read(sub.join("Gigs%%Wedding & Party.crate")).unwrap(),
+    );
+    assert_eq!(paths.len(), 2);
+    assert!(
+        paths
+            .iter()
+            .all(|p| !p.starts_with('/') && p.ends_with(".mp3") || p.ends_with(".ogg")),
+        "{paths:?}"
+    );
+    std::fs::remove_file(sub.join("Afro.crate")).unwrap();
+    let imp = call(
+        &app,
+        "serato_import_crates",
+        json!({"path": serato.to_str().unwrap()}),
+    );
+    println!("{imp}");
+    let crates = call(&app, "list_crates", json!({}));
+    let imported = crates
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "Wedding & Party" && c["id"] != wed["id"])
+        .cloned()
+        .expect("imported crate");
+    let got = search(&app, json!({"crate_id": imported["id"], "limit": 10}));
+    assert_eq!(got["total"], 2, "round trip lost tracks: {got}");
+
+    // rekordbox XML.
+    let xml_path = e.data.parent().unwrap().join("rekordbox.xml");
+    let r = call(
+        &app,
+        "export_rekordbox",
+        json!({"path": xml_path.to_str().unwrap(), "crate_ids": [folder["id"], afro["id"]]}),
+    );
+    assert!(
+        app.dispatch(
+            "export_rekordbox",
+            json!({"path": xml_path.to_str().unwrap()})
+        )
+        .is_err(),
+        "must not overwrite"
+    );
+    let xml = std::fs::read_to_string(&xml_path).unwrap();
+    assert!(xml.starts_with("<?xml") && xml.contains("<DJ_PLAYLISTS Version=\"1.0.0\">"));
+    assert!(xml.contains("<NODE Type=\"0\" Name=\"Gigs\""));
+    assert!(xml.contains("Name=\"Wedding &amp; Party\" Type=\"1\" KeyType=\"0\" Entries=\"2\""));
+    assert!(xml.contains(&format!(
+        "Name=\"Afro\" Type=\"1\" KeyType=\"0\" Entries=\"{afro_n}\""
+    )));
+    assert!(xml.contains("Location=\"file://localhost/"));
+    assert!(xml.contains("Deep%20Tenant%20-%20Warehouse%2094.mp3"));
+    assert_eq!(r["tracks"].as_i64().unwrap(), 2 + afro_n);
+    assert_eq!(
+        dj_core::dj_export::file_url("C:\\Music\\A & B.mp3"),
+        "file://localhost/C:/Music/A%20%26%20B.mp3"
+    );
+
+    // Folders: each crate copied and verified into its own folder.
+    let usb = e.data.parent().unwrap().join("USB");
+    std::fs::create_dir_all(&usb).unwrap();
+    call(
+        &app,
+        "export_crate_folders",
+        json!({"dest": usb.to_str().unwrap(), "crate_ids": [folder["id"]]}),
+    );
+    let j = wait_job(&app, "crate_export");
+    assert_eq!(j["state"], "completed", "{j}");
+    let wdir = usb.join("Gigs").join("Wedding & Party");
+    assert!(wdir.is_dir(), "{j}");
+    assert!(wdir.join("playlist.m3u8").is_file());
+    let copied: Vec<_> = std::fs::read_dir(wdir.join("Music"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    assert!(
+        copied.iter().any(|f| f.ends_with(".mp3")) && copied.iter().any(|f| f.ends_with(".ogg")),
+        "{copied:?}"
+    );
+    // Sources untouched.
+    assert_eq!(before, snapshot(&e.music));
+}

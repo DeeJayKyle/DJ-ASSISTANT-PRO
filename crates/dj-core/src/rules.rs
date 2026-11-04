@@ -126,7 +126,7 @@ fn field(id: &str, low_kbps: u32) -> Option<(String, FieldType)> {
             Enum,
         ),
         "status" => (
-            s("(CASE WHEN t.presence='missing' THEN 'missing' WHEN r.status='offline' THEN 'offline' WHEN t.read_status<>'ok' THEN t.read_status ELSE 'ok' END)"),
+            s("(CASE WHEN t.presence='missing' AND t.removed_at IS NOT NULL THEN 'removed' WHEN t.presence='missing' THEN 'missing' WHEN r.status='offline' THEN 'offline' WHEN t.read_status<>'ok' THEN t.read_status ELSE 'ok' END)"),
             Enum,
         ),
         _ => return None,

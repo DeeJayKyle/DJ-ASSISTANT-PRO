@@ -53,6 +53,10 @@ pub struct App {
         Mutex<std::collections::HashMap<String, Vec<crate::safe_write::PlannedChange>>>,
     pub(crate) pack_previews: Mutex<std::collections::HashMap<String, crate::gigpack::PackPlan>>,
     pub(crate) agent: Mutex<std::collections::HashMap<String, crate::agent::Conversation>>,
+    /// Previewed organiser plans by token: (operations, duplicate merge (keep, others)).
+    pub(crate) org_previews: Mutex<
+        std::collections::HashMap<String, (Vec<crate::organize::Op>, Option<(i64, Vec<i64>)>)>,
+    >,
 }
 
 pub(crate) fn arg<T: DeserializeOwned>(args: &Value, key: &str) -> Result<T> {
@@ -93,6 +97,7 @@ impl App {
             write_previews: Mutex::new(Default::default()),
             pack_previews: Mutex::new(Default::default()),
             agent: Mutex::new(Default::default()),
+            org_previews: Mutex::new(Default::default()),
         };
         app.restart_watcher();
         Ok(app)

@@ -12,7 +12,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn token() -> String {
     crate::scanner::new_uid("token")
@@ -614,6 +614,28 @@ impl App {
                 lock(&self.pack_previews).insert(t.clone(), plan.clone());
                 json!({"token": t, "plan": plan})
             }
+            "export_serato" => crate::dj_export::export_serato(
+                &lock(&self.conn),
+                Path::new(&arg::<String>(a, "serato_dir")?),
+                arg::<Option<Vec<i64>>>(a, "crate_ids")?.as_deref(),
+            )?,
+            "export_rekordbox" => crate::dj_export::export_rekordbox(
+                &lock(&self.conn),
+                Path::new(&arg::<String>(a, "path")?),
+                arg::<Option<Vec<i64>>>(a, "crate_ids")?.as_deref(),
+                env!("CARGO_PKG_VERSION"),
+            )?,
+            "export_crate_folders" => {
+                let dest = PathBuf::from(arg::<String>(a, "dest")?);
+                if !dest.is_dir() {
+                    return invalid("choose a destination folder or drive that exists");
+                }
+                let ids: Option<Vec<i64>> = arg(a, "crate_ids")?;
+                let db = self.db_path.clone();
+                self.start_job("crate_export", move |ctl, p| {
+                    crate::dj_export::export_folders(&db, &dest, ids, ctl, p)
+                })?
+            }
             "gigpack_start" => {
                 let t: String = arg(a, "token")?;
                 let plan = lock(&self.pack_previews)
@@ -637,6 +659,124 @@ impl App {
                 let t = token();
                 lock(&self.write_previews).insert(t.clone(), plan.clone());
                 json!({"token": t, "plan": plan})
+            }
+            "fix_files_preview" => {
+                // Write catalogue fixes into the files' own tags (opt-in, previewed).
+                let ids: Vec<i64> = if arg::<Option<bool>>(a, "all")?.unwrap_or(false) {
+                    let conn = lock(&self.conn);
+                    let v: Vec<i64> = conn
+                        .prepare("SELECT t.id FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id LEFT JOIN analysis a ON a.track_id=t.id WHERE t.presence='present' AND t.read_status='ok' AND t.media_kind='audio' AND (u.track_id IS NOT NULL OR a.track_id IS NOT NULL) LIMIT 5000")?
+                        .query_map([], |r| r.get(0))?
+                        .collect::<std::result::Result<_, _>>()?;
+                    v
+                } else {
+                    self.resolve_ids(a)?
+                };
+                if ids.is_empty() {
+                    return invalid("nothing to write: no catalogue fixes or analysis yet");
+                }
+                let conn = lock(&self.conn);
+                if !safe_write::enabled(&conn)? {
+                    return invalid("Writing to music files is turned off. Turn it on in Settings → Safety first.");
+                }
+                let plan = safe_write::preview_from_catalogue(
+                    &conn,
+                    &ids,
+                    arg::<Option<bool>>(a, "include_estimates")?.unwrap_or(true),
+                )?;
+                drop(conn);
+                let t = token();
+                lock(&self.write_previews).insert(t.clone(), plan.clone());
+                json!({"token": t, "plan": plan})
+            }
+            "bad_files" => {
+                let conn = lock(&self.conn);
+                let ids = crate::organize::bad_files(&conn)?;
+                drop(conn);
+                let rows = if ids.is_empty() {
+                    json!([])
+                } else {
+                    library_rows(self, &ids)?
+                };
+                json!({"ids": ids, "rows": rows})
+            }
+            "organize_preview" => {
+                let kind: String = arg(a, "kind")?;
+                let conn = lock(&self.conn);
+                let mut merge = None;
+                let plan = match kind.as_str() {
+                    "rename" => {
+                        drop(conn);
+                        let ids = self.resolve_ids(a)?;
+                        crate::organize::preview_rename(
+                            &lock(&self.conn),
+                            &ids,
+                            &arg::<Option<String>>(a, "template")?
+                                .unwrap_or_else(|| "{artist} - {title}".into()),
+                        )?
+                    }
+                    "move" => {
+                        drop(conn);
+                        let ids = self.resolve_ids(a)?;
+                        crate::organize::preview_move(
+                            &lock(&self.conn),
+                            &ids,
+                            &arg::<Option<String>>(a, "template")?
+                                .unwrap_or_else(|| "{genre}/{artist}".into()),
+                        )?
+                    }
+                    "folder_rename" => crate::organize::preview_folder_rename(
+                        &conn,
+                        &arg::<String>(a, "folder")?,
+                        &arg::<String>(a, "new_name")?,
+                    )?,
+                    "remove" => {
+                        drop(conn);
+                        let ids = self.resolve_ids(a)?;
+                        crate::organize::preview_remove(&lock(&self.conn), &self.data_dir(), &ids)?
+                    }
+                    "bad_files" => {
+                        let ids = crate::organize::bad_files(&conn)?;
+                        crate::organize::preview_remove(&conn, &self.data_dir(), &ids)?
+                    }
+                    "replace" => {
+                        let keep: i64 = arg(a, "keep")?;
+                        let others: Vec<i64> = arg(a, "others")?;
+                        merge = Some((keep, others.clone()));
+                        crate::organize::preview_replace(&conn, &self.data_dir(), keep, &others)?
+                    }
+                    _ => return invalid("unknown organiser action"),
+                };
+                let t = token();
+                lock(&self.org_previews).insert(t.clone(), (plan.ops.clone(), merge));
+                json!({"token": t, "plan": plan})
+            }
+            "organize_apply" => {
+                let t: String = arg(a, "token")?;
+                if !arg::<Option<bool>>(a, "approved")?.unwrap_or(false) {
+                    return invalid("changes must be explicitly approved");
+                }
+                let (ops, merge) = lock(&self.org_previews)
+                    .remove(&t)
+                    .ok_or_else(|| Error::Invalid("preview again first".into()))?;
+                let conn = lock(&self.conn);
+                if let Some((keep, others)) = &merge {
+                    crate::organize::merge_into(&conn, *keep, others)?;
+                }
+                json!(crate::organize::apply(&conn, &self.data_dir(), &ops)?)
+            }
+            "organize_undo" => json!({"undone": crate::organize::undo(
+                &lock(&self.conn),
+                arg::<Option<String>>(a, "batch")?.as_deref(),
+                arg(a, "id")?
+            )?}),
+            "organize_history" => json!(crate::organize::history(&lock(&self.conn), 500)?),
+            "removed_summary" => crate::organize::removed_summary(&lock(&self.conn))?,
+            "empty_removed" => {
+                if !arg::<Option<bool>>(a, "confirmed")?.unwrap_or(false) {
+                    return invalid("permanently deleting removed files must be confirmed");
+                }
+                json!({"deleted": crate::organize::empty_removed(&lock(&self.conn), &self.data_dir())?})
             }
             "write_apply" => {
                 let t: String = arg(a, "token")?;
@@ -744,4 +884,16 @@ impl App {
             _ => return invalid(format!("unknown command '{cmd}'")),
         })
     }
+}
+
+/// Library rows for a set of ids (for previews).
+fn library_rows(app: &App, ids: &[i64]) -> Result<Value> {
+    let conn = lock(&app.conn);
+    let mut rows = vec![];
+    for id in ids.iter().take(500) {
+        if let Ok(d) = crate::library::track_detail(&conn, *id) {
+            rows.push(json!(d.row));
+        }
+    }
+    Ok(json!(rows))
 }
