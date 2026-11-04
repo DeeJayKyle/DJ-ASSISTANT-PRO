@@ -7,6 +7,11 @@ DJ Assistant 1.6.0
 - **Drum Lab sequencer:** a 16-step pattern for your kit with tempo and swing. It loops while you edit, and every change is heard straight away. Export the loop as a 4-bar WAV, or the pattern as MIDI.
 - **Lighter on memory:** the Studio keeps only the 8 most recent songs loaded.
 
+**AI assistant: use any model you have in Ollama**
+- Settings → AI assistant → Local model now scans Ollama and lists every model on this computer, with its size and family. Pick any one; *Scan again* picks up models you've just added.
+- Download any model from the Ollama library by name (for example `mistral` or `gemma2:9b`), not just the three recommended ones.
+- Models that can't use tools still work: the assistant falls back to a plain chat for them. Embedding-only models are shown but can't be picked, since they can't hold a conversation.
+
 **Fixes**
 - The Remix timeline's ruler no longer blocks clicks on the first track's clips.
 - The Drum Lab pads fit their panel at every window size.

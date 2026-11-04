@@ -728,6 +728,9 @@ label.check input { accent-color: var(--mint); width: 16px; height: 16px; flex: 
 .model-opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; color: var(--text); }
 .model-opt.on { border-color: var(--mint-line); background: var(--mint-soft); }
 .model-opt input { margin-top: 4px; accent-color: var(--mint); }
+.model-opt.off { opacity: 0.55; cursor: default; }
+div.model-opt { cursor: default; align-items: center; }
+details > summary { cursor: pointer; color: var(--text); }
 
 /* ---- Customisable look: page transitions, closing, performance ---- */
 :root[data-transition="fade"] .page { animation-name: page-fade; }

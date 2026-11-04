@@ -153,7 +153,53 @@ pub fn from_ollama(v: &Value, call_seq: &mut u64) -> Value {
 }
 
 pub fn ollama_body(model: &str, system: &str, tools: &[Value], messages: &[Value]) -> Value {
-    json!({"model": model, "messages": to_ollama_messages(system, messages), "tools": to_ollama_tools(tools), "stream": false})
+    let mut body =
+        json!({"model": model, "messages": to_ollama_messages(system, messages), "stream": false});
+    // models without tool support reject any "tools" field, even an empty one
+    if !tools.is_empty() {
+        body["tools"] = json!(to_ollama_tools(tools));
+    }
+    body
+}
+
+/// Ollama's reply when a model has no tool support (e.g. "gemma2 does not support tools").
+pub fn ollama_no_tools(v: &Value) -> bool {
+    v["error"]
+        .as_str()
+        .is_some_and(|e| e.to_ascii_lowercase().contains("does not support tools"))
+}
+
+/// Every model in an Ollama `/api/tags` reply (most recently used first); embedding models can't chat.
+pub fn parse_ollama_tags(v: &Value) -> Vec<dj_core::online::LocalModel> {
+    v["models"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| {
+                    let name = m["name"].as_str().or(m["model"].as_str())?.to_string();
+                    let d = &m["details"];
+                    let family = d["family"].as_str().unwrap_or("").to_string();
+                    let families: Vec<&str> = d["families"]
+                        .as_array()
+                        .map(|f| f.iter().filter_map(|x| x.as_str()).collect())
+                        .unwrap_or_default();
+                    let lower = name.to_ascii_lowercase();
+                    let embed = lower.contains("embed")
+                        || [family.as_str()]
+                            .iter()
+                            .chain(families.iter())
+                            .any(|f| f.contains("bert"));
+                    Some(dj_core::online::LocalModel {
+                        name,
+                        size: m["size"].as_u64().unwrap_or(0),
+                        family,
+                        parameters: d["parameter_size"].as_str().unwrap_or("").to_string(),
+                        can_chat: !embed,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Sums Ollama's per-layer download progress into one figure.
@@ -184,6 +230,41 @@ impl PullProgress {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn scans_installed_models_and_spots_embedding_models() {
+        let v = json!({"models": [
+            {"name": "mistral:latest", "size": 4_100_000_000u64, "details": {"family": "llama", "parameter_size": "7.2B"}},
+            {"name": "nomic-embed-text:latest", "size": 274_000_000u64, "details": {"family": "nomic-bert", "families": ["nomic-bert"]}},
+            {"name": "gemma2:2b", "size": 1_600_000_000u64, "details": {"family": "gemma2", "parameter_size": "2.6B"}}
+        ]});
+        let m = parse_ollama_tags(&v);
+        assert_eq!(
+            m.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(),
+            ["mistral:latest", "nomic-embed-text:latest", "gemma2:2b"]
+        );
+        assert!(m[0].can_chat && !m[1].can_chat && m[2].can_chat);
+        assert_eq!(m[0].parameters, "7.2B");
+        assert_eq!(m[0].size, 4_100_000_000);
+        assert!(parse_ollama_tags(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn plain_chat_for_models_without_tools() {
+        assert!(ollama_no_tools(
+            &json!({"error": "registry.ollama.ai/library/gemma2:2b does not support tools"})
+        ));
+        assert!(!ollama_no_tools(&json!({"error": "model not found"})));
+        let b = ollama_body("gemma2:2b", "sys", &[], &[]);
+        assert!(b.get("tools").is_none());
+        let b = ollama_body(
+            "qwen2.5:7b",
+            "sys",
+            &[json!({"name": "t", "description": "d", "input_schema": {}})],
+            &[],
+        );
+        assert_eq!(b["tools"].as_array().unwrap().len(), 1);
+    }
+
     use super::*;
 
     #[test]

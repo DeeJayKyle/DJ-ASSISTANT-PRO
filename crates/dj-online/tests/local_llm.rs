@@ -190,3 +190,36 @@ fn local_model_download_reports_progress_and_errors() {
     let p = http.llm_local_probe("http://127.0.0.1:9");
     assert!(!p.running && p.models.is_empty());
 }
+
+#[test]
+fn models_without_tools_still_answer() {
+    let (url, seen) = serve(vec![
+        (
+            400,
+            json!({"error": "registry.ollama.ai/library/gemma2:2b does not support tools"}),
+        ),
+        (
+            200,
+            json!({"model": "gemma2:2b", "message": {"role": "assistant", "content": "Your library has 12 tracks."}, "done_reason": "stop"}),
+        ),
+    ]);
+    let http = dj_online::Http::new();
+    let cfg = LlmConfig {
+        provider: "local".into(),
+        model: "gemma2:2b".into(),
+        api_key: None,
+        local_url: url,
+    };
+    let r = http
+        .llm_chat(
+            &cfg,
+            "GUIDE",
+            &dj_core::agent::tool_specs(),
+            &[json!({"role": "user", "content": "how many tracks?"})],
+        )
+        .unwrap();
+    assert_eq!(r["content"][0]["text"], "Your library has 12 tracks.");
+    let s = seen.lock().unwrap();
+    assert!(s[0].1.get("tools").is_some());
+    assert!(s[1].1.get("tools").is_none(), "the retry is a plain chat");
+}

@@ -109,6 +109,22 @@ pub struct LocalProbe {
     /// Its server answered at the configured address.
     pub running: bool,
     pub models: Vec<String>,
+    /// Every installed model with its size and kind (found by scanning the server).
+    pub details: Vec<LocalModel>,
+}
+
+/// One model installed in the local model server.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct LocalModel {
+    pub name: String,
+    /// Size on disk in bytes.
+    pub size: u64,
+    /// e.g. "llama", "qwen2"
+    pub family: String,
+    /// e.g. "7.6B"
+    pub parameters: String,
+    /// False for embedding-only models, which can't hold a conversation.
+    pub can_chat: bool,
 }
 
 /// Used when no online implementation is installed.

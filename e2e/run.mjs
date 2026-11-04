@@ -384,9 +384,38 @@ await step("premium UI switch repaints with the Midnight Pro palette and back", 
   expect((await page.evaluate(() => document.documentElement.dataset.palette)) === undefined, "palette not removed");
 });
 
+await step("AI assistant: a local model server is scanned and any installed model can be chosen", async () => {
+  // A stand-in for Ollama on 127.0.0.1 with three installed models (one is embedding-only).
+  const { createServer } = await import("node:http");
+  const tags = { models: [
+    { name: "mistral:latest", size: 4100000000, details: { family: "llama", parameter_size: "7.2B" } },
+    { name: "gemma2:2b", size: 1600000000, details: { family: "gemma2", parameter_size: "2.6B" } },
+    { name: "nomic-embed-text:latest", size: 274000000, details: { family: "nomic-bert", families: ["nomic-bert"] } },
+  ] };
+  const fake = createServer((req, res) => { res.setHeader("content-type", "application/json"); res.end(JSON.stringify(req.url === "/api/tags" ? tags : {})); });
+  await new Promise((r) => fake.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${fake.address().port}`;
+  expect(!(await bridge("set_setting", { key: "ai_local_url", value: url })).error, "local url not accepted");
+  await nav("Settings").click();
+  await page.getByRole("heading", { name: "AI assistant", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Local model (private)" }).click();
+  await page.getByText("Found 3 models on this computer — pick any one:").waitFor();
+  const group = page.getByRole("radiogroup", { name: "Installed local models" });
+  expect(await group.getByRole("radio", { name: /nomic-embed-text/ }).isDisabled(), "embedding model should not be choosable");
+  await group.getByRole("radio", { name: /gemma2:2b/ }).check();
+  await page.getByText("Using gemma2:2b").waitFor();
+  await page.getByText("Ready", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Scan again" }).click();
+  await page.getByText("Found 3 models on this computer.").waitFor();
+  await page.getByRole("radiogroup", { name: "Installed local models" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(shots, "15-local-models.png") });
+  expect((await bridge("ai_status")).ok?.model === "gemma2:2b", "model not saved");
+  fake.close();
+});
+
 await step("AI assistant: turn on Claude with a key (scripted model in tests)", async () => {
   await nav("Settings").click();
-  await page.getByRole("heading", { name: "AI assistant" }).waitFor();
+  await page.getByRole("heading", { name: "AI assistant", exact: true }).waitFor();
   await page.getByRole("button", { name: "Claude (online)" }).click();
   await page.getByText(/Add your Anthropic API key/).first().waitFor();
   await page.getByLabel("Anthropic API key").fill("sk-ant-e2e-demo");

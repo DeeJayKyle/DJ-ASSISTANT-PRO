@@ -38,6 +38,19 @@ impl Default for Http {
 }
 
 impl Http {
+    /// Scans the local model server for every installed model.
+    fn local_tags(&self, url: &str) -> Result<Vec<dj_core::online::LocalModel>, String> {
+        let mut res = self
+            .local_agent
+            .get(&format!("{}/api/tags", url.trim_end_matches('/')))
+            .call()
+            .map_err(|e| local_unreachable(url, &e))?;
+        let v: Value = res
+            .body_mut()
+            .read_json()
+            .map_err(|e| format!("unexpected response: {e}"))?;
+        Ok(llm::parse_ollama_tags(&v))
+    }
     pub fn new() -> Self {
         let cfg = ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(20)))
@@ -330,19 +343,27 @@ impl Online for Http {
             }
             "local" => {
                 let url = format!("{}/api/chat", cfg.local_url.trim_end_matches('/'));
-                let body = llm::ollama_body(&cfg.model, system, tools, messages);
-                let mut res = self
-                    .local_agent
-                    .post(&url)
-                    .send_json(&body)
-                    .map_err(|e| local_unreachable(&cfg.local_url, &e))?;
-                let status = res.status().as_u16();
-                let v: Value = res
-                    .body_mut()
-                    .with_config()
-                    .limit(32 * 1024 * 1024)
-                    .read_json()
-                    .map_err(|e| format!("unexpected response ({status}): {e}"))?;
+                let send = |tools: &[Value]| -> Result<(u16, Value), String> {
+                    let body = llm::ollama_body(&cfg.model, system, tools, messages);
+                    let mut res = self
+                        .local_agent
+                        .post(&url)
+                        .send_json(&body)
+                        .map_err(|e| local_unreachable(&cfg.local_url, &e))?;
+                    let status = res.status().as_u16();
+                    let v: Value = res
+                        .body_mut()
+                        .with_config()
+                        .limit(32 * 1024 * 1024)
+                        .read_json()
+                        .map_err(|e| format!("unexpected response ({status}): {e}"))?;
+                    Ok((status, v))
+                };
+                let (mut status, mut v) = send(tools)?;
+                // Many local models can't call tools: answer as a plain chat instead.
+                if status == 400 && !tools.is_empty() && llm::ollama_no_tools(&v) {
+                    (status, v) = send(&[])?;
+                }
                 if status == 404 {
                     return Err(format!(
                         "the model '{}' isn't installed. Run: ollama pull {}",
@@ -363,31 +384,17 @@ impl Online for Http {
     }
 
     fn llm_local_models(&self, url: &str) -> Result<Vec<String>, String> {
-        let mut res = self
-            .local_agent
-            .get(&format!("{}/api/tags", url.trim_end_matches('/')))
-            .call()
-            .map_err(|e| local_unreachable(url, &e))?;
-        let v: Value = res
-            .body_mut()
-            .read_json()
-            .map_err(|e| format!("unexpected response: {e}"))?;
-        Ok(v["models"]
-            .as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default())
+        Ok(self.local_tags(url)?.into_iter().map(|m| m.name).collect())
     }
 
     fn llm_local_probe(&self, url: &str) -> dj_core::online::LocalProbe {
-        let models = self.llm_local_models(url);
+        let tags = self.local_tags(url);
+        let details = tags.clone().unwrap_or_default();
         dj_core::online::LocalProbe {
-            installed: ollama_exe().is_some() || models.is_ok(),
-            running: models.is_ok(),
-            models: models.unwrap_or_default(),
+            installed: ollama_exe().is_some() || tags.is_ok(),
+            running: tags.is_ok(),
+            models: details.iter().map(|m| m.name.clone()).collect(),
+            details,
         }
     }
 

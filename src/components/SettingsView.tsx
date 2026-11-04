@@ -28,13 +28,15 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 
 
 type LocalSetupState = {
-  probe: { installed: boolean; running: boolean; models: string[] };
+  probe: { installed: boolean; running: boolean; models: string[]; details?: LocalModel[] };
   model: string;
   has_model: boolean;
   local_url: string;
   recommended: Array<{ id: string; size: string; note: string }>;
   download: { state: string; done: number; total: number; message: string | null; errors: number; result: unknown };
 };
+
+type LocalModel = { name: string; size: number; family: string; parameters: string; can_chat: boolean };
 
 const gb = (n: number) => `${(n / 1e9).toFixed(n >= 1e10 ? 0 : 1)} GB`;
 
@@ -107,7 +109,9 @@ function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => v
   const [s, setS] = useState<LocalSetupState | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [waitingInstall, setWaitingInstall] = useState(false);
+  const [other, setOther] = useState("");
   const load = () => api.aiLocalSetup().then(setS).catch(() => {});
+  const rescan = () => { setBusy("scan"); api.aiLocalSetup().then((r: LocalSetupState) => { setS(r); toast(r.probe.running ? `Found ${r.probe.models.length} model${r.probe.models.length === 1 ? "" : "s"} on this computer.` : "Ollama isn't answering. Start it first.", !r.probe.running); }).catch(() => {}).finally(() => setBusy(null)); };
   useEffect(() => { load(); }, []);
   const dl = s?.download;
   const downloading = dl?.state === "running" || dl?.state === "paused";
@@ -129,6 +133,62 @@ function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => v
   if (!s) return <div className="skeleton" style={{ height: 120 }} />;
   const { probe } = s;
   const ready = probe.running && s.has_model;
+  const installed: LocalModel[] = probe.details ?? probe.models.map((name) => ({ name, size: 0, family: "", parameters: "", can_chat: true }));
+  const isInstalled = (id: string) => probe.models.some((m) => m === id || m.replace(/:latest$/, "") === id);
+  const otherName = other.trim();
+  const validName = /^[A-Za-z0-9][A-Za-z0-9:._\-/]{0,99}$/.test(otherName);
+  const pull = (m: string) => api.setSetting("ai_local_model", m).then(() => api.aiLocalPull(m)).then(() => { setOther(""); return load(); }).catch((e) => toast(e.message, true));
+  const picker = (
+    <div className="col" style={{ gap: 10 }}>
+      {probe.running && (
+        <div className="col" style={{ gap: 6 }}>
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="small muted grow">{installed.length ? `Found ${installed.length} model${installed.length === 1 ? "" : "s"} on this computer — pick any one:` : "No models on this computer yet. Download one below."}</span>
+            <button className="btn ghost small" disabled={busy === "scan"} onClick={rescan}><Icon name="refresh" size={14} /> {busy === "scan" ? "Scanning…" : "Scan again"}</button>
+          </div>
+          {installed.length > 0 && (
+            <div className="model-pick" role="radiogroup" aria-label="Installed local models">
+              {installed.map((m) => (
+                <label key={m.name} className={`model-opt${s.model === m.name || s.model === m.name.replace(/:latest$/, "") ? " on" : ""}${m.can_chat ? "" : " off"}`}>
+                  <input type="radio" name="installed-model" checked={s.model === m.name || s.model === m.name.replace(/:latest$/, "")} disabled={!m.can_chat || downloading} onChange={() => choose(m.name)} />
+                  <span><strong>{m.name}</strong> <span className="faint">{[m.parameters, m.size ? gb(m.size) : "", m.family].filter(Boolean).join(" · ")}</span>
+                    {!m.can_chat && <><br /><span className="small muted">Embedding model — it can't hold a conversation.</span></>}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {downloading ? (
+        <div className="col" style={{ gap: 6 }}>
+          <div className="progress" aria-label="Model download progress"><div style={{ width: `${dl!.total ? Math.min(100, (dl!.done / dl!.total) * 100) : 2}%` }} /></div>
+          <div className="row" style={{ gap: 10 }}>
+            <span className="small muted grow">{s.model}: {dl!.message}{dl!.total ? ` — ${gb(dl!.done)} of ${gb(dl!.total)} (${Math.floor((dl!.done / dl!.total) * 100)}%)` : ""}</span>
+            <button className="btn ghost small" onClick={() => api.cancelJob("ai_model").then(load)}>Stop</button>
+          </div>
+          <span className="small faint">You can keep using DJ Assistant. If you stop, the download picks up where it left off next time.</span>
+        </div>
+      ) : (
+        <details className="col" open={!installed.some((m) => m.can_chat)}>
+          <summary className="small">Download a model</summary>
+          <div className="model-pick" style={{ marginTop: 8 }}>
+            {s.recommended.filter((m) => !isInstalled(m.id)).map((m) => (
+              <div key={m.id} className="model-opt">
+                <span className="grow"><strong>{m.id}</strong> <span className="faint">· {m.size}</span><br /><span className="small muted">{m.note}</span></span>
+                <button className="btn small" disabled={!probe.running} onClick={() => pull(m.id)} aria-label={`Download ${m.id}`}><Icon name="download" size={14} /> Download</button>
+              </div>
+            ))}
+          </div>
+          <form className="row wrap" style={{ gap: 8, marginTop: 8 }} onSubmit={(e) => { e.preventDefault(); if (validName) pull(otherName); }}>
+            <input className="input mono grow" value={other} onChange={(e) => setOther(e.target.value)} placeholder="Any model from ollama.com/library, e.g. mistral or gemma2:9b" aria-label="Other model name" />
+            <button className="btn small" disabled={!probe.running || !validName}><Icon name="download" size={14} /> Download</button>
+          </form>
+          {!probe.running && <span className="small faint">Start Ollama first.</span>}
+          {dl?.state === "failed" && <span className="small s-error">{dl.message}</span>}
+        </details>
+      )}
+    </div>
+  );
   const step = (done: boolean, n: number, title: string, body: React.ReactNode) => (
     <li className={`setup-step${done ? " done" : ""}`}>
       <span className="setup-n" aria-hidden>{done ? <Icon name="check" size={14} /> : n}</span>
@@ -138,7 +198,7 @@ function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => v
       </div>
     </li>
   );
-  const choose = (m: string) => api.setSetting("ai_local_model", m).then(() => { load(); onChanged(); }).catch((e) => toast(e.message, true));
+  const choose = (m: string) => { setS((x) => (x ? { ...x, model: m } : x)); api.setSetting("ai_local_model", m).then(() => { load(); onChanged(); }).catch((e) => { toast(e.message, true); load(); }); };
   return (
     <div className="col" style={{ gap: 12 }}>
       <p className="small muted" style={{ margin: 0 }}>Runs the assistant on this computer with <strong>Ollama</strong> (free). Nothing leaves your computer. Local models are slower and less reliable than Claude at multi-step tasks.</p>
@@ -161,49 +221,15 @@ function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => v
             <span className="small faint">It runs quietly in the background (look for the llama icon in the system tray).</span>
           </div>
         ))}
-        {step(s.has_model, 3, s.has_model ? `Model ${s.model} is downloaded` : `Download the model`, (
-          <div className="col" style={{ gap: 8 }}>
-            <div className="model-pick" role="radiogroup" aria-label="Local model">
-              {s.recommended.map((m) => (
-                <label key={m.id} className={`model-opt${s.model === m.id ? " on" : ""}`}>
-                  <input type="radio" name="local-model" checked={s.model === m.id} disabled={downloading} onChange={() => choose(m.id)} />
-                  <span><strong>{m.id}</strong> <span className="faint">· {m.size}{probe.models.includes(m.id) ? " · downloaded" : ""}</span><br /><span className="small muted">{m.note}</span></span>
-                </label>
-              ))}
-            </div>
-            {downloading ? (
-              <div className="col" style={{ gap: 6 }}>
-                <div className="progress" aria-label="Model download progress"><div style={{ width: `${dl!.total ? Math.min(100, (dl!.done / dl!.total) * 100) : 2}%` }} /></div>
-                <div className="row" style={{ gap: 10 }}>
-                  <span className="small muted grow">{dl!.message}{dl!.total ? ` — ${gb(dl!.done)} of ${gb(dl!.total)} (${Math.floor((dl!.done / dl!.total) * 100)}%)` : ""}</span>
-                  <button className="btn ghost small" onClick={() => api.cancelJob("ai_model").then(load)}>Stop</button>
-                </div>
-                <span className="small faint">You can keep using DJ Assistant. If you stop, the download picks up where it left off next time.</span>
-              </div>
-            ) : (
-              <div className="row wrap" style={{ gap: 8 }}>
-                <button className="btn primary small" disabled={!probe.running} onClick={() => api.aiLocalPull(s.model).then(load).catch((e) => toast(e.message, true))}><Icon name="download" size={14} /> Download {s.model}</button>
-                {!probe.running && <span className="small faint">Start Ollama first.</span>}
-                {dl?.state === "failed" && <span className="small s-error">{dl.message}</span>}
-              </div>
-            )}
-          </div>
-        ))}
+        {step(s.has_model, 3, s.has_model ? `Using ${s.model}` : "Choose a model", picker)}
       </ol>
       {ready && (
         <div className="notice info" style={{ margin: 0 }}>
           <Icon name="check" />
-          <div>The assistant runs privately on this computer with <strong>{s.model}</strong>. {probe.models.length > 1 && <>Installed models: {probe.models.join(", ")}.</>}</div>
+          <div>The assistant runs privately on this computer with <strong>{s.model}</strong>.</div>
         </div>
       )}
-      {ready && probe.models.length > 1 && (
-        <label className="field" style={{ maxWidth: 320 }}>
-          Use model
-          <select className="select" value={s.model} onChange={(e) => choose(e.target.value)} aria-label="Installed local model">
-            {probe.models.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
-      )}
+      {ready && <div className="col" style={{ gap: 8 }}><strong className="small">Models on this computer</strong>{picker}</div>}
     </div>
   );
 }
