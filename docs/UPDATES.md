@@ -12,7 +12,14 @@ v1.0.0 checks, in order:
 The updater downloads anonymously, so **the release files must be publicly downloadable**. While DJ-ASSISTANT-PRO is private, update checks find nothing (the app keeps working normally). Choose one:
 
 - **A. Make DJ-ASSISTANT-PRO public** — no other change needed; the next release is picked up automatically.
-- **B. Keep the source private** — create a public repository `DeeJayKyle/dj-assistant-releases` and publish each release's `DJ-Assistant_x.y.z_x64-setup.exe`, `.sig`, `SHA256SUMS.txt` and `latest.json` there (the `url` inside `latest.json` must point to that repository's download).
+- **B. Keep the source private (chosen)** — a public repository `DeeJayKyle/dj-assistant-releases` holds only the installers, checksums, signatures and `latest.json`. The Release workflow publishes there automatically when the `RELEASES_TOKEN` secret is set (see below), and `latest.json` then points at that repository's downloads.
+
+### Setting up option B (once)
+
+1. On GitHub, create a **public** repository named `dj-assistant-releases` under `DeeJayKyle`, ticking "Add a README" (a release needs at least one commit to attach its tag to). No code goes in it.
+2. Create a fine-grained personal access token (GitHub → Settings → Developer settings → Fine-grained tokens): repository access **only** `dj-assistant-releases`, permission **Contents: Read and write**, with an expiry date you will remember to renew.
+3. In DJ-ASSISTANT-PRO, add it as the repository secret `RELEASES_TOKEN`, next to the two signing secrets below.
+4. Run the Release workflow again for the current tag (e.g. `v1.2.0`). It rebuilds, signs, replaces the private release's files with a matching set and publishes the public copy with `latest.json`. Installed copies then see the update.
 
 ## One-time setup for automatic signing
 

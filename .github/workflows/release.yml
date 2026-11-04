@@ -63,6 +63,11 @@ jobs:
           }
       - name: Collect release files and checksums
         shell: pwsh
+        env:
+          # Public repo that hosts installers + latest.json for auto-update
+          # (the source repo stays private). Used only when RELEASES_TOKEN is set.
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          PUBLIC_REPO: DeeJayKyle/dj-assistant-releases
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
           # GitHub replaces spaces in asset names, so publish a space-free name
@@ -89,7 +94,7 @@ jobs:
               pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
               platforms = @{ "windows-x86_64" = @{
                 signature = (Get-Content $sig.Name -Raw).Trim()
-                url = "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/$exe"
+                url = "https://github.com/$(if ($env:RELEASES_TOKEN) { $env:PUBLIC_REPO } else { '${{ github.repository }}' })/releases/download/${{ inputs.tag }}/$exe"
               } }
             }
             $manifest | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8NoBOM latest.json
@@ -115,4 +120,33 @@ jobs:
           $files = Get-ChildItem release | ForEach-Object { $_.FullName }
           $flags = @()
           if ($env:PRE -eq "true") { $flags += "--prerelease" } else { $flags += "--latest" }
-          gh release create $env:TAG @files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DJ Assistant $env:TAG" --notes-file docs/RELEASE_NOTES.md @flags
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # Re-run for an existing release (e.g. after adding the signing key).
+            # The rebuild's bytes differ from the first build, so the installer,
+            # checksums, signature and manifest are replaced together and always match.
+            gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
+            Write-Host "Release $env:TAG already existed; replaced its files with this verified, matching set."
+          } else {
+            gh release create $env:TAG @files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DJ Assistant $env:TAG" --notes-file docs/RELEASE_NOTES.md @flags
+          }
+      - name: Publish installer and update manifest to the public update repo
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          PRE: ${{ inputs.prerelease }}
+          PUBLIC_REPO: DeeJayKyle/dj-assistant-releases
+        run: |
+          if (-not $env:GH_TOKEN) { Write-Host "::notice::RELEASES_TOKEN not set - skipping the public update repo."; exit 0 }
+          if (-not (Test-Path release/latest.json)) { Write-Host "::warning::No signed latest.json (TAURI_SIGNING_PRIVATE_KEY not set) - nothing for auto-update to publish."; exit 0 }
+          # Only the installer, its checksums and the signed manifest are public. No source code.
+          $files = Get-ChildItem release -Include *.exe,*.sig,SHA256SUMS.txt,latest.json -Recurse | ForEach-Object { $_.FullName }
+          gh release view $env:TAG --repo $env:PUBLIC_REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG @files --repo $env:PUBLIC_REPO --clobber
+          } else {
+            $flags = @()
+            if ($env:PRE -eq "true") { $flags += "--prerelease" } else { $flags += "--latest" }
+            gh release create $env:TAG @files --repo $env:PUBLIC_REPO --title "DJ Assistant $env:TAG" --notes-file docs/RELEASE_NOTES.md @flags
+          }
