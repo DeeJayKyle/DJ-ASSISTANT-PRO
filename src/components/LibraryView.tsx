@@ -222,6 +222,7 @@ export function LibraryView({ state, setState, crate, root, crates, fields, vers
                 <button role="menuitem" onClick={() => exportSel("m3u")}><Icon name="export" size={14} /> Export as playlist (M3U8)</button>
                 <button role="menuitem" onClick={() => exportSel("csv")}><Icon name="file" size={14} /> Export as CSV</button>
                 <button role="menuitem" onClick={() => act(() => api.lookupMusicBrainz({ ids }), "Looking up on MusicBrainz (1 per second). Results appear in Suggestions.")}><Icon name="wand" size={14} /> Look up on MusicBrainz</button>
+                <button role="menuitem" onClick={() => act(() => api.lookupCatalogs({ ids }), "Checking BPM, year and genre on Deezer and Apple Music. Results appear in Suggestions.")}><Icon name="cloud" size={14} /> Check BPM, year &amp; genre online</button>
                 <button role="menuitem" onClick={() => { setWriteIds(ids); setMenu(null); }}><Icon name="edit" size={14} /> Write tags to files…</button>
                 {crate && (
                   <button role="menuitem" onClick={() => act(() => api.crateRemove(crate.id, ids), crate.kind === "smart" ? "Excluded from this smart crate." : "Removed from crate. Files were not touched.")}>

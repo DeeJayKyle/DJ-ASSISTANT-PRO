@@ -12,6 +12,41 @@ use std::sync::Arc;
 struct FakeOnline;
 static LLM_SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 impl Online for FakeOnline {
+    fn catalog_lookup(
+        &self,
+        artist: &str,
+        title: &str,
+    ) -> Result<Vec<dj_core::online::CatalogMatch>, String> {
+        let t = title.split(" (").next().unwrap_or(title).to_string();
+        let m = |source: &str, genre: &str| dj_core::online::CatalogMatch {
+            source: source.into(),
+            title: t.clone(),
+            artist: artist.into(),
+            album: Some("Coastline".into()),
+            duration_ms: Some(2000),
+            bpm: if source == "Deezer" {
+                Some(122.0)
+            } else {
+                None
+            },
+            release_date: Some("2014-03-04".into()),
+            genres: vec![genre.into()],
+            label: if source == "Deezer" {
+                Some("Harbour Records".into())
+            } else {
+                None
+            },
+            isrc: None,
+        };
+        Ok(vec![
+            m("Deezer", "Amapiano"),
+            m("Apple Music", "Amapiano"),
+            dj_core::online::CatalogMatch {
+                title: "Something Else".into(),
+                ..m("Deezer", "Rock")
+            },
+        ])
+    }
     fn musicbrainz_recordings(
         &self,
         artist: &str,
@@ -2553,4 +2588,55 @@ fn any_online_ai_service_can_be_chosen() {
         json!({"key": "ai_provider", "value": "claude"}),
     );
     assert_eq!(call(&app, "ai_status", json!({}))["provider"], "claude");
+}
+
+#[test]
+fn catalogues_fix_bpm_year_and_genre_when_they_agree() {
+    let e = env();
+    let app = app_with_fake(&e);
+    add_and_scan(&app, &e.music);
+    let id = id_of(&app, "Lagos Lights - Sunrise Groove.mp3");
+    // Off by default, like every online service.
+    assert!(app
+        .dispatch("lookup_catalogs", json!({"ids": [id]}))
+        .is_err());
+    call(
+        &app,
+        "set_service",
+        json!({"service": "catalogs", "enabled": true}),
+    );
+    call(&app, "lookup_catalogs", json!({"ids": [id]}));
+    assert_eq!(wait_job(&app, "catalogs")["state"], "completed");
+    let s = call(&app, "suggestions", json!({"track_id": id}));
+    let find = |f: &str| {
+        s.as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["field"] == f && x["status"] == "pending")
+            .cloned()
+    };
+    let year = find("year").unwrap_or_else(|| {
+        panic!(
+            "year suggestion: {s} / {}",
+            call(&app, "job_status", json!({"kind": "catalogs"}))
+        )
+    });
+    assert_eq!(year["suggested_value"], "2014");
+    assert_eq!(year["source"], "Deezer + Apple Music");
+    assert!(year["confidence"].as_f64().unwrap() >= 0.85, "{year}");
+    let genre = find("genre").unwrap_or_else(|| panic!("genre suggestion: {s}"));
+    assert_eq!(genre["suggested_value"], "Amapiano");
+    assert!(genre["evidence"].as_str().unwrap().contains("both"));
+    let bpm = find("bpm").expect("bpm suggestion");
+    assert_eq!(bpm["source"], "Deezer");
+    // The unrelated "Something Else" result was ignored.
+    assert!(!s.to_string().contains("Rock"));
+    // Auto-prep applies what the catalogues agree on.
+    call(&app, "run_auto_prep", json!({}));
+    wait_job(&app, "auto_prep");
+    let row = &search(&app, json!({"text": "sunrise groove"}))["rows"][0];
+    assert_eq!(row["year"], 2014, "{row}");
+    // the file already had a genre: the catalogue's is suggested, not forced
+    assert_eq!(row["genre"], "Afrobeats", "{row}");
+    assert!(genre["confidence"].as_f64().unwrap() < 0.85, "{genre}");
 }

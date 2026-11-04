@@ -760,6 +760,24 @@ await step("Studio Synth Lab and Drum Lab: sounds from words, played and saved",
 });
 
 // ---------------------------------------------------------------- local accounts
+await step("Online catalogues: Deezer & Apple Music can be turned on and checked from Suggestions", async () => {
+  await nav("Settings").click();
+  const sw = page.getByLabel("Turn Deezer & Apple Music catalogues on");
+  await sw.scrollIntoViewIfNeeded();
+  expect(!(await sw.isChecked()), "catalogues should be off by default");
+  await sw.locator("xpath=..").click();
+  await page.waitForTimeout(300);
+  expect((await bridge("services")).ok.some((s) => s.id === "catalogs" && s.enabled), "catalogues not enabled");
+  await nav("Suggestions").click();
+  // the Studio (visited earlier) stays mounted but must be hidden on other pages
+  expect(!(await page.getByRole("heading", { name: "Studio", exact: true }).isVisible()), "Studio page shows through on Suggestions");
+  await page.screenshot({ path: path.join(shots, "17-suggestions.png") });
+  await page.getByRole("button", { name: /Check BPM, year & genre online/ }).click();
+  await page.getByText(/Checking BPM, year and genre on Deezer and Apple Music/).first().waitFor();
+  // the test build has no network: turn it back off so later steps stay offline
+  expect(!(await bridge("set_service", { service: "catalogs", enabled: false })).error, "turn off");
+});
+
 await step("a second local account has its own empty library, and switching back restores yours", async () => {
   await page.getByRole("button", { name: /Herbie/ }).first().click();
   await page.getByRole("menuitem", { name: "Manage accounts…" }).click();

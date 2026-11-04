@@ -327,3 +327,16 @@ fn openai_compatible_services_chat_with_tools_and_list_models() {
     assert_eq!(s[0].1["tools"].as_array().unwrap().len(), tools.len());
     assert_eq!(s[2].0, "/v1/models");
 }
+
+/// Live check against the real catalogues: `cargo test -p dj-online -- --ignored live_catalogues`
+#[test]
+#[ignore]
+fn live_catalogues() {
+    let http = dj_online::Http::new();
+    let m = http.catalog_lookup("Daft Punk", "Get Lucky").unwrap();
+    eprintln!("{m:#?}");
+    assert!(m.iter().any(|x| x.source == "Deezer"));
+    assert!(m
+        .iter()
+        .any(|x| x.source == "Apple Music" && !x.genres.is_empty()));
+}

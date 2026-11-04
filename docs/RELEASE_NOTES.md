@@ -1,3 +1,29 @@
+DJ Assistant 1.7.0
+
+**Choose any AI for the assistant** (Settings → AI assistant, or Online services)
+- A dropdown with every option, not just Claude:
+  - **Free online:** Google Gemini, Groq, OpenRouter's free models, GitHub Models, Cerebras, Mistral, SambaNova and Hugging Face. These need a free key and have usage limits.
+  - **Paid:** Claude, OpenAI (ChatGPT), DeepSeek, xAI (Grok) and Together AI.
+  - **Any other OpenAI-compatible server**, including LM Studio or vLLM on this computer.
+  - **Local:** Ollama, fully private.
+- Each service keeps its own API key (in Windows Credential Manager) and its own model. *Load models* lists every model your key can use.
+- Models that can't use tools still answer, as a plain chat.
+
+**Exact BPM, release year and genre from online catalogues** (Settings → Online services → *Deezer & Apple Music catalogues*; free, no key)
+- Turn it on and auto-prep checks every new track against Deezer and Apple Music, as well as the analysis and tags on this computer.
+- **BPM:** Deezer's tempo is checked against this file's audio analysis, including half- and double-time mistakes. When they agree, the exact tempo is applied automatically. When they disagree, it waits for you to review.
+- **Release year:** when both catalogues list the same year, it's corrected automatically. One source alone only fills an empty year.
+- **Genre:** fills empty genres. A genre you already have is never replaced; the catalogues' genre is shown as a suggestion instead, because their genres are broad ("Pop").
+- **Label:** fills an empty label.
+- Only the same recording is used: same title and artist, and the same length within 10 seconds. Remixes and other edits are skipped. Every change shows its evidence in Suggestions and can be undone.
+- Run it any time with *Check BPM, year & genre online* in Suggestions, the library's track menu, or a Library Health fix list.
+
+**Fixes**
+- The Studio page no longer stays visible on top of other pages after you open it.
+- Page headers wrap their buttons instead of squeezing the description.
+
+---
+
 DJ Assistant 1.6.1
 
 **Fix: local models in Ollama work out of the box**

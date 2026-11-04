@@ -93,6 +93,32 @@ pub fn run(db_path: &Path, online: &dyn Online, ctl: &ScanControl, p: &Progress)
         }
     }
 
+    // Exact BPM, year and genre from the free music catalogues, for tracks not checked yet.
+    let mut catalog_checked = 0usize;
+    if crate::suggest::service_enabled(&conn, "catalogs")? && !crate::jobs::wait_or_cancelled(ctl) {
+        let ids: Vec<i64> = conn
+            .prepare(
+                "SELECT t.id FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id
+                 WHERE t.presence='present' AND t.read_status='ok' AND t.media_kind='audio'
+                   AND COALESCE(u.artist, t.artist) IS NOT NULL AND COALESCE(u.title, t.title) IS NOT NULL
+                   AND t.id NOT IN (SELECT track_id FROM catalog_checked)
+                 ORDER BY t.first_seen_at DESC LIMIT 300",
+            )?
+            .query_map([], |r| r.get(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        if !ids.is_empty() {
+            message(
+                p,
+                format!(
+                    "Checking BPM, year and genre of {} track(s) against Deezer and Apple Music…",
+                    ids.len()
+                ),
+            );
+            catalog_checked = ids.len();
+            crate::suggest::catalog_lookup(&conn, online, &ids, ctl, p)?;
+        }
+    }
+
     let min = min_confidence(&conn)?;
     message(p, "Applying recommended fixes to your catalogue…");
     // Fill gaps from the best evidence; replace existing values only when very sure.
@@ -104,7 +130,7 @@ pub fn run(db_path: &Path, online: &dyn Online, ctl: &ScanControl, p: &Progress)
         |r| r.get(0),
     )?;
     let summary = json!({
-        "analysed": pending_analysis, "suggestions_found": created, "musicbrainz_lookups": looked_up,
+        "analysed": pending_analysis, "suggestions_found": created, "musicbrainz_lookups": looked_up, "catalog_checked": catalog_checked,
         "fixes_applied": applied, "min_confidence": min, "left_to_review": to_review,
         "missing_before": before, "missing_after": after,
     });

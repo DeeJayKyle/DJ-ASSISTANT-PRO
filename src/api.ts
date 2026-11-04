@@ -143,6 +143,7 @@ export const api = {
   resetSuggestion: (id: number) => call("reset_suggestion", { id }),
   acceptBulk: (min_confidence: number, source?: string | null) => call<{ accepted: number }>("accept_suggestions_bulk", { min_confidence, source: source ?? null }),
   lookupMusicBrainz: (sel: Selection) => call("lookup_musicbrainz", sel),
+  lookupCatalogs: (sel: Selection) => call("lookup_catalogs", sel),
   lookupAcoustid: (sel: Selection) => call("lookup_acoustid", { ...sel, confirmed: true }),
   services: () => call<Service[]>("services"),
   setService: (service: string, enabled: boolean) => call("set_service", { service, enabled }),

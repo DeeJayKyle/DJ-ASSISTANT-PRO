@@ -46,6 +46,24 @@ pub struct ReleaseItem {
     pub url: Option<String>,
 }
 
+/// A track found in a public music catalogue (Deezer, Apple Music).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct CatalogMatch {
+    /// "Deezer" or "Apple Music"
+    pub source: String,
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub duration_ms: Option<i64>,
+    /// Beats per minute as the catalogue lists it (Deezer only).
+    pub bpm: Option<f64>,
+    /// "YYYY-MM-DD" (or just the year)
+    pub release_date: Option<String>,
+    pub genres: Vec<String>,
+    pub label: Option<String>,
+    pub isrc: Option<String>,
+}
+
 pub trait Online: Send + Sync {
     fn musicbrainz_recordings(&self, artist: &str, title: &str)
         -> Result<Vec<MbRecording>, String>;
@@ -67,6 +85,10 @@ pub trait Online: Send + Sync {
         artist: &str,
         title: &str,
     ) -> Result<Vec<SimilarItem>, String>;
+    /// Search the free Deezer and Apple Music catalogues (no key) for a track.
+    fn catalog_lookup(&self, _artist: &str, _title: &str) -> Result<Vec<CatalogMatch>, String> {
+        Err("music catalogue lookups are not available in this build".into())
+    }
     /// One model turn for the AI assistant. `messages` and the returned value
     /// use the Anthropic Messages format ({"content": [...], "stop_reason", "model"}).
     fn llm_chat(
@@ -184,6 +206,12 @@ pub const SERVICES: &[(&str, &str, &str, &str)] = &[
         "MusicBrainz",
         "Recording, artist, release and original-year information; new releases from artists you follow.",
         "The artist and title text of tracks you choose to look up (or artist names you follow). Never audio, file paths or listening history.",
+    ),
+    (
+        "catalogs",
+        "Deezer & Apple Music catalogues",
+        "Exact BPM, release year, genre and label for your tracks from two free music catalogues (no key needed). Auto-prep checks new music against them and fixes values the catalogues agree on.",
+        "The artist and title text of tracks being looked up. Never audio, file paths or listening history.",
     ),
     (
         "acoustid",

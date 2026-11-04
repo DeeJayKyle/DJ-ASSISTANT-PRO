@@ -369,6 +369,13 @@ CREATE TABLE file_ops (
 );
 CREATE INDEX idx_file_ops_batch ON file_ops(batch);
 "#,
+    // 6: online catalogue checks (Deezer, Apple Music), so tracks aren't looked up twice
+    r#"
+CREATE TABLE catalog_checked (
+    track_id INTEGER PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+    checked_at INTEGER NOT NULL
+);
+"#,
 ];
 
 pub fn now_ms() -> i64 {

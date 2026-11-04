@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "dj-assistant"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "dj-core",
  "dj-online",
@@ -920,7 +920,7 @@ dependencies = [
 
 [[package]]
 name = "dj-core"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "blake3",
  "crossbeam-channel",
@@ -943,7 +943,7 @@ dependencies = [
 
 [[package]]
 name = "dj-devbridge"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "dj-core",
  "dj-online",
@@ -953,7 +953,7 @@ dependencies = [
 
 [[package]]
 name = "dj-online"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "dj-core",
  "serde",

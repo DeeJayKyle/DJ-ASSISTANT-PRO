@@ -42,7 +42,7 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 
 **Audio analysis (local)** — BPM with half/double-time alternatives, key with Camelot code, energy (scaled to your library), loudness (LUFS), peak, clipping, silence, intro/outro length, cue ideas (first sound, mix-in, drop, mix-out), waveform, tempo-drift warning and an audio fingerprint. All shown as estimates with method and version; your values always win.
 
-**Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz and AcoustID. Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
+**Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz, AcoustID and the free Deezer & Apple Music catalogues (exact BPM checked against the audio, release year, genre, label — applied automatically only when the sources agree). Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
 
 **Duplicates & health** — exact (full-file hash) vs possible vs alternate versions, with reasons and review notes; library health for missing metadata (with a **Fix** list that offers evidence-based suggestions and bulk editing, saved to the catalogue only), unreadable/unsupported files, low bitrate (configurable, default 128 kbps, never applied to lossless or unknown), offline drives and missing files.
 
@@ -58,7 +58,7 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 
 **Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
 
-**Assistant** — an AI assistant that already knows every feature of the app (Claude with your own API key, or any model installed in Ollama on this computer, found automatically; off by default). It looks things up in your library, filters views, and proposes actions (crates, energy/genre/key edits, tags, templates, scans, analysis, sets, gig mode, settings) as cards that run only when you press Run. It can never change music files or Serato data. Without AI, the built-in rule-based assistant and **/commands** (/scan, /fix genre, /set 120 wedding, /keys musical…) still work. Hide it with Ctrl+J.
+**Assistant** — an AI assistant that already knows every feature of the app (choose from a dropdown: free online AIs such as Gemini, Groq, OpenRouter's free models and GitHub Models; Claude, ChatGPT, DeepSeek or Grok with your own key; any OpenAI-compatible server; or any model in Ollama on this computer; off by default). It looks things up in your library, filters views, and proposes actions (crates, energy/genre/key edits, tags, templates, scans, analysis, sets, gig mode, settings) as cards that run only when you press Run. It can never change music files or Serato data. Without AI, the built-in rule-based assistant and **/commands** (/scan, /fix genre, /set 120 wedding, /keys musical…) still work. Hide it with Ctrl+J.
 **Quick Prep AI help** — when the AI assistant is on (below), *Improve with AI* sharpens clean names and genres and the playlist box understands any request. It uses the same model you chose for the assistant and sends only file names, tag text and BPM/key/energy — never audio or file paths. Answers are suggestions; your edits win.
 
 **Assistant** — a local, rule-based helper (not an AI model) in a sidebar you can hide (Ctrl+J) or expand. “afrobeats 2010s energy 6-8 no live”, “low bitrate”, “plan a 2 hour wedding set”, “gig pack”… It says exactly what it understood and can only search, filter and open views.
@@ -79,7 +79,7 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 ## Privacy
 
 - No online account and no telemetry; accounts are local to this computer. The core library has no network code; CI traces system calls during scanning, analysis, Set Studio, gig packs, tag writing and personal-file indexing to prove no internet sockets are opened.
-- Online services (MusicBrainz, AcoustID, Last.fm, the AI assistant, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
+- Online services (MusicBrainz, Deezer & Apple Music catalogues, AcoustID, Last.fm, the AI assistant, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
 - Logs record command names and errors only.
 
 ## Install (Windows 10/11, 64-bit)

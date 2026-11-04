@@ -117,7 +117,7 @@ export function OrganizeView({ settings, crates, toast, bump, onSettings, onRevi
     playSound(r.skipped.length && !r.done ? "error" : "saved");
     load(); bump();
   });
-  const result = prep?.result as null | { analysed: number; fixes_applied: number; left_to_review: number; suggestions_found: number; musicbrainz_lookups: number };
+  const result = prep?.result as null | { analysed: number; fixes_applied: number; left_to_review: number; suggestions_found: number; musicbrainz_lookups: number; catalog_checked?: number };
   const batches = Object.values(history.reduce<Record<string, OrgHistory[]>>((m, h) => { (m[h.batch] ??= []).push(h); return m; }, {})).slice(0, 12);
 
   return (
@@ -136,7 +136,7 @@ export function OrganizeView({ settings, crates, toast, bump, onSettings, onRevi
             <span className="small muted">After every scan</span>
             <label className="toggle"><input type="checkbox" aria-label="Auto-prep after every scan" checked={settings.auto_prep} onChange={(e) => api.setSetting("auto_prep", e.target.checked).then(bump)} /><span className="knob" /></label>
           </div>
-          <p className="small muted" style={{ marginTop: 0 }}>When music is added, DJ Assistant analyses BPM, key, energy and loudness, finds titles, artists, genres and years from file names, folders, albums and artists (and MusicBrainz, if you turned it on), and applies the recommended fixes to your catalogue. Empty fields are filled from good evidence; existing values change only at {Math.round(settings.auto_fix_min * 100)}% confidence or more. Nothing on disk changes here.</p>
+          <p className="small muted" style={{ marginTop: 0 }}>When music is added, DJ Assistant analyses BPM, key, energy and loudness, finds titles, artists, genres and years from file names, folders, albums and artists (and MusicBrainz, plus exact BPM, release year and genre from Deezer &amp; Apple Music, if you turned them on in Settings → Online services), and applies the recommended fixes to your catalogue. Empty fields are filled from good evidence; existing values change only at {Math.round(settings.auto_fix_min * 100)}% confidence or more. Nothing on disk changes here.</p>
           {prep?.state === "running" && (
             <div className="col" style={{ gap: 6 }}>
               <div className="progress"><div style={{ width: `${prep.total ? (prep.done / prep.total) * 100 : 5}%` }} /></div>
@@ -149,6 +149,7 @@ export function OrganizeView({ settings, crates, toast, bump, onSettings, onRevi
               <div><strong>{result.fixes_applied}</strong><span className="small muted">fixes applied</span></div>
               <div><strong>{result.left_to_review}</strong><span className="small muted">left to review</span></div>
               {result.musicbrainz_lookups > 0 && <div><strong>{result.musicbrainz_lookups}</strong><span className="small muted">MusicBrainz lookups</span></div>}
+              {(result.catalog_checked ?? 0) > 0 && <div><strong>{result.catalog_checked}</strong><span className="small muted">checked on Deezer &amp; Apple Music</span></div>}
             </div>
           )}
           <div className="row wrap" style={{ gap: 8 }}>

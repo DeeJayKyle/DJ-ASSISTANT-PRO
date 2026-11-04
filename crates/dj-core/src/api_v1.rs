@@ -150,6 +150,15 @@ impl App {
                     suggest::musicbrainz_lookup(&conn, online.as_ref(), &ids, ctl, p)
                 })?
             }
+            "lookup_catalogs" => {
+                let ids = self.resolve_ids(a)?;
+                suggest::require_service(&lock(&self.conn), "catalogs")?;
+                let (db, online) = (self.db_path.clone(), self.online.clone());
+                self.start_job("catalogs", move |ctl, p| {
+                    let conn = db::open(&db)?;
+                    suggest::catalog_lookup(&conn, online.as_ref(), &ids, ctl, p).map(|_| ())
+                })?
+            }
             "lookup_acoustid" => {
                 if !arg::<Option<bool>>(a, "confirmed")?.unwrap_or(false) {
                     return invalid("Each AcoustID lookup must be confirmed: an audio fingerprint (not the audio) will be sent.");

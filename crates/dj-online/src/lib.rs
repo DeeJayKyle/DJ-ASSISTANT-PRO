@@ -10,7 +10,7 @@
 pub mod llm;
 
 use dj_core::agent::LlmConfig;
-use dj_core::online::{AcoustidMatch, MbRecording, Online, ReleaseItem, SimilarItem};
+use dj_core::online::{AcoustidMatch, CatalogMatch, MbRecording, Online, ReleaseItem, SimilarItem};
 use serde_json::Value;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -28,6 +28,8 @@ pub struct Http {
     /// Loopback only, never through a proxy (local model server).
     local_agent: ureq::Agent,
     last_mb: Mutex<Option<Instant>>,
+    last_deezer: Mutex<Option<Instant>>,
+    last_itunes: Mutex<Option<Instant>>,
     call_seq: Mutex<u64>,
 }
 
@@ -76,8 +78,114 @@ impl Http {
             ai_agent: ai.into(),
             local_agent: local.into(),
             last_mb: Mutex::new(None),
+            last_deezer: Mutex::new(None),
+            last_itunes: Mutex::new(None),
             call_seq: Mutex::new(0),
         }
+    }
+
+    /// Waits so calls through `slot` are at least `gap` apart (each service's fair-use limit).
+    fn throttle(slot: &Mutex<Option<Instant>>, gap: Duration) {
+        let mut l = slot.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(t) = *l {
+            let el = t.elapsed();
+            if el < gap {
+                std::thread::sleep(gap - el);
+            }
+        }
+        *l = Some(Instant::now());
+    }
+
+    /// Deezer: search, then the best match's track (BPM, date, ISRC) and album (genres, label).
+    fn deezer(&self, artist: &str, title: &str) -> Result<Vec<CatalogMatch>, String> {
+        let gap = Duration::from_millis(150); // 50 requests per 5 s allowed
+        Self::throttle(&self.last_deezer, gap);
+        let q = format!("{artist} {title}");
+        let v = self.get_json(
+            "https://api.deezer.com/search",
+            &[("q", &q), ("limit", "10")],
+        )?;
+        if let Some(e) = v.pointer("/error/message").and_then(|m| m.as_str()) {
+            return Err(format!("Deezer: {e}"));
+        }
+        let (want_t, want_a) = (
+            dj_core::text::base_title(title),
+            dj_core::text::base_artist(artist),
+        );
+        let hits: Vec<&Value> = v["data"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|t| {
+                let same_t = dj_core::text::base_title(t["title"].as_str().unwrap_or("")) == want_t
+                    || dj_core::text::base_title(t["title_short"].as_str().unwrap_or("")) == want_t;
+                let same_a = t
+                    .pointer("/artist/name")
+                    .and_then(|a| a.as_str())
+                    .is_some_and(|a| dj_core::text::base_artist(a) == want_a);
+                same_t && same_a
+            })
+            .take(3)
+            .collect();
+        if hits.is_empty() {
+            return Ok(vec![]);
+        }
+        // The main edition, with its album (genres, label).
+        let mut main: Option<CatalogMatch> = None;
+        for (i, hit) in hits.iter().enumerate() {
+            Self::throttle(&self.last_deezer, gap);
+            let t = self.get_json(
+                &format!(
+                    "https://api.deezer.com/track/{}",
+                    hit["id"].as_i64().unwrap_or(0)
+                ),
+                &[],
+            )?;
+            if i == 0 {
+                let album_id = t.pointer("/album/id").and_then(|i| i.as_i64()).unwrap_or(0);
+                let album = if album_id > 0 {
+                    Self::throttle(&self.last_deezer, gap);
+                    self.get_json(&format!("https://api.deezer.com/album/{album_id}"), &[])
+                        .unwrap_or(Value::Null)
+                } else {
+                    Value::Null
+                };
+                main = parse_deezer(&t, &album);
+                if main.as_ref().is_some_and(|m| m.bpm.is_some()) {
+                    break;
+                }
+            } else if let Some(other) = parse_deezer(&t, &Value::Null) {
+                // Deezer lists a tempo on some editions only: borrow one of the same length.
+                let same_len = match (other.duration_ms, main.as_ref().and_then(|m| m.duration_ms))
+                {
+                    (Some(a), Some(b)) => (a - b).abs() <= 3000,
+                    _ => false,
+                };
+                if same_len && other.bpm.is_some() {
+                    if let Some(m) = main.as_mut() {
+                        m.bpm = other.bpm;
+                    }
+                    break;
+                }
+            }
+        }
+        Ok(main.into_iter().collect())
+    }
+
+    /// Apple Music (iTunes Search API): genre, release date and length.
+    fn itunes(&self, artist: &str, title: &str) -> Result<Vec<CatalogMatch>, String> {
+        Self::throttle(&self.last_itunes, Duration::from_millis(3100)); // about 20 per minute
+        let term = format!("{artist} {title}");
+        let v = self.get_json(
+            "https://itunes.apple.com/search",
+            &[
+                ("term", &term),
+                ("media", "music"),
+                ("entity", "song"),
+                ("limit", "8"),
+            ],
+        )?;
+        Ok(parse_itunes(&v))
     }
 
     fn mb_throttle(&self) {
@@ -137,6 +245,73 @@ fn credit(v: &Value) -> String {
                 .collect::<String>()
         })
         .unwrap_or_default()
+}
+
+/// A Deezer track (with its album) as a catalogue match.
+pub fn parse_deezer(track: &Value, album: &Value) -> Option<CatalogMatch> {
+    let title = track["title"].as_str()?.to_string();
+    let artist = track
+        .pointer("/artist/name")
+        .and_then(|a| a.as_str())?
+        .to_string();
+    let genres = album
+        .pointer("/genres/data")
+        .and_then(|g| g.as_array())
+        .map(|g| {
+            g.iter()
+                .filter_map(|x| x["name"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let text = |v: &Value| {
+        v.as_str()
+            .filter(|s| !s.trim().is_empty() && *s != "0000-00-00")
+            .map(str::to_string)
+    };
+    Some(CatalogMatch {
+        source: "Deezer".into(),
+        title,
+        artist,
+        album: text(&track["album"]["title"]),
+        duration_ms: track["duration"]
+            .as_i64()
+            .filter(|d| *d > 0)
+            .map(|d| d * 1000),
+        bpm: track["bpm"].as_f64().filter(|b| *b > 0.0),
+        release_date: text(&track["release_date"]).or_else(|| text(&album["release_date"])),
+        genres,
+        label: text(&album["label"]),
+        isrc: text(&track["isrc"]),
+    })
+}
+
+/// iTunes Search API results as catalogue matches.
+pub fn parse_itunes(v: &Value) -> Vec<CatalogMatch> {
+    v["results"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|r| r["kind"].as_str().is_none_or(|k| k == "song"))
+        .filter_map(|r| {
+            Some(CatalogMatch {
+                source: "Apple Music".into(),
+                title: r["trackName"].as_str()?.to_string(),
+                artist: r["artistName"].as_str()?.to_string(),
+                album: r["collectionName"].as_str().map(str::to_string),
+                duration_ms: r["trackTimeMillis"].as_i64(),
+                bpm: None,
+                release_date: r["releaseDate"]
+                    .as_str()
+                    .map(|d| d.chars().take(10).collect()),
+                genres: r["primaryGenreName"]
+                    .as_str()
+                    .map(|g| vec![g.to_string()])
+                    .unwrap_or_default(),
+                label: None,
+                isrc: None,
+            })
+        })
+        .collect()
 }
 
 pub fn parse_mb_recordings(v: &Value) -> Vec<MbRecording> {
@@ -563,6 +738,20 @@ impl Online for Http {
         Ok(parse_mb_recordings(&v))
     }
 
+    fn catalog_lookup(&self, artist: &str, title: &str) -> Result<Vec<CatalogMatch>, String> {
+        // Either catalogue on its own is useful; both failing is an error.
+        let d = self.deezer(artist, title);
+        let i = self.itunes(artist, title);
+        match (d, i) {
+            (Err(a), Err(b)) => Err(format!("{a}; Apple Music: {b}")),
+            (d, i) => Ok(d
+                .unwrap_or_default()
+                .into_iter()
+                .chain(i.unwrap_or_default())
+                .collect()),
+        }
+    }
+
     fn musicbrainz_artist_releases(&self, artist: &str) -> Result<Vec<ReleaseItem>, String> {
         self.mb_throttle();
         let v = self.get_json(
@@ -677,6 +866,37 @@ impl Online for Http {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn parses_deezer_and_apple_music_catalogue_entries() {
+        use serde_json::json;
+        let track = json!({"id": 3135556, "title": "Harder, Better, Faster, Stronger", "duration": 224, "bpm": 123.4,
+            "release_date": "2001-03-07", "isrc": "GBDUW0000059", "artist": {"name": "Daft Punk"}, "album": {"id": 302127, "title": "Discovery"}});
+        let album = json!({"genres": {"data": [{"name": "Electro"}, {"name": "Dance"}]}, "label": "Parlophone (France)", "release_date": "2001-03-07"});
+        let d = parse_deezer(&track, &album).unwrap();
+        assert_eq!(
+            (d.source.as_str(), d.bpm, d.duration_ms),
+            ("Deezer", Some(123.4), Some(224_000))
+        );
+        assert_eq!(d.genres, vec!["Electro", "Dance"]);
+        assert_eq!(d.label.as_deref(), Some("Parlophone (France)"));
+        assert_eq!(d.release_date.as_deref(), Some("2001-03-07"));
+        // Deezer reports an unknown tempo as 0 and unknown dates as 0000-00-00
+        let none = parse_deezer(
+            &json!({"title": "x", "artist": {"name": "y"}, "bpm": 0, "release_date": "0000-00-00"}),
+            &serde_json::Value::Null,
+        )
+        .unwrap();
+        assert_eq!((none.bpm, none.release_date), (None, None));
+        let a = parse_itunes(&json!({"resultCount": 2, "results": [
+            {"kind": "song", "trackName": "Harder, Better, Faster, Stronger", "artistName": "Daft Punk", "collectionName": "Discovery",
+             "trackTimeMillis": 224693, "releaseDate": "2001-03-07T08:00:00Z", "primaryGenreName": "Electronic"},
+            {"kind": "music-video", "trackName": "video", "artistName": "Daft Punk"}]}));
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].genres, vec!["Electronic"]);
+        assert_eq!(a[0].release_date.as_deref(), Some("2001-03-07"));
+        assert_eq!(a[0].source, "Apple Music");
+    }
+
     use super::*;
     use serde_json::json;
 
