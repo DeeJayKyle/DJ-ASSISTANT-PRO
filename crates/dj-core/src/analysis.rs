@@ -35,6 +35,8 @@ pub struct Analysis {
     pub camelot: Option<String>,
     pub key_confidence: f64,
     pub energy: Option<i64>,
+    /// Raw 0..1 energy score before library-relative scaling.
+    pub energy_raw: Option<f64>,
     pub loudness_lufs: Option<f64>,
     pub peak_dbfs: Option<f64>,
     pub clipped_runs: i64,
@@ -353,7 +355,24 @@ fn tempo_from_env(env: &[f32], fr: f32) -> Option<(f64, f64)> {
             best = Some((lag, s));
         }
     }
-    let (lag, s) = best?;
+    let (mut lag, s) = best?;
+    // DJ convention: prefer the half-time reading above 150 BPM when the
+    // evidence for it is close (hats and off-beats often double the tempo).
+    if 60.0 * fr as f64 / lag as f64 > 150.0 && 2 * lag <= max_lag {
+        let hl = 2 * lag;
+        let half_score = vals[hl]
+            .max(vals[hl - 1])
+            .max(vals[(hl + 1).min(vals.len() - 1)]);
+        if half_score >= 0.55 * vals[lag] {
+            lag = (hl - 1..=(hl + 1).min(vals.len() - 2))
+                .max_by(|a, b| {
+                    vals[*a]
+                        .partial_cmp(&vals[*b])
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .unwrap_or(hl);
+        }
+    }
     let mean = scores.iter().sum::<f64>() / scores.len() as f64;
     let var = scores.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / scores.len() as f64;
     let conf = if var > 0.0 {
@@ -461,7 +480,7 @@ fn estimate_key(x: &[f32], sr: f32) -> Option<(String, String, f64)> {
     for frame in &spec {
         for (k, m) in frame.iter().enumerate().skip(1) {
             let f = k as f32 * sr / n as f32;
-            if !(55.0..=1760.0).contains(&f) {
+            if !(65.0..=1760.0).contains(&f) {
                 continue;
             }
             let midi = 12.0 * (f / 440.0).log2() + 69.0;
@@ -675,7 +694,8 @@ pub fn analyse_decoded(d: &Decoded) -> Analysis {
         a.key_confidence = (conf * 100.0).round() / 100.0;
     }
 
-    // Energy estimate 1-10 from loudness, rhythmic activity and brightness.
+    // Energy: a raw 0..1 score from loudness, tempo, percussive punch and
+    // brightness. The 1-10 value is later scaled against the DJ's library.
     let lufs = d.loudness_lufs.unwrap_or_else(|| {
         let r = (x.iter().map(|s| (s * s) as f64).sum::<f64>() / x.len() as f64).sqrt();
         20.0 * r.max(1e-9).log10() - 0.7
@@ -686,6 +706,10 @@ pub fn analyse_decoded(d: &Decoded) -> Analysis {
     } else {
         oenv.iter().map(|v| *v as f64).sum::<f64>() / oenv.len() as f64
     };
+    let level = (low.iter().map(|s| (s * s) as f64).sum::<f64>() / low.len().max(1) as f64)
+        .sqrt()
+        .max(1e-6);
+    let punch = onset_mean / (level * 100.0);
     let spec = spectrogram(&low[..low.len().min((lsr * 60.0) as usize)], 2048, 2048);
     let centroid = if spec.is_empty() {
         0.0
@@ -704,9 +728,15 @@ pub fn analyse_decoded(d: &Decoded) -> Analysis {
             0.0
         }
     };
-    let raw = 0.55 * norm(lufs, -24.0, -6.0)
-        + 0.3 * norm(onset_mean, 0.0, 6.0)
-        + 0.15 * norm(centroid, 600.0, 2600.0);
+    let tempo = a
+        .bpm
+        .map(|b| norm(if b > 150.0 { b / 2.0 } else { b }, 70.0, 132.0))
+        .unwrap_or(0.5);
+    let raw = 0.35 * norm(lufs, -20.0, -7.0)
+        + 0.3 * tempo
+        + 0.25 * norm(punch, 0.05, 0.6)
+        + 0.1 * norm(centroid, 500.0, 2500.0);
+    a.energy_raw = Some((raw * 1000.0).round() / 1000.0);
     a.energy = Some((1.0 + (raw * 9.0).round()).clamp(1.0, 10.0) as i64);
     if d.clipped_runs > 10 {
         a.warnings.push(format!(

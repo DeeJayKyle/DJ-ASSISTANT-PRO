@@ -103,7 +103,7 @@ fn transition_notes(a: &Tp, b: &Tp) -> (f64, Vec<String>) {
                     d * 100.0
                 ));
             } else {
-                s -= 1.5;
+                s -= 3.0;
                 notes.push(format!(
                     "BPM jump {x:.0} → {y:.0}: plan a cut, echo-out or bridge track"
                 ));

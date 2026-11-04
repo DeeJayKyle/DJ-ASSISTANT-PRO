@@ -61,8 +61,8 @@ pub fn store(
             conn.execute(
                 "INSERT OR REPLACE INTO analysis (track_id, method, version, analysed_at, file_size, file_mtime, status, error, bpm, bpm_confidence, bpm_alt,
                    musical_key, camelot, key_confidence, energy, loudness_lufs, peak_dbfs, clipped_runs, silence_start_ms, silence_end_ms, intro_end_ms,
-                   outro_start_ms, tempo_stable, cues_json, warnings_json, waveform, fingerprint, fingerprint_encoded, duration_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,'ok',NULL,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27)",
+                   outro_start_ms, tempo_stable, cues_json, warnings_json, waveform, fingerprint, fingerprint_encoded, duration_ms, energy_raw)
+                 VALUES (?1,?2,?3,?4,?5,?6,'ok',NULL,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28)",
                 params![
                     id,
                     analysis::METHOD,
@@ -90,7 +90,8 @@ pub fn store(
                     a.waveform,
                     if a.fingerprint.is_empty() { None } else { Some(fp_to_blob(&a.fingerprint)) },
                     a.fingerprint_encoded,
-                    a.duration_ms
+                    a.duration_ms,
+                    a.energy_raw
                 ],
             )?;
             suggest_from_analysis(conn, id, a)?;
@@ -166,6 +167,32 @@ fn suggest_from_analysis(conn: &Connection, id: i64, a: &Analysis) -> Result<()>
         }
     }
     Ok(())
+}
+
+/// Scale estimated energy to 1-10 relative to the DJ's own library: half
+/// percentile rank, half absolute score. Needs at least 8 analysed tracks.
+pub fn rescale_energy(conn: &Connection) -> Result<usize> {
+    let mut stmt = conn.prepare("SELECT track_id, energy_raw FROM analysis WHERE status='ok' AND energy_raw IS NOT NULL ORDER BY energy_raw")?;
+    let rows: Vec<(i64, f64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<std::result::Result<_, _>>()?;
+    if rows.len() < 8 {
+        return Ok(0);
+    }
+    let n = rows.len() as f64;
+    let tx = conn.unchecked_transaction()?;
+    {
+        let mut up = tx.prepare_cached("UPDATE analysis SET energy=?2 WHERE track_id=?1")?;
+        for (i, (id, raw)) in rows.iter().enumerate() {
+            let pct = i as f64 / (n - 1.0);
+            let e = (1.0 + (0.5 * pct + 0.5 * raw) * 9.0)
+                .round()
+                .clamp(1.0, 10.0) as i64;
+            up.execute(params![id, e])?;
+        }
+    }
+    tx.commit()?;
+    Ok(rows.len())
 }
 
 pub fn is_current(conn: &Connection, id: i64) -> Result<bool> {
@@ -254,6 +281,7 @@ pub fn run_job(
             store(&conn, id, size, mtime, &res)?;
             jobs::tick(p, ok);
         }
+        rescale_energy(&conn)?;
         Ok(())
     })
 }

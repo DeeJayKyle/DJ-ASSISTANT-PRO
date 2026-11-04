@@ -338,6 +338,10 @@ ALTER TABLE track_user ADD COLUMN album TEXT;
 ALTER TABLE track_user ADD COLUMN original_year INTEGER CHECK (original_year IS NULL OR (original_year BETWEEN 1000 AND 9999));
 ALTER TABLE track_user ADD COLUMN record_label TEXT;
 "#,
+    // 3: library-relative energy
+    r#"
+ALTER TABLE analysis ADD COLUMN energy_raw REAL;
+"#,
 ];
 
 pub fn now_ms() -> i64 {
