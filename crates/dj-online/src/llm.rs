@@ -152,6 +152,131 @@ pub fn from_ollama(v: &Value, call_seq: &mut u64) -> Value {
     json!({"content": content, "stop_reason": stop, "model": v["model"]})
 }
 
+/// Messages-format conversation -> OpenAI chat-completions messages (tool ids kept, so
+/// each tool result answers the call that asked for it).
+pub fn to_openai_messages(system: &str, messages: &[Value]) -> Vec<Value> {
+    let mut out = vec![json!({"role": "system", "content": system})];
+    for m in messages {
+        let role = m["role"].as_str().unwrap_or("user");
+        let blocks: Vec<Value> = match &m["content"] {
+            Value::String(s) => vec![json!({"type": "text", "text": s})],
+            Value::Array(a) => a.clone(),
+            _ => vec![],
+        };
+        if role == "assistant" {
+            let text: Vec<&str> = blocks
+                .iter()
+                .filter(|b| b["type"] == "text")
+                .filter_map(|b| b["text"].as_str())
+                .collect();
+            let calls: Vec<Value> = blocks
+                .iter()
+                .filter(|b| b["type"] == "tool_use")
+                .map(|b| json!({"id": b["id"], "type": "function", "function": {"name": b["name"], "arguments": b["input"].to_string()}}))
+                .collect();
+            let mut msg = json!({"role": "assistant", "content": text.join("\n")});
+            if !calls.is_empty() {
+                if text.is_empty() {
+                    msg["content"] = Value::Null;
+                }
+                msg["tool_calls"] = json!(calls);
+            }
+            out.push(msg);
+        } else {
+            let mut text = vec![];
+            for b in &blocks {
+                match b["type"].as_str() {
+                    Some("tool_result") => {
+                        let content = match &b["content"] {
+                            Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        };
+                        out.push(json!({"role": "tool", "tool_call_id": b["tool_use_id"], "content": content}));
+                    }
+                    Some("text") => text.push(b["text"].as_str().unwrap_or_default().to_string()),
+                    _ => {}
+                }
+            }
+            if !text.is_empty() {
+                out.push(json!({"role": "user", "content": text.join("\n\n")}));
+            }
+        }
+    }
+    out
+}
+
+pub fn openai_body(model: &str, system: &str, tools: &[Value], messages: &[Value]) -> Value {
+    let mut b = json!({"model": model, "messages": to_openai_messages(system, messages)});
+    if !tools.is_empty() {
+        b["tools"] = json!(to_ollama_tools(tools));
+    }
+    b
+}
+
+/// OpenAI chat-completions reply -> Messages-format reply.
+pub fn from_openai(v: &Value, call_seq: &mut u64) -> Value {
+    let choice = &v["choices"][0];
+    let msg = &choice["message"];
+    let mut content = vec![];
+    if let Some(t) = msg["content"].as_str().filter(|t| !t.trim().is_empty()) {
+        content.push(json!({"type": "text", "text": t}));
+    }
+    let mut used_tool = false;
+    for c in msg["tool_calls"].as_array().into_iter().flatten() {
+        let f = &c["function"];
+        let mut args = match &f["arguments"] {
+            Value::String(s) => serde_json::from_str(s).unwrap_or(json!({})),
+            other => other.clone(),
+        };
+        if !args.is_object() {
+            args = json!({});
+        }
+        *call_seq += 1;
+        let id = c["id"]
+            .as_str()
+            .filter(|i| !i.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("call_{}", *call_seq));
+        content.push(json!({"type": "tool_use", "id": id, "name": f["name"], "input": args}));
+        used_tool = true;
+    }
+    let stop = if used_tool {
+        "tool_use"
+    } else if choice["finish_reason"] == "length" {
+        "max_tokens"
+    } else {
+        "end_turn"
+    };
+    json!({"content": content, "stop_reason": stop, "model": v["model"]})
+}
+
+pub fn openai_error(label: &str, status: u16, body: &Value) -> String {
+    let msg = body
+        .pointer("/error/message")
+        .or_else(|| body.pointer("/0/error/message"))
+        .and_then(|m| m.as_str())
+        .or_else(|| body["error"].as_str())
+        .unwrap_or("request failed");
+    match status {
+        401 | 403 => format!("{label} rejected the API key. Check it in Settings → AI assistant."),
+        429 => format!("{label}'s rate limit or credit was reached. Wait a moment, or check your plan. ({msg})"),
+        404 => format!("{label} doesn't have that model ({msg}). Pick another in Settings → AI assistant."),
+        500..=599 => format!("{label} is having trouble right now. Try again shortly. (HTTP {status})"),
+        _ => format!("{msg} (HTTP {status})"),
+    }
+}
+
+/// A service saying the chosen model can't call tools.
+pub fn openai_no_tools(status: u16, body: &Value) -> bool {
+    let m = body.to_string().to_ascii_lowercase();
+    (status == 400 || status == 404 || status == 422)
+        && m.contains("tool")
+        && (m.contains("not support")
+            || m.contains("unsupported")
+            || m.contains("not enabled")
+            || m.contains("not available"))
+}
+
 /// Ollama runs models with a small context window (often 4096 tokens) unless asked for more,
 /// and the app guide plus tools alone are several thousand tokens. Ask for enough room.
 pub fn ollama_body(
@@ -278,6 +403,50 @@ mod tests {
         assert_eq!(m[0].parameters, "7.2B");
         assert_eq!(m[0].size, 4_100_000_000);
         assert!(parse_ollama_tags(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn openai_round_trip_keeps_tool_ids() {
+        let conv = vec![
+            json!({"role": "user", "content": "show me house"}),
+            json!({"role": "assistant", "content": [{"type": "tool_use", "id": "call_9", "name": "search_tracks", "input": {"text": "house"}}]}),
+            json!({"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call_9", "content": "[]"}]}),
+        ];
+        let m = to_openai_messages("GUIDE", &conv);
+        assert_eq!(m[0]["role"], "system");
+        assert_eq!(m[2]["tool_calls"][0]["id"], "call_9");
+        assert_eq!(
+            m[2]["tool_calls"][0]["function"]["arguments"],
+            "{\"text\":\"house\"}"
+        );
+        assert!(m[2]["content"].is_null());
+        assert_eq!(m[3]["role"], "tool");
+        assert_eq!(m[3]["tool_call_id"], "call_9");
+        let mut seq = 0;
+        let r = from_openai(
+            &json!({"model": "gpt-x", "choices": [{"finish_reason": "tool_calls", "message": {"content": null,
+            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "search_tracks", "arguments": "{\"text\":\"afro\"}"}}]}}]}),
+            &mut seq,
+        );
+        assert_eq!(r["stop_reason"], "tool_use");
+        assert_eq!(r["content"][0]["id"], "call_1");
+        assert_eq!(r["content"][0]["input"]["text"], "afro");
+        let r = from_openai(
+            &json!({"choices": [{"finish_reason": "stop", "message": {"content": "Hi"}}]}),
+            &mut seq,
+        );
+        assert_eq!(r["stop_reason"], "end_turn");
+        assert_eq!(r["content"][0]["text"], "Hi");
+        assert!(openai_body("m", "s", &[], &conv).get("tools").is_none());
+        assert!(openai_error("OpenAI", 401, &json!({})).contains("OpenAI rejected the API key"));
+        assert!(openai_no_tools(
+            400,
+            &json!({"error": {"message": "This model does not support tools"}})
+        ));
+        assert!(!openai_no_tools(
+            400,
+            &json!({"error": {"message": "bad request"}})
+        ));
     }
 
     #[test]

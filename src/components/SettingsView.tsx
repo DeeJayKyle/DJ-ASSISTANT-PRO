@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isDesktop, openUrl, pickFile, pickFolder } from "../api";
-import type { AiStatus, ChangeLogEntry, Labels, Service, Settings } from "../types";
+import type { AiService, AiStatus, ChangeLogEntry, Labels, Service, Settings } from "../types";
 import { checkForUpdate, type UpdateInfo } from "../lib/updater";
 import { dateTime } from "../lib/format";
 import { BACKGROUNDS, PRESETS, type UiPrefs } from "../lib/theme";
@@ -234,12 +234,105 @@ function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => v
   );
 }
 
+/** Every AI the assistant can use, in one dropdown. */
+export function AiPicker({ st, onPick, online = false }: { st: AiStatus; onPick: (p: string) => void; online?: boolean }) {
+  return (
+    <select className="select" value={online && (st.provider === "off" || st.provider === "local") ? "" : st.provider} onChange={(e) => e.target.value && onPick(e.target.value)} aria-label={online ? "Online AI service" : "AI provider"}>
+      {online ? <option value="">Choose a service…</option> : <option value="off">Off (built-in assistant only)</option>}
+      <optgroup label="Free online (free API key, usage limits apply)">
+        {st.services.filter((s) => s.free).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+      </optgroup>
+      <optgroup label="Online (your own paid API key)">
+        <option value="claude">Claude (Anthropic)</option>
+        {st.services.filter((s) => !s.free).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+      </optgroup>
+      {!online && <optgroup label="On this computer (private)"><option value="local">Local model (Ollama)</option></optgroup>}
+    </select>
+  );
+}
+
+/** The Online services row for the AI assistant: pick the service, paste its key. */
+function OnlineAiCard({ toast, onChanged }: { toast: (m: string, e?: boolean) => void; onChanged: () => void }) {
+  const [st, setSt] = useState<AiStatus | null>(null);
+  const [key, setKey] = useState("");
+  const reload = () => api.aiStatus().then(setSt).catch(() => {});
+  useEffect(() => { reload(); const h = () => reload(); window.addEventListener("dj-ai-changed", h); return () => window.removeEventListener("dj-ai-changed", h); }, []);
+  if (!st) return null;
+  const online = st.provider !== "off" && st.provider !== "local";
+  const svc = st.services.find((x) => x.id === st.provider);
+  const secret = st.provider === "claude" ? "anthropic" : svc ? `ai_${svc.id}` : null;
+  const hasKey = st.provider === "claude" ? st.has_key : !!svc?.has_key;
+  const changed = () => { reload(); onChanged(); window.dispatchEvent(new Event("dj-ai-changed")); };
+  const act = (p: Promise<unknown>, msg?: string) => p.then(() => { if (msg) toast(msg); changed(); }).catch((e) => toast(e.message, true));
+  return (
+    <div className="col" style={{ gap: 6, marginTop: 6 }}>
+      <div className="row wrap" style={{ gap: 8 }}>
+        <div style={{ minWidth: 260 }}><AiPicker st={st} online onPick={(p) => act(api.setSetting("ai_provider", p))} /></div>
+        {online && secret && (
+          <form className="row" style={{ gap: 8, flex: 1 }} onSubmit={(e) => { e.preventDefault(); act(api.setSecret(secret, key.trim()), "Key saved to Credential Manager.").then(() => setKey("")); }}>
+            <input className="input" type="password" autoComplete="off" style={{ flex: 1, minWidth: 200 }} aria-label={`${st.label} API key`} placeholder={hasKey ? "Key saved — enter a new one to replace" : `Paste your ${st.label.split(/ — | \(/)[0]} API key`} value={key} onChange={(e) => setKey(e.target.value)} />
+            <button className="btn small" type="submit" disabled={!key.trim()}>Save key</button>
+            {hasKey && <button className="btn small ghost danger" type="button" onClick={() => act(api.deleteSecret(secret))}>Remove API key</button>}
+          </form>
+        )}
+      </div>
+      {online && <span className="small muted">Using <strong>{st.label}</strong>{st.model ? <> · {st.model}</> : null}. {st.ready ? "Ready." : st.reason} Change the model under AI assistant above.</span>}
+    </div>
+  );
+}
+
+/** Key, model and (for a custom server) address for an OpenAI-compatible service. */
+function OnlineService({ st, svc, run, toast }: { st: AiStatus; svc: AiService; run: (p: Promise<unknown>, msg?: string) => Promise<unknown>; toast: (m: string, e?: boolean) => void }) {
+  const [key, setKey] = useState("");
+  const [model, setModel] = useState(st.model);
+  const [url, setUrl] = useState(st.custom_url);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { setModel(st.model); setModels(null); }, [svc.id, st.model]);
+  const custom = svc.id === "custom";
+  const load = () => { setLoading(true); api.aiListModels().then((m) => { setModels(m); toast(`${m.length} models available.`); }).catch((e) => toast(e.message, true)).finally(() => setLoading(false)); };
+  const saveModel = (m: string) => { const v = m.trim(); if (v && v !== st.model) run(api.setSetting(`ai_model_${svc.id}`, v), `Using ${v}.`); };
+  return (
+    <div className="col" style={{ gap: 10 }}>
+      {custom && (
+        <form className="row wrap" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); run(api.setSetting("ai_custom_url", url.trim()), "Server address saved."); }}>
+          <input className="input mono" style={{ flex: 1, minWidth: 260 }} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… or http://127.0.0.1:1234/v1 (LM Studio, vLLM, LiteLLM…)" aria-label="Server address" />
+          <button className="btn" type="submit" disabled={!url.trim() || url.trim() === st.custom_url}>Save address</button>
+        </form>
+      )}
+      <form className="row wrap" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); run(api.setSecret(`ai_${svc.id}`, key.trim()), "API key saved in Windows Credential Manager.").then(() => setKey("")); }}>
+        <input className="input" style={{ flex: 1, minWidth: 220 }} type="password" autoComplete="off" placeholder={svc.has_key ? "Key saved — paste a new one to replace it" : `${svc.label.split(/ — | \(/)[0]} API key${custom ? " (if your server needs one)" : ""}`} value={key} onChange={(e) => setKey(e.target.value)} aria-label={`${svc.label} API key`} />
+        <button className="btn" type="submit" disabled={!key.trim()}>Save API key</button>
+        {svc.has_key && <button className="btn ghost" type="button" onClick={() => run(api.deleteSecret(`ai_${svc.id}`), "API key removed.")}>Remove API key</button>}
+      </form>
+      <div className="row wrap" style={{ gap: 8, alignItems: "flex-end" }}>
+        <label className="field" style={{ flex: 1, minWidth: 240 }}>
+          Model
+          {models && models.length ? (
+            <select className="select" value={models.includes(model) ? model : ""} onChange={(e) => { setModel(e.target.value); saveModel(e.target.value); }} aria-label="Model">
+              {!models.includes(model) && <option value="">{model || "Choose a model"}</option>}
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input className="input mono" value={model} onChange={(e) => setModel(e.target.value)} onBlur={() => saveModel(model)} onKeyDown={(e) => { if (e.key === "Enter") saveModel(model); }} placeholder={svc.model_hint || "model name"} aria-label="Model" />
+          )}
+        </label>
+        <button className="btn" type="button" disabled={loading || (!svc.has_key && !custom) || (custom && !st.custom_url)} onClick={load}><Icon name="refresh" size={14} /> {loading ? "Loading…" : "Load models"}</button>
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>
+        {svc.key_url ? <>Get a {svc.free ? "free " : ""}key at <a href="#" onClick={(e) => { e.preventDefault(); openUrl(svc.key_url).catch(() => {}); }}>{svc.key_url.replace(/^https:\/\//, "")}</a>{svc.free ? " — no card needed; free plans have rate limits." : " (usage is billed to that account)."} {svc.id === "openrouter" ? "Pick a model ending in “:free” to pay nothing. " : ""}</> : "Any server that speaks the OpenAI chat-completions API with tools. "}
+        The key is stored in Windows Credential Manager, never in DJ Assistant's files. Models that can't use tools still answer, but can't look things up.
+      </p>
+    </div>
+  );
+}
+
 function AiSettings({ toast, onProvider }: { toast: (m: string, e?: boolean) => void; onProvider: () => void }) {
   const [st, setSt] = useState<AiStatus | null>(null);
   const [key, setKey] = useState("");
   const [testing, setTesting] = useState<string | null>(null);
   const load = () => api.aiStatus().then(setSt).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); const h = () => load(); window.addEventListener("dj-ai-changed", h); return () => window.removeEventListener("dj-ai-changed", h); }, []);
   const changed = () => { load(); onProvider(); window.dispatchEvent(new Event("dj-ai-changed")); };
   const run = (p: Promise<unknown>, msg?: string) => p.then(() => { if (msg) toast(msg); changed(); }).catch((e) => toast(e.message, true));
   const test = async () => {
@@ -253,6 +346,7 @@ function AiSettings({ toast, onProvider }: { toast: (m: string, e?: boolean) => 
     }
   };
   if (!st) return null;
+  const svc = st.services.find((x) => x.id === st.provider);
   return (
     <section className="panel">
       <div className="row" style={{ marginBottom: 6 }}>
@@ -260,13 +354,10 @@ function AiSettings({ toast, onProvider }: { toast: (m: string, e?: boolean) => 
         {st.ready && <span className="badge q-lossless">Ready</span>}
       </div>
       <p className="small muted" style={{ marginTop: 0 }}>An AI model in the Assistant panel that already knows every feature of DJ Assistant. It looks things up in your library and proposes actions — creating crates, setting energy or genre, planning sets, starting scans — that run only when you press Run. It can never change, move or delete your music files or touch Serato.</p>
-      <div className="seg" role="group" aria-label="AI provider" style={{ marginBottom: 12 }}>
-        {(["off", "claude", "local"] as const).map((p) => (
-          <button key={p} aria-pressed={st.provider === p} onClick={() => run(api.setSetting("ai_provider", p))}>
-            {p === "off" ? "Off" : p === "claude" ? "Claude (online)" : "Local model (private)"}
-          </button>
-        ))}
-      </div>
+      <label className="field" style={{ maxWidth: 420, marginBottom: 12 }}>
+        Which AI to use
+        <AiPicker st={st} onPick={(p) => run(api.setSetting("ai_provider", p))} />
+      </label>
       {st.provider === "claude" && (
         <div className="col" style={{ gap: 10 }}>
           <label className="field">
@@ -283,6 +374,7 @@ function AiSettings({ toast, onProvider }: { toast: (m: string, e?: boolean) => 
           <p className="small muted" style={{ margin: 0 }}>Get a key at console.anthropic.com (usage is billed to your Anthropic account). The key is stored in Windows Credential Manager, never in DJ Assistant's files.</p>
         </div>
       )}
+      {svc && <OnlineService st={st} svc={svc} run={run} toast={toast} />}
       {st.provider === "local" && <LocalSetup toast={toast} onChanged={changed} />}
       <p className="small" style={{ marginBottom: 0 }}><strong>What is sent:</strong> <span className="muted">{st.sends}</span></p>
       {st.provider !== "off" && (
@@ -306,6 +398,8 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
   const [upd, setUpd] = useState<{ state: "idle" | "checking" | "none" | "available" | "installing" | "error"; info?: UpdateInfo; pct?: number | null; msg?: string }>({ state: "idle" });
   const load = () => { api.services().then(setServices); api.changeLog().then(setLog); api.labels().then(setLabels); };
   useEffect(load, []);
+  // the AI assistant's switch follows whichever service is chosen in the AI section
+  useEffect(() => { const h = () => api.services().then(setServices).catch(() => {}); window.addEventListener("dj-ai-changed", h); return () => window.removeEventListener("dj-ai-changed", h); }, []);
   const set = (key: keyof Settings, value: unknown) => api.setSetting(key, value).then(() => onChange({ ...settings, [key]: value } as Settings)).catch((e) => toast(e.message, true));
   const check = async () => {
     setUpd({ state: "checking" });
@@ -404,7 +498,8 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
               <div style={{ flex: 1 }}>
                 <strong>{s.name}</strong> <span className="small muted">— {s.provides}</span>
                 <div className="small"><span className="muted">Sends:</span> {s.sends}</div>
-                {s.needs_key && (
+                {s.id === "anthropic" && <OnlineAiCard toast={toast} onChanged={load} />}
+                {s.needs_key && s.id !== "anthropic" && (
                   <form className="row" style={{ marginTop: 6 }} onSubmit={(e) => { e.preventDefault(); api.setSecret(s.id, keys[s.id] ?? "").then(() => { toast("Key saved to Credential Manager."); setKeys({ ...keys, [s.id]: "" }); load(); }).catch((er) => toast(er.message, true)); }}>
                     <input className="input" type="password" autoComplete="off" style={{ width: 280 }} aria-label={`${s.name} API key`} placeholder={s.has_key ? "Key saved — enter a new one to replace" : "Paste your API key"} value={keys[s.id] ?? ""} onChange={(e) => setKeys({ ...keys, [s.id]: e.target.value })} />
                     <button className="btn small" type="submit" disabled={!(keys[s.id] ?? "").trim()}>Save key</button>
@@ -412,7 +507,7 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
                   </form>
                 )}
               </div>
-              <Toggle label={`Turn ${s.name} on`} checked={s.enabled} onChange={(v) => api.setService(s.id, v).then(load)} />
+              <Toggle label={`Turn ${s.name} on`} checked={s.enabled} onChange={(v) => api.setService(s.id, v).then(() => { load(); if (s.id === "anthropic") window.dispatchEvent(new Event("dj-ai-changed")); })} />
             </div>
           ))}
         </section>

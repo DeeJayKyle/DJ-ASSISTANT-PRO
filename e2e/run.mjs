@@ -398,7 +398,7 @@ await step("AI assistant: a local model server is scanned and any installed mode
   expect(!(await bridge("set_setting", { key: "ai_local_url", value: url })).error, "local url not accepted");
   await nav("Settings").click();
   await page.getByRole("heading", { name: "AI assistant", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Local model (private)" }).click();
+  await page.getByLabel("AI provider", { exact: true }).selectOption("local");
   await page.getByText("Found 3 models on this computer — pick any one:").waitFor();
   const group = page.getByRole("radiogroup", { name: "Installed local models" });
   expect(await group.getByRole("radio", { name: /nomic-embed-text/ }).isDisabled(), "embedding model should not be choosable");
@@ -413,16 +413,49 @@ await step("AI assistant: a local model server is scanned and any installed mode
   fake.close();
 });
 
+await step("AI assistant: any online AI can be chosen from a dropdown (OpenAI-compatible server, models loaded)", async () => {
+  const { createServer } = await import("node:http");
+  const fake = createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify(req.url === "/v1/models" ? { data: [{ id: "local-llama-8b" }, { id: "qwen3-14b" }] } : {}));
+  });
+  await new Promise((r) => fake.listen(0, "127.0.0.1", r));
+  const picker = page.getByLabel("AI provider", { exact: true });
+  const options = await picker.locator("option").allInnerTexts();
+  for (const want of ["Claude (Anthropic)", "OpenAI (ChatGPT)", "Google Gemini — free tier", "Groq — free tier", "GitHub Models — free with a GitHub account", "Mistral — free tier", "DeepSeek", "xAI (Grok)", "Local model (Ollama)"]) expect(options.includes(want), `${want} missing: ${options}`);
+  await picker.selectOption("gemini");
+  await page.getByLabel("Google Gemini — free tier API key").first().waitFor();
+  await page.getByText(/Get a free key at/).waitFor();
+  await page.getByText("Add the API key for this AI service").first().waitFor();
+  await picker.selectOption("custom");
+  await page.getByLabel("Server address").fill(`http://127.0.0.1:${fake.address().port}/v1`);
+  await page.getByRole("button", { name: "Save address" }).click();
+  await page.getByRole("button", { name: "Load models" }).click();
+  await page.getByText("2 models available.").waitFor();
+  await page.getByLabel("Model", { exact: true }).selectOption("qwen3-14b");
+  await page.getByText("Ready", { exact: true }).waitFor();
+  expect((await bridge("ai_status")).ok?.model === "qwen3-14b", "model not saved");
+  // The Online services card offers the same choice.
+  const card = page.getByLabel("Online AI service");
+  expect((await card.inputValue()) === "custom", "online card shows the chosen service");
+  await page.getByRole("switch", { name: "Turn AI assistant (online) on" }).or(page.getByLabel("Turn AI assistant (online) on")).first().waitFor();
+  const on = await page.getByLabel("Turn AI assistant (online) on").first().evaluate((el) => el.getAttribute("aria-checked") ?? String(el.checked));
+  expect(on === "true", `online switch should be on (${on})`);
+  await page.getByRole("heading", { name: "Online services" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(shots, "16-ai-services.png") });
+  fake.close();
+});
+
 await step("AI assistant: turn on Claude with a key (scripted model in tests)", async () => {
   await nav("Settings").click();
   await page.getByRole("heading", { name: "AI assistant", exact: true }).waitFor();
-  await page.getByRole("button", { name: "Claude (online)" }).click();
+  await page.getByLabel("AI provider", { exact: true }).selectOption("claude");
   await page.getByText(/Add your Anthropic API key/).first().waitFor();
-  await page.getByLabel("Anthropic API key").fill("sk-ant-e2e-demo");
+  await page.getByLabel("Anthropic API key").first().fill("sk-ant-e2e-demo");
   await page.getByRole("button", { name: "Save API key" }).click();
   await page.getByText("Ready", { exact: true }).waitFor();
   await page.getByText(/sent to Anthropic/).first().waitFor();
-  await page.getByRole("contentinfo").getByText(/AI assistant \(Claude\)/).waitFor();
+  await page.getByRole("contentinfo").getByText(/AI assistant \(online\)/).waitFor();
 });
 
 await step("AI assistant looks things up, filters the library and proposes a crate that runs only on approval", async () => {

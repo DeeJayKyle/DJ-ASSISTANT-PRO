@@ -165,6 +165,9 @@ impl dj_core::online::Online for DemoAi {
     fn llm_local_start(&self) -> Result<(), String> {
         self.1.llm_local_start()
     }
+    fn llm_list_models(&self, cfg: &dj_core::agent::LlmConfig) -> Result<Vec<String>, String> {
+        self.1.llm_list_models(cfg)
+    }
     fn llm_local_pull(
         &self,
         url: &str,

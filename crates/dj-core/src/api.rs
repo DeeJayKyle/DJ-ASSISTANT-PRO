@@ -482,8 +482,30 @@ impl App {
                     }
                     "ai_provider" => {
                         let v = value.as_str().unwrap_or("");
-                        if !["off", "claude", "local"].contains(&v) {
-                            return invalid("AI provider must be off, claude or local");
+                        if !crate::agent::is_provider(v) {
+                            return invalid("unknown AI provider");
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                        // remembered so the Online services switch turns the same one back on
+                        if v != "off" && v != "local" {
+                            db::set_setting(&conn, "ai_online_last", v)?;
+                        }
+                    }
+                    k if k.starts_with("ai_model_")
+                        && crate::agent::ai_service(&k["ai_model_".len()..]).is_some() =>
+                    {
+                        let v = value.as_str().unwrap_or("").trim();
+                        if !crate::agent::valid_model_name(v) {
+                            return invalid(
+                                "that doesn't look like a model name (e.g. gpt-4.1-mini)",
+                            );
+                        }
+                        db::set_setting(&conn, &key, v)?;
+                    }
+                    "ai_custom_url" => {
+                        let v = value.as_str().unwrap_or("").trim().trim_end_matches('/');
+                        if !crate::agent::valid_custom_url(v) {
+                            return invalid("enter an https:// address, or http:// on this computer (e.g. http://127.0.0.1:1234/v1)");
                         }
                         db::set_setting(&conn, &key, v)?;
                     }

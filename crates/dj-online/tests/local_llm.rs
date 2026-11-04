@@ -61,6 +61,8 @@ fn local_model_chat_and_model_list() {
         provider: "local".into(),
         model: "qwen2.5:7b".into(),
         api_key: None,
+        base_url: String::new(),
+        label: "Ollama".into(),
         local_url: url.clone(),
     };
     let tools = dj_core::agent::tool_specs();
@@ -208,6 +210,8 @@ fn models_without_tools_still_answer() {
         provider: "local".into(),
         model: "gemma2:2b".into(),
         api_key: None,
+        base_url: String::new(),
+        label: "Ollama".into(),
         local_url: url,
     };
     let r = http
@@ -241,6 +245,8 @@ fn asks_for_a_bigger_context_when_the_request_does_not_fit() {
         provider: "local".into(),
         model: "dj-assistant-brain:latest".into(),
         api_key: None,
+        base_url: String::new(),
+        label: "Ollama".into(),
         local_url: url,
     };
     let tools = dj_core::agent::tool_specs();
@@ -261,4 +267,63 @@ fn asks_for_a_bigger_context_when_the_request_does_not_fit() {
         "retried with a window that fits"
     );
     assert!(s[1].1.get("tools").is_some(), "tools are kept");
+}
+
+#[test]
+fn openai_compatible_services_chat_with_tools_and_list_models() {
+    let (url, seen) = serve(vec![
+        (
+            200,
+            json!({"model": "gpt-x", "choices": [{"finish_reason": "tool_calls", "message": {"role": "assistant", "content": null,
+                "tool_calls": [{"id": "call_abc", "type": "function", "function": {"name": "search_tracks", "arguments": "{\"text\":\"house\"}"}}]}}]}),
+        ),
+        (
+            401,
+            json!({"error": {"message": "Incorrect API key provided"}}),
+        ),
+        (
+            200,
+            json!({"data": [{"id": "gpt-x"}, {"id": "models/gemini-pro"}, {"id": "gpt-x"}]}),
+        ),
+    ]);
+    let http = dj_online::Http::new();
+    let cfg = LlmConfig {
+        provider: "openai".into(),
+        model: "gpt-x".into(),
+        api_key: Some("sk-test".into()),
+        local_url: String::new(),
+        base_url: format!("{url}/v1"),
+        label: "OpenAI (ChatGPT)".into(),
+    };
+    let tools = dj_core::agent::tool_specs();
+    let r = http
+        .llm_chat(
+            &cfg,
+            "GUIDE",
+            &tools,
+            &[json!({"role": "user", "content": "show me house"})],
+        )
+        .unwrap();
+    assert_eq!(r["stop_reason"], "tool_use");
+    assert_eq!(r["content"][0]["id"], "call_abc");
+    assert_eq!(r["content"][0]["input"]["text"], "house");
+    let e = http
+        .llm_chat(
+            &cfg,
+            "GUIDE",
+            &tools,
+            &[json!({"role": "user", "content": "x"})],
+        )
+        .unwrap_err();
+    assert!(e.contains("OpenAI (ChatGPT) rejected the API key"), "{e}");
+    assert_eq!(
+        http.llm_list_models(&cfg).unwrap(),
+        vec!["gemini-pro", "gpt-x"]
+    );
+    let s = seen.lock().unwrap();
+    assert_eq!(s[0].0, "/v1/chat/completions");
+    assert_eq!(s[0].1["model"], "gpt-x");
+    assert_eq!(s[0].1["messages"][0]["role"], "system");
+    assert_eq!(s[0].1["tools"].as_array().unwrap().len(), tools.len());
+    assert_eq!(s[2].0, "/v1/models");
 }

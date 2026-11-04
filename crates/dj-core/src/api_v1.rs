@@ -245,6 +245,14 @@ impl App {
                 })?;
                 json!({"started": true})
             }
+            "ai_list_models" => {
+                // the models an online AI service offers with the saved key
+                let cfg = crate::agent::config(self)?;
+                if cfg.base_url.is_empty() {
+                    return invalid("choose an online AI service first");
+                }
+                json!(self.online.llm_list_models(&cfg).map_err(Error::Invalid)?)
+            }
             "ai_local_models" => {
                 let url = crate::agent::config(self)?.local_url;
                 json!(self.online.llm_local_models(&url).map_err(Error::Invalid)?)
@@ -262,8 +270,10 @@ impl App {
                     } else {
                         suggest::service_enabled(&conn, id)?
                     };
+                    let provider = db::get_setting(&conn, "ai_provider")?;
                     let enabled = if *id == "anthropic" {
-                        db::get_setting(&conn, "ai_provider")?.as_deref() == Some("claude")
+                        // the online AI assistant, whichever service it uses
+                        matches!(provider.as_deref(), Some(p) if p != "off" && p != "local")
                     } else {
                         enabled
                     };
@@ -279,11 +289,11 @@ impl App {
                     return invalid("unknown service");
                 }
                 if svc == "anthropic" {
-                    db::set_setting(
-                        &lock(&self.conn),
-                        "ai_provider",
-                        if on { "claude" } else { "off" },
-                    )?;
+                    let conn = lock(&self.conn);
+                    let last = db::get_setting(&conn, "ai_online_last")?
+                        .filter(|p| crate::agent::is_provider(p))
+                        .unwrap_or_else(|| "claude".into());
+                    db::set_setting(&conn, "ai_provider", if on { &last } else { "off" })?;
                     return Ok(json!({"ok": true}));
                 }
                 let key = if svc == "updates" {
@@ -297,7 +307,10 @@ impl App {
             "set_secret" => {
                 let svc: String = arg(a, "service")?;
                 let v: String = arg(a, "value")?;
-                if !["acoustid", "lastfm", "anthropic"].contains(&svc.as_str()) {
+                let ai_key = svc
+                    .strip_prefix("ai_")
+                    .is_some_and(|id| crate::agent::ai_service(id).is_some());
+                if !["acoustid", "lastfm", "anthropic"].contains(&svc.as_str()) && !ai_key {
                     return invalid("unknown service");
                 }
                 if svc == "anthropic" && !v.trim().starts_with("sk-ant-") {

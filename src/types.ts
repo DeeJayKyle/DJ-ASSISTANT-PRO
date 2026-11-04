@@ -263,8 +263,13 @@ export interface AiTurn {
   provider: string;
 }
 
+export interface AiService { id: string; label: string; key_url: string; model_hint: string; has_key: boolean; free: boolean }
+
 export interface AiStatus {
-  provider: "off" | "claude" | "local";
+  provider: string;
+  label: string;
+  services: AiService[];
+  custom_url: string;
   model: string;
   ready: boolean;
   reason: string | null;

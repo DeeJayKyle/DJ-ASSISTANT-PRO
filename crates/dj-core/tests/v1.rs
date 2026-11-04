@@ -2439,3 +2439,118 @@ fn crates_export_to_serato_rekordbox_and_folders() {
     // Sources untouched.
     assert_eq!(before, snapshot(&e.music));
 }
+
+#[test]
+fn any_online_ai_service_can_be_chosen() {
+    let e = env();
+    let app = app_with_fake(&e);
+    let st = call(&app, "ai_status", json!({}));
+    let ids: Vec<&str> = st["services"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s["id"].as_str())
+        .collect();
+    for want in [
+        "openai",
+        "gemini",
+        "groq",
+        "mistral",
+        "deepseek",
+        "xai",
+        "openrouter",
+        "custom",
+    ] {
+        assert!(ids.contains(&want), "{want} missing from {ids:?}");
+    }
+    // OpenAI: needs its own key; the suggested model is used until one is picked.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_provider", "value": "openai"}),
+    );
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(st["ready"], false);
+    assert!(st["reason"].as_str().unwrap().contains("API key"));
+    assert!(st["sends"].as_str().unwrap().contains("OpenAI"));
+    call(
+        &app,
+        "set_secret",
+        json!({"service": "ai_openai", "value": "sk-proj-test"}),
+    );
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_model_openai", "value": "gpt-4.1"}),
+    );
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(st["ready"], true, "{st}");
+    assert_eq!(st["model"], "gpt-4.1");
+    assert!(app
+        .dispatch(
+            "set_setting",
+            json!({"key": "ai_model_openai", "value": "bad model name!"})
+        )
+        .is_err());
+    assert!(app
+        .dispatch("set_secret", json!({"service": "ai_nope", "value": "k"}))
+        .is_err());
+    assert!(app
+        .dispatch(
+            "set_setting",
+            json!({"key": "ai_provider", "value": "nope"})
+        )
+        .is_err());
+    // The Online services switch remembers the chosen service.
+    call(
+        &app,
+        "set_service",
+        json!({"service": "anthropic", "enabled": false}),
+    );
+    assert_eq!(call(&app, "ai_status", json!({}))["provider"], "off");
+    call(
+        &app,
+        "set_service",
+        json!({"service": "anthropic", "enabled": true}),
+    );
+    assert_eq!(call(&app, "ai_status", json!({}))["provider"], "openai");
+    let svc = call(&app, "services", json!({}));
+    assert!(svc
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["id"] == "anthropic" && s["enabled"] == true));
+    // Custom servers: https anywhere, http only on this computer; no key needed.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_provider", "value": "custom"}),
+    );
+    assert_eq!(call(&app, "ai_status", json!({}))["ready"], false);
+    assert!(app
+        .dispatch(
+            "set_setting",
+            json!({"key": "ai_custom_url", "value": "http://example.com/v1"})
+        )
+        .is_err());
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_custom_url", "value": "http://127.0.0.1:1234/v1"}),
+    );
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_model_custom", "value": "qwen/qwen3-8b"}),
+    );
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(st["ready"], true, "{st}");
+    assert_eq!(st["custom_url"], "http://127.0.0.1:1234/v1");
+    // Claude still works as before.
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_provider", "value": "claude"}),
+    );
+    assert_eq!(call(&app, "ai_status", json!({}))["provider"], "claude");
+}

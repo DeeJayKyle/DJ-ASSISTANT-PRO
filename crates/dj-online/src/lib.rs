@@ -392,8 +392,72 @@ impl Online for Http {
                 let mut seq = self.call_seq.lock().unwrap_or_else(|e| e.into_inner());
                 Ok(llm::from_ollama(&v, &mut seq))
             }
+            _ if !cfg.base_url.is_empty() => {
+                // OpenAI-compatible service (OpenAI, Gemini, Groq, Mistral, DeepSeek, xAI…)
+                let url = format!("{}/chat/completions", cfg.base_url.trim_end_matches('/'));
+                let send = |tools: &[Value]| -> Result<(u16, Value), String> {
+                    let mut req = self
+                        .ai_agent
+                        .post(&url)
+                        .header("content-type", "application/json");
+                    if let Some(k) = cfg.api_key.as_deref() {
+                        req = req.header("authorization", &format!("Bearer {k}"));
+                    }
+                    if cfg.provider == "openrouter" {
+                        req = req.header("x-title", "DJ Assistant");
+                    }
+                    let mut res = req
+                        .send_json(llm::openai_body(&cfg.model, system, tools, messages))
+                        .map_err(|e| format!("{} could not be reached: {e}", cfg.label))?;
+                    let status = res.status().as_u16();
+                    let v: Value = res
+                        .body_mut()
+                        .with_config()
+                        .limit(32 * 1024 * 1024)
+                        .read_json()
+                        .unwrap_or(Value::Null);
+                    Ok((status, v))
+                };
+                let (mut status, mut v) = send(tools)?;
+                if !tools.is_empty() && llm::openai_no_tools(status, &v) {
+                    (status, v) = send(&[])?;
+                }
+                if status >= 400 {
+                    return Err(llm::openai_error(&cfg.label, status, &v));
+                }
+                let mut seq = self.call_seq.lock().unwrap_or_else(|e| e.into_inner());
+                Ok(llm::from_openai(&v, &mut seq))
+            }
             other => Err(format!("unknown AI provider '{other}'")),
         }
+    }
+
+    fn llm_list_models(&self, cfg: &LlmConfig) -> Result<Vec<String>, String> {
+        let mut req = self
+            .ai_agent
+            .get(&format!("{}/models", cfg.base_url.trim_end_matches('/')));
+        if let Some(k) = cfg.api_key.as_deref() {
+            req = req.header("authorization", &format!("Bearer {k}"));
+        }
+        let mut res = req
+            .call()
+            .map_err(|e| format!("{} could not be reached: {e}", cfg.label))?;
+        let status = res.status().as_u16();
+        let v: Value = res.body_mut().read_json().unwrap_or(Value::Null);
+        if status >= 400 {
+            return Err(llm::openai_error(&cfg.label, status, &v));
+        }
+        let mut ids: Vec<String> = v["data"]
+            .as_array()
+            .or(v["models"].as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|m| m["id"].as_str().or(m["name"].as_str()))
+            .map(|id| id.trim_start_matches("models/").to_string())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
     }
 
     fn llm_local_models(&self, url: &str) -> Result<Vec<String>, String> {

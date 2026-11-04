@@ -226,7 +226,7 @@ export function ChatPanel({ mode, setMode, onApply, onNavigate, onUi, onOpenSett
   };
 
   const palette = input.startsWith("/") && !input.includes(" ") ? COMMANDS.filter((c) => c.cmd.startsWith(input.toLowerCase())) : [];
-  const providerLabel = ai?.provider === "claude" ? ai.claude_models.find((m) => m.id === ai.model)?.label.split(" — ")[0] ?? ai.model : ai?.provider === "local" ? `${ai.model} (on this computer)` : "";
+  const providerLabel = ai?.provider === "claude" ? ai.claude_models.find((m) => m.id === ai.model)?.label.split(" — ")[0] ?? ai.model : ai?.provider === "local" ? `${ai.model} (on this computer)` : ai && ai.provider !== "off" ? `${ai.model} · ${ai.label.split(/ — | \(/)[0]}` : "";
 
   return (
     <aside className="chat" aria-label="Assistant">

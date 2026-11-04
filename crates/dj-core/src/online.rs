@@ -78,6 +78,10 @@ pub trait Online: Send + Sync {
     ) -> Result<serde_json::Value, String> {
         Err("AI models are not available in this build".into())
     }
+    /// Models an OpenAI-compatible service offers (GET /models with the key).
+    fn llm_list_models(&self, _cfg: &crate::agent::LlmConfig) -> Result<Vec<String>, String> {
+        Err("AI models are not available in this build".into())
+    }
     /// Models installed in the local model server (Ollama).
     fn llm_local_models(&self, _url: &str) -> Result<Vec<String>, String> {
         Err("AI models are not available in this build".into())
@@ -195,9 +199,9 @@ pub const SERVICES: &[(&str, &str, &str, &str)] = &[
     ),
     (
         "anthropic",
-        "AI assistant (Claude)",
-        "Answers questions about your library and the app, and proposes actions you approve.",
-        "Your messages to the assistant and the catalogue details its tools look up (titles, artists, genres, ratings and similar). Never audio, file paths or personal documents. Needs your Anthropic API key.",
+        "AI assistant (online)",
+        "Answers questions about your library and the app, and proposes actions you approve. Choose Claude, ChatGPT, Gemini, Grok, Mistral, DeepSeek and more.",
+        "Your messages to the assistant and the catalogue details its tools look up (titles, artists, genres, ratings and similar), to the AI service you choose. Never audio, file paths or personal documents. Needs that service's API key.",
     ),
     (
         "updates",

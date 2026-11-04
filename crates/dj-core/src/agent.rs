@@ -29,13 +29,162 @@ const MAX_RESULT_CHARS: usize = 24_000;
 /// Which model to use and how to reach it.
 #[derive(Debug, Clone, Serialize)]
 pub struct LlmConfig {
-    /// "claude" or "local".
+    /// "claude", "local", or one of the OpenAI-compatible services in `AI_SERVICES`.
     pub provider: String,
     pub model: String,
     #[serde(skip)]
     pub api_key: Option<String>,
     /// Base URL of the local model server (Ollama).
     pub local_url: String,
+    /// OpenAI-compatible services: the API base (…/v1). Empty for Claude and local.
+    #[serde(default)]
+    pub base_url: String,
+    /// The service's name, for messages ("OpenAI rejected the API key").
+    #[serde(default)]
+    pub label: String,
+}
+
+/// Online AI services that speak the OpenAI chat-completions API (with tools):
+/// (id, name, API base, where to get a key, a suggested model).
+pub const AI_SERVICES: &[(&str, &str, &str, &str, &str)] = &[
+    // Free tiers: sign up, create a key, no card needed (limits apply).
+    (
+        "gemini",
+        "Google Gemini — free tier",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "https://aistudio.google.com/app/apikey",
+        "gemini-2.5-flash",
+    ),
+    (
+        "groq",
+        "Groq — free tier",
+        "https://api.groq.com/openai/v1",
+        "https://console.groq.com/keys",
+        "llama-3.3-70b-versatile",
+    ),
+    (
+        "openrouter",
+        "OpenRouter — free models (\":free\")",
+        "https://openrouter.ai/api/v1",
+        "https://openrouter.ai/keys",
+        "meta-llama/llama-3.3-70b-instruct:free",
+    ),
+    (
+        "github",
+        "GitHub Models — free with a GitHub account",
+        "https://models.github.ai/inference",
+        "https://github.com/settings/personal-access-tokens",
+        "openai/gpt-4.1-mini",
+    ),
+    (
+        "cerebras",
+        "Cerebras — free tier",
+        "https://api.cerebras.ai/v1",
+        "https://cloud.cerebras.ai",
+        "llama-3.3-70b",
+    ),
+    (
+        "mistral",
+        "Mistral — free tier",
+        "https://api.mistral.ai/v1",
+        "https://console.mistral.ai/api-keys",
+        "mistral-small-latest",
+    ),
+    (
+        "sambanova",
+        "SambaNova — free tier",
+        "https://api.sambanova.ai/v1",
+        "https://cloud.sambanova.ai/apis",
+        "Meta-Llama-3.3-70B-Instruct",
+    ),
+    (
+        "huggingface",
+        "Hugging Face — free monthly credits",
+        "https://router.huggingface.co/v1",
+        "https://huggingface.co/settings/tokens",
+        "meta-llama/Llama-3.3-70B-Instruct",
+    ),
+    // Paid (billed to your account).
+    (
+        "openai",
+        "OpenAI (ChatGPT)",
+        "https://api.openai.com/v1",
+        "https://platform.openai.com/api-keys",
+        "gpt-4.1-mini",
+    ),
+    (
+        "deepseek",
+        "DeepSeek",
+        "https://api.deepseek.com/v1",
+        "https://platform.deepseek.com/api_keys",
+        "deepseek-chat",
+    ),
+    (
+        "xai",
+        "xAI (Grok)",
+        "https://api.x.ai/v1",
+        "https://console.x.ai",
+        "grok-3",
+    ),
+    (
+        "together",
+        "Together AI",
+        "https://api.together.xyz/v1",
+        "https://api.together.xyz/settings/api-keys",
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    ),
+    ("custom", "Other (OpenAI-compatible server)", "", "", ""),
+];
+
+/// Services in `AI_SERVICES` with a free tier.
+pub const FREE_AI_SERVICES: &[&str] = &[
+    "gemini",
+    "groq",
+    "openrouter",
+    "github",
+    "cerebras",
+    "mistral",
+    "sambanova",
+    "huggingface",
+];
+
+pub fn ai_service(
+    id: &str,
+) -> Option<&'static (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+)> {
+    AI_SERVICES.iter().find(|s| s.0 == id)
+}
+
+/// Every provider the assistant can use.
+pub fn is_provider(id: &str) -> bool {
+    ["off", "claude", "local"].contains(&id) || ai_service(id).is_some()
+}
+
+/// A model name a user typed: letters, digits and : . _ - / @ only.
+pub fn valid_model_name(v: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= 120
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || ":._-/@".contains(c))
+}
+
+/// A custom API base: https anywhere, or plain http only on this computer (LM Studio, vLLM…).
+pub fn valid_custom_url(v: &str) -> bool {
+    let v = v.trim_end_matches('/');
+    if v.len() > 300 || v.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
+    }
+    if let Some(rest) = v.strip_prefix("https://") {
+        return !rest.is_empty() && !rest.starts_with('/');
+    }
+    ["http://127.0.0.1:", "http://localhost:", "http://[::1]:"]
+        .iter()
+        .any(|p| v.starts_with(p) && v.len() > p.len())
 }
 
 pub const CLAUDE_MODELS: &[(&str, &str)] = &[
@@ -644,23 +793,39 @@ pub struct Turn {
 pub fn config(app: &App) -> Result<LlmConfig> {
     let conn = crate::api::lock(&app.conn);
     let provider = db::get_setting(&conn, "ai_provider")?.unwrap_or_else(|| "off".into());
+    let svc = ai_service(&provider);
     let model = if provider == "local" {
         db::get_setting(&conn, "ai_local_model")?.unwrap_or_else(|| DEFAULT_LOCAL_MODEL.into())
+    } else if let Some(s) = svc {
+        db::get_setting(&conn, &format!("ai_model_{}", s.0))?.unwrap_or_else(|| s.4.into())
     } else {
         db::get_setting(&conn, "ai_model")?.unwrap_or_else(|| CLAUDE_MODELS[0].0.into())
     };
     let local_url =
         db::get_setting(&conn, "ai_local_url")?.unwrap_or_else(|| DEFAULT_LOCAL_URL.into());
+    let base_url = match svc {
+        Some(("custom", ..)) => db::get_setting(&conn, "ai_custom_url")?.unwrap_or_default(),
+        Some(s) => s.2.to_string(),
+        None => String::new(),
+    };
     drop(conn);
     Ok(LlmConfig {
         api_key: if provider == "claude" {
             app.secrets.get("anthropic")
+        } else if svc.is_some() {
+            app.secrets.get(&format!("ai_{provider}"))
         } else {
             None
+        },
+        label: match provider.as_str() {
+            "claude" => "Anthropic".into(),
+            "local" => "Ollama".into(),
+            _ => svc.map(|s| s.1.to_string()).unwrap_or_default(),
         },
         provider,
         model,
         local_url,
+        base_url,
     })
 }
 
@@ -686,20 +851,43 @@ pub fn status(app: &App) -> Result<Value> {
             }
         }
         "claude" => (true, None),
+        "custom" if c.base_url.is_empty() => (
+            false,
+            Some("Enter your server's address in Settings → AI assistant."),
+        ),
+        "custom" => (true, None),
+        p if ai_service(p).is_some() && c.api_key.is_none() => (
+            false,
+            Some("Add the API key for this AI service in Settings → AI assistant."),
+        ),
+        p if ai_service(p).is_some() => (true, None),
         _ => (
             false,
             Some("The AI assistant is off. The built-in rule-based assistant answers instead."),
         ),
     };
     let sends = match c.provider.as_str() {
-        "claude" => "Your messages to the assistant and the catalogue details its tools look up (titles, artists, genres, ratings and similar) are sent to Anthropic to answer. Never audio, file paths or personal documents.",
-        "local" => "Nothing leaves this computer: the model runs locally (Ollama).",
-        _ => "Nothing — the AI assistant is off.",
+        "claude" => "Your messages to the assistant and the catalogue details its tools look up (titles, artists, genres, ratings and similar) are sent to Anthropic to answer. Never audio, file paths or personal documents.".to_string(),
+        "local" => "Nothing leaves this computer: the model runs locally (Ollama).".to_string(),
+        p if ai_service(p).is_some() => format!("Your messages to the assistant and the catalogue details its tools look up (titles, artists, genres, ratings and similar) are sent to {} to answer. Never audio, file paths or personal documents.", if p == "custom" { "the server you entered" } else { c.label.as_str() }),
+        _ => "Nothing — the AI assistant is off.".to_string(),
+    };
+    let services: Vec<Value> = AI_SERVICES
+        .iter()
+        .map(|s| {
+            json!({"id": s.0, "label": s.1, "key_url": s.3, "model_hint": s.4, "free": FREE_AI_SERVICES.contains(&s.0),
+            "has_key": app.secrets.get(&format!("ai_{}", s.0)).is_some()})
+        })
+        .collect();
+    let custom_url = {
+        let conn = crate::api::lock(&app.conn);
+        db::get_setting(&conn, "ai_custom_url")?.unwrap_or_default()
     };
     Ok(
         json!({"provider": c.provider, "model": c.model, "ready": ready, "reason": reason, "sends": sends,
         "local_url": c.local_url, "has_key": app.secrets.get("anthropic").is_some(), "claude_models": CLAUDE_MODELS.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
-        "default_local_model": DEFAULT_LOCAL_MODEL}),
+        "default_local_model": DEFAULT_LOCAL_MODEL, "services": services, "custom_url": custom_url,
+        "label": c.label}),
     )
 }
 

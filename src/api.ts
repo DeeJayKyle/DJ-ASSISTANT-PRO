@@ -151,6 +151,7 @@ export const api = {
   aiConfirm: (conversation_id: string, decisions: Record<string, boolean>) => call<AiTurn>("ai_confirm", { conversation_id, decisions }),
   aiReset: (conversation_id: string) => call("ai_reset", { conversation_id }),
   aiLocalModels: () => call<string[]>("ai_local_models"),
+  aiListModels: () => call<string[]>("ai_list_models"),
   aiLocalSetup: () => call<any>("ai_local_setup"), // eslint-disable-line @typescript-eslint/no-explicit-any
   aiLocalStart: () => call<{ running: boolean }>("ai_local_start"),
   aiLocalPull: (model?: string) => call<{ started: boolean }>("ai_local_pull", { model: model ?? null }),
