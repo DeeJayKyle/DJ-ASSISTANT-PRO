@@ -10,6 +10,7 @@ export function CrateDialog({
   initial,
   initialRules,
   fields,
+  crates = [],
   onClose,
   onSaved,
   onDeleted,
@@ -17,6 +18,7 @@ export function CrateDialog({
   initial: Crate | null;
   initialRules?: RuleSet | null;
   fields: FieldInfo[];
+  crates?: Crate[];
   onClose: () => void;
   onSaved: (c: Crate) => void;
   onDeleted: () => void;
@@ -25,6 +27,7 @@ export function CrateDialog({
   const [kind, setKind] = useState<"manual" | "smart">(initial?.kind ?? (initialRules ? "smart" : "manual"));
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
   const [category, setCategory] = useState(initial?.category ?? "");
+  const [parent, setParent] = useState<number | null>(initial?.parent_id ?? null);
   const [rules, setRules] = useState<RuleSet>(initial?.rules ?? initialRules ?? emptyRuleSet());
   const [preview, setPreview] = useState<{ total: number; sample: TrackRow[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +53,7 @@ export function CrateDialog({
 
   const save = async () => {
     setError(null);
-    const input = { name, kind, color, category: category || null, rules: kind === "smart" ? clean : null };
+    const input = { name, kind, color, category: category || null, parent_id: parent, rules: kind === "smart" ? clean : null };
     try {
       const c = initial ? await api.updateCrate(initial.id, input) : await api.createCrate(input);
       onSaved(c);
@@ -94,6 +97,13 @@ export function CrateDialog({
         <label className="field" style={{ flex: 2, minWidth: 220 }}>
           Name
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Afrobeats 2010s peak time" maxLength={120} />
+        </label>
+        <label className="field" style={{ flex: 1, minWidth: 150 }}>
+          Inside folder (optional)
+          <select className="select" value={parent ?? ""} onChange={(e) => setParent(Number(e.target.value) || null)}>
+            <option value="">Top level</option>
+            {crates.filter((c) => c.id !== initial?.id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
         </label>
         <label className="field" style={{ flex: 1, minWidth: 150 }}>
           Category (optional)

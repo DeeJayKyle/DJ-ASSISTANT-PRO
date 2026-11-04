@@ -72,7 +72,7 @@ export function DuplicatesView({ version, toast }: { version: number; toast: (m:
       </div>
       <div className="view-body">
         {hash?.state === "running" && (
-          <div className="panel" style={{ marginBottom: 14 }} aria-live="polite">
+          <div className="panel beam" style={{ marginBottom: 14 }} aria-live="polite">
             <div className="row" style={{ marginBottom: 8 }}>
               <strong>Reading files to compare contents…</strong>
               <span className="muted small">
@@ -111,7 +111,7 @@ export function DuplicatesView({ version, toast }: { version: number; toast: (m:
           </div>
         )}
         {shown.map((g) => (
-          <article key={g.key} className="dup-group" aria-label={`${KIND_LABEL[g.kind]} group`}>
+          <article key={g.key} className="card dup-group" aria-label={`${KIND_LABEL[g.kind]} group`}>
             <div className="dup-head">
               <span className={`badge kind-${g.kind}`}>{KIND_LABEL[g.kind]}</span>
               <p style={{ flex: 1 }}>{g.reason}</p>

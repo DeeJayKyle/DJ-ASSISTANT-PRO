@@ -22,7 +22,7 @@ export function HealthView({ version, onOpen }: { version: number; onOpen: (item
       <div className="view-body">
         <div className="grid-cards">
           {h.items.map((it) => (
-            <button key={it.id} className={`health-card${it.count === 0 ? " zero" : warn.has(it.id) ? " warn" : ""}`} onClick={() => onOpen(it)} disabled={it.count === 0} aria-label={`${it.label}: ${it.count}. Open in library`}>
+            <button key={it.id} className={`card health-card${it.count === 0 ? " zero" : warn.has(it.id) ? " warn" : ""}`} onClick={() => onOpen(it)} disabled={it.count === 0} aria-label={`${it.label}: ${it.count}. Open in library`}>
               <span className="n">{it.count.toLocaleString()}</span>
               <strong>{it.label}</strong>
               <p>{it.explanation}</p>

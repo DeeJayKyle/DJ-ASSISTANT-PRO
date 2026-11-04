@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { AssistantReply, Crate, FieldInfo, HealthItem, RuleSet, ScanProgress, Settings, Stats } from "./types";
+import type { AssistantReply, Crate, FieldInfo, Health, HealthItem, JobState, Root, RuleSet, ScanProgress, SetParams, Settings, Stats } from "./types";
 import { Sidebar, type View } from "./components/Sidebar";
-import { LibraryView, emptyLibraryState, type LibraryState } from "./components/LibraryView";
+import { TitleBar } from "./components/TitleBar";
+import { LibraryView, addFoldersFlow, emptyLibraryState, type LibraryState } from "./components/LibraryView";
 import { HealthView } from "./components/HealthView";
 import { DuplicatesView } from "./components/DuplicatesView";
-import { FoldersView } from "./components/FoldersView";
+import { ActivityView } from "./components/ActivityView";
+import { CratesView } from "./components/CratesView";
+import { SuggestionsView } from "./components/SuggestionsView";
+import { DiscoveryView } from "./components/DiscoveryView";
+import { SetStudioView } from "./components/SetStudioView";
+import { GigView } from "./components/GigView";
+import { GigPackView } from "./components/GigPackView";
+import { FilesView } from "./components/FilesView";
 import { SettingsView, SAFETY_POINTS } from "./components/SettingsView";
-import { RoadmapView } from "./components/RoadmapView";
 import { ChatPanel } from "./components/ChatPanel";
 import { StatusBar } from "./components/StatusBar";
 import { CrateDialog } from "./components/CrateDialog";
 import { Dialog } from "./components/ui";
 import { Icon } from "./components/Icon";
 import { emptyRuleSet } from "./lib/rules";
+import { checkForUpdate, type UpdateInfo } from "./lib/updater";
 
 type ChatMode = "open" | "full" | "hidden";
 
@@ -23,27 +31,32 @@ export default function App() {
   const [info, setInfo] = useState<{ version: string; db_path: string } | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [crates, setCrates] = useState<Crate[]>([]);
+  const [roots, setRoots] = useState<Root[]>([]);
   const [fields, setFields] = useState<FieldInfo[]>([]);
   const [scan, setScan] = useState<ScanProgress | null>(null);
+  const [jobs, setJobs] = useState<JobState[]>([]);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [pending, setPending] = useState(0);
+  const [onlineOn, setOnlineOn] = useState<string[]>([]);
   const [version, setVersion] = useState(0);
   const [lib, setLib] = useState<LibraryState>(emptyLibraryState());
-  const [crateState, setCrateState] = useState<LibraryState>(emptyLibraryState());
+  const [subState, setSubState] = useState<LibraryState>(emptyLibraryState());
   const [chat, setChat] = useState<ChatMode>("open");
   const [crateDialog, setCrateDialog] = useState<null | { crate: Crate | null; rules?: RuleSet | null }>(null);
-  const [toastMsg, setToastMsg] = useState<{ m: string; err: boolean } | null>(null);
+  const [setParams, setSetParams] = useState<Partial<SetParams> | null>(null);
+  const [toastMsg, setToastMsg] = useState<{ m: string; err: boolean; k: number } | null>(null);
+  const [update, setUpdate] = useState<{ info: UpdateInfo; pct: number | null; installing: boolean } | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const toast = useCallback((m: string, err = false) => {
-    setToastMsg({ m, err });
-    window.setTimeout(() => setToastMsg((t) => (t?.m === m ? null : t)), err ? 6000 : 3200);
+    const k = Date.now();
+    setToastMsg({ m, err, k });
+    window.setTimeout(() => setToastMsg((t) => (t?.k === k ? null : t)), err ? 6500 : 3400);
   }, []);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
-  // Initial load
   useEffect(() => {
-    // Ignore a late response from a superseded run (React StrictMode runs
-    // effects twice in development) so it cannot overwrite newer state.
     let stale = false;
     Promise.all([api.getSettings(), api.appInfo(), api.ruleFields(), api.scanStatus()])
       .then(([s, i, f, sc]) => {
@@ -53,60 +66,75 @@ export default function App() {
         setFields(f);
         setScan(sc);
         setChat(s.chat_open ? "open" : "hidden");
+        if (s.auto_update) checkForUpdate().then((u) => !stale && u && setUpdate({ info: u, pct: null, installing: false })).catch(() => {});
       })
       .catch((e) => !stale && setFatal(String(e.message ?? e)));
-    return () => {
-      stale = true;
-    };
+    return () => { stale = true; };
   }, []);
 
   useEffect(() => {
     api.stats().then(setStats).catch(() => {});
     api.listCrates().then(setCrates).catch(() => {});
+    api.listRoots().then(setRoots).catch(() => {});
+    api.health().then(setHealth).catch(() => {});
+    api.suggestionCounts().then((c) => setPending(c.pending ?? 0)).catch(() => {});
+    api.services().then((s) => setOnlineOn(s.filter((x) => x.enabled && x.id !== "updates").map((x) => x.name))).catch(() => {});
   }, [version]);
 
   useEffect(() => {
-    if (settings) document.documentElement.dataset.theme = settings.theme;
+    if (!settings) return;
+    const r = document.documentElement;
+    r.dataset.theme = settings.theme;
+    r.dataset.surface = settings.surface;
+    r.dataset.motion = settings.motion;
   }, [settings]);
 
-  // Poll scan progress while a scan runs; refresh data when it ends.
-  const running = scan?.state === "running" || scan?.state === "paused";
+  // Poll scan + background jobs; refresh data when they finish.
+  const busy = scan?.state === "running" || scan?.state === "paused" || jobs.some((j) => j.state === "running" || j.state === "paused");
+  const prevScan = useRef<string>("idle");
+  const prevJobs = useRef<Record<string, string>>({});
   useEffect(() => {
-    if (!running) return;
     let last = 0;
+    const live = (st: string) => st === "running" || st === "paused";
     const t = window.setInterval(async () => {
-      const s = await api.scanStatus().catch(() => null);
-      if (!s) return;
-      setScan(s);
-      const done = s.files_processed + s.unchanged;
-      if (s.state !== "running" && s.state !== "paused") {
-        bump();
-        toast(s.state === "completed" ? `Scan complete: ${s.added} new, ${s.updated} updated, ${s.errors} problem${s.errors === 1 ? "" : "s"}.` : `Scan ${s.state}.`, s.state === "failed");
-      } else if (done - last >= 500) {
-        last = done;
-        bump();
+      const [s, j] = await Promise.all([api.scanStatus().catch(() => null), api.jobs().catch(() => [] as JobState[])]);
+      let changed = false;
+      if (s) {
+        if (live(prevScan.current) && !live(s.state)) {
+          changed = true;
+          toast(s.state === "completed" ? `Scan complete: ${s.added} new, ${s.updated} updated, ${s.errors} problem${s.errors === 1 ? "" : "s"}.` : `Scan ${s.state}.`, s.state === "failed");
+        }
+        prevScan.current = s.state;
+        setScan(s);
+        const done = s.files_processed + s.unchanged;
+        if (s.state === "running" && done - last >= 500) { last = done; changed = true; }
       }
-    }, 700);
+      for (const n of j) {
+        const was = prevJobs.current[n.kind];
+        if (was && live(was) && !live(n.state)) {
+          changed = true;
+          toast(n.state === "failed" ? `${n.kind} failed: ${n.message}` : `${n.kind[0].toUpperCase() + n.kind.slice(1)} ${n.state}${n.errors ? ` (${n.errors} could not be processed)` : ""}.`, n.state === "failed");
+        }
+        prevJobs.current[n.kind] = n.state;
+      }
+      setJobs(j);
+      if (changed) bump();
+    }, busy ? 700 : 2500);
     return () => window.clearInterval(t);
-  }, [running, bump, toast]);
-  // When a scan is started from anywhere, pick it up.
-  useEffect(() => {
-    api.scanStatus().then(setScan).catch(() => {});
-  }, [version]);
+  }, [busy, bump, toast]);
 
   const setChatMode = (m: ChatMode) => {
     setChat(m);
     api.setSetting("chat_open", m !== "hidden").catch(() => {});
   };
 
-  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
       if (e.key === "/" && !typing) {
         e.preventDefault();
-        if (view !== "library" && !view.startsWith("crate:")) setView("library");
+        if (view !== "library" && !view.startsWith("crate:") && !view.startsWith("root:")) setView("library");
         setTimeout(() => searchRef.current?.focus(), 0);
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j") {
@@ -119,7 +147,8 @@ export default function App() {
   });
 
   const currentCrate = view.startsWith("crate:") ? (crates.find((c) => c.id === Number(view.slice(6))) ?? null) : null;
-  useEffect(() => setCrateState(emptyLibraryState()), [currentCrate?.id]);
+  const currentRoot = view.startsWith("root:") ? (roots.find((r) => r.id === Number(view.slice(5))) ?? null) : null;
+  useEffect(() => setSubState(emptyLibraryState()), [currentCrate?.id, currentRoot?.id]);
 
   const applyAssistant = (r: AssistantReply) => {
     setLib({ ...emptyLibraryState(), text: r.text ?? "", filters: r.filters ?? emptyRuleSet() });
@@ -130,24 +159,36 @@ export default function App() {
     setLib({ ...emptyLibraryState(), filters: it.filters });
     setView("library");
   };
+  const navigate = (target: string, r: AssistantReply) => {
+    if (target === "set-studio" && r.params) setSetParams(r.params);
+    const map: Record<string, View> = { folders: "activity" };
+    setView((map[target] ?? target) as View);
+  };
 
-  if (fatal)
-    return (
-      <div className="empty" style={{ height: "100%", justifyContent: "center" }}>
-        <h2>DJ Assistant could not start</h2>
-        <p>{fatal}</p>
-      </div>
-    );
-  if (!settings) return <div className="empty">Loading…</div>;
+  if (fatal) return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><h2>DJ Assistant could not start</h2><p>{fatal}</p></div>;
+  if (!settings) return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><div className="spin"><Icon name="disc" size={32} /></div></div>;
+
+  const scanning = scan?.state === "running" || scan?.state === "paused";
+  const onAddFolder = () => addFoldersFlow(toast, bump).then((ok) => !ok && setView("activity"));
+  const onScan = () => (roots.length ? api.startScan().then(() => { setScan({ ...(scan as ScanProgress), state: "running", phase: "starting" }); toast("Read-only scan started."); }).catch((e) => toast(e.message, true)) : setView("activity"));
 
   let main: React.ReactNode;
-  if (view === "library" || currentCrate) {
-    main = (
+  if (view === "library" || currentCrate || currentRoot) {
+    const noLibrary = stats && stats.roots === 0 && view === "library";
+    main = noLibrary ? (
+      <div className="page"><div className="empty" style={{ flex: 1, justifyContent: "center" }}>
+        <div className="art"><Icon name="music" size={30} /></div>
+        <h2>Welcome, Herbie</h2>
+        <p style={{ maxWidth: 520 }}>Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never writes to Serato.</p>
+        <button className="btn primary big" onClick={() => setView("activity")}><Icon name="folder" size={18} /> Add music folders</button>
+      </div></div>
+    ) : (
       <LibraryView
-        key={currentCrate ? `c${currentCrate.id}` : "lib"}
-        state={currentCrate ? crateState : lib}
-        setState={currentCrate ? setCrateState : setLib}
+        key={currentCrate ? `c${currentCrate.id}` : currentRoot ? `r${currentRoot.id}` : "lib"}
+        state={currentCrate || currentRoot ? subState : lib}
+        setState={currentCrate || currentRoot ? setSubState : setLib}
         crate={currentCrate}
+        root={currentRoot}
         crates={crates}
         fields={fields}
         version={version}
@@ -156,87 +197,70 @@ export default function App() {
         onEditCrate={(c) => setCrateDialog({ crate: c })}
         onSaveSmart={(rules) => setCrateDialog({ crate: null, rules })}
         searchRef={searchRef}
+        onAddFolder={onAddFolder}
+        onScan={onScan}
+        scanning={scanning}
       />
     );
-  } else if (view === "health") main = <HealthView version={version} onOpen={openHealth} />;
-  else if (view === "duplicates") main = <DuplicatesView version={version} toast={toast} />;
-  else if (view === "folders") main = <FoldersView scan={scan} version={version} bump={bump} toast={toast} />;
-  else if (view === "settings") main = <SettingsView settings={settings} onChange={setSettings} info={info} />;
-  else if (view === "roadmap") main = <RoadmapView />;
+  } else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} /></div>;
+  else if (view === "duplicates") main = <div className="page"><DuplicatesView version={version} toast={toast} /></div>;
+  else if (view === "activity") main = <ActivityView scan={scan} version={version} bump={bump} toast={toast} health={health} />;
+  else if (view === "crates") main = <CratesView crates={crates} version={version} bump={bump} toast={toast} setView={setView} onNewCrate={() => setCrateDialog({ crate: null })} />;
+  else if (view === "suggestions") main = <SuggestionsView version={version} bump={bump} toast={toast} />;
+  else if (view === "discovery") main = <DiscoveryView crates={crates} version={version} bump={bump} toast={toast} />;
+  else if (view === "set-studio") main = <SetStudioView crates={crates} version={version} toast={toast} bump={bump} initial={setParams} />;
+  else if (view === "gig") main = <GigView toast={toast} onChange={() => { api.getSettings().then(setSettings); bump(); }} />;
+  else if (view === "gig-pack") main = <GigPackView crates={crates} toast={toast} />;
+  else if (view === "files") main = <FilesView toast={toast} />;
+  else if (view === "settings") main = <SettingsView settings={settings} onChange={setSettings} info={info} toast={toast} bump={bump} />;
   else main = <div className="empty">This crate no longer exists.</div>;
 
-  const noLibrary = stats && stats.roots === 0 && view === "library";
-
   return (
-    <div className="shell">
-      <div className={`workspace${chat === "full" ? " chat-full" : ""}`}>
-        <Sidebar view={view} setView={setView} crates={crates} stats={stats} onNewCrate={() => setCrateDialog({ crate: null })} />
-        <main>
-          {noLibrary ? (
-            <div className="empty" style={{ flex: 1, justifyContent: "center" }}>
-              <h2>Welcome, Herbie</h2>
-              <p style={{ maxWidth: 520 }}>Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never touches Serato.</p>
-              <button className="btn primary" onClick={() => setView("folders")}>
-                <Icon name="folder" /> Add music folders
-              </button>
-            </div>
-          ) : (
-            main
-          )}
-        </main>
-        {chat !== "hidden" && <ChatPanel mode={chat} setMode={setChatMode} onApply={applyAssistant} onNavigate={(t) => setView(t as View)} />}
+    <div className="app-shell">
+      <TitleBar gig={settings.gig_mode} />
+      <div className={`workspace${chat === "full" ? " chat-full" : chat === "hidden" ? " no-chat" : ""}`}>
+        <Sidebar view={view} setView={setView} crates={crates} roots={roots} stats={stats} pending={pending} onNewCrate={() => setCrateDialog({ crate: null })} docsEnabled={settings.docs_enabled} />
+        <main>{main}</main>
+        {chat !== "hidden" && <ChatPanel mode={chat} setMode={setChatMode} onApply={(r) => { applyAssistant(r); }} onNavigate={navigate} />}
       </div>
-      <StatusBar scan={scan} version={info?.version ?? ""} chatHidden={chat === "hidden"} onShowChat={() => setChatMode("open")} onOpenFolders={() => setView("folders")} />
+      <StatusBar scan={scan} jobs={jobs} version={info?.version ?? ""} onlineOn={onlineOn} chatHidden={chat === "hidden"} onShowChat={() => setChatMode("open")} onOpen={(v) => setView(v as View)} />
       {crateDialog && (
         <CrateDialog
           initial={crateDialog.crate}
           initialRules={crateDialog.rules}
           fields={fields}
+          crates={crates}
           onClose={() => setCrateDialog(null)}
-          onSaved={(c) => {
-            setCrateDialog(null);
-            bump();
-            setView(`crate:${c.id}`);
-            toast(`Crate “${c.name}” saved.`);
-          }}
-          onDeleted={() => {
-            setCrateDialog(null);
-            setView("library");
-            bump();
-            toast("Crate deleted. Tracks and files were not affected.");
-          }}
+          onSaved={(c) => { setCrateDialog(null); bump(); setView(`crate:${c.id}`); toast(`Crate “${c.name}” saved.`); }}
+          onDeleted={() => { setCrateDialog(null); setView("library"); bump(); toast("Crate deleted. Tracks and files were not affected."); }}
         />
       )}
+      {update && (
+        <div className="update-banner glass beam" role="status">
+          <div className="row" style={{ alignItems: "flex-start" }}>
+            <Icon name="download" />
+            <div style={{ flex: 1 }}>
+              <strong>DJ Assistant {update.info.version} is ready</strong>
+              <div className="small muted">{update.installing ? `Downloading… ${update.pct ?? ""}${update.pct != null ? "%" : ""}` : "Installs in place and restarts. Your catalogue and settings are kept."}</div>
+            </div>
+            {!update.installing && <button className="btn ghost small icon" aria-label="Later" onClick={() => setUpdate(null)}><Icon name="close" size={14} /></button>}
+          </div>
+          {!update.installing && (
+            <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }}>
+              <button className="btn small" onClick={() => setUpdate(null)}>Later</button>
+              <button className="btn small primary" onClick={() => { setUpdate({ ...update, installing: true }); update.info.install((pct) => setUpdate((u) => (u ? { ...u, pct } : u))).catch((e) => { toast(`Update failed: ${e}`, true); setUpdate(null); }); }}>Install &amp; restart</button>
+            </div>
+          )}
+        </div>
+      )}
       {!settings.privacy_acknowledged && (
-        <Dialog
-          narrow
-          title="Before you start"
-          onClose={() => {}}
-          footer={
-            <button
-              className="btn primary"
-              onClick={() => {
-                api.setSetting("privacy_acknowledged", true).then(() => setSettings({ ...settings, privacy_acknowledged: true }));
-              }}
-            >
-              I understand
-            </button>
-          }
-        >
+        <Dialog narrow title="Before you start" onClose={() => {}} footer={<button className="btn primary" onClick={() => api.setSetting("privacy_acknowledged", true).then(() => setSettings({ ...settings, privacy_acknowledged: true }))}>I understand</button>}>
           <p>DJ Assistant is built to protect your music library:</p>
-          <ul className="privacy-list">
-            {SAFETY_POINTS.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
+          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 6 }}>{SAFETY_POINTS.map((p) => <li key={p}>{p}</li>)}</ul>
           <p className="muted small">You can read this again any time in Settings.</p>
         </Dialog>
       )}
-      {toastMsg && (
-        <div className={`toast${toastMsg.err ? " error" : ""}`} role={toastMsg.err ? "alert" : "status"}>
-          {toastMsg.m}
-        </div>
-      )}
+      {toastMsg && <div key={toastMsg.k} className={`toast${toastMsg.err ? " error" : ""}`} role={toastMsg.err ? "alert" : "status"}>{toastMsg.err ? <Icon name="warn" size={16} /> : <Icon name="check" size={16} />}{toastMsg.m}</div>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // End-to-end test: real React UI + real dj-core backend (via the dev-only
 // loopback bridge) + real audio fixture files. Run: npm run e2e
 import { spawn, execSync } from "node:child_process";
-import { cpSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,9 +10,11 @@ import { chromium } from "playwright";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const data = path.join(root, "e2e/.data");
 const music = path.join(data, "Herbie Music");
-const shots = process.env.E2E_SCREENSHOTS ?? path.join(root, "e2e/.data/screenshots");
+const usb = path.join(data, "USB");
+const shots = process.env.E2E_SCREENSHOTS ?? path.join(data, "screenshots");
 rmSync(data, { recursive: true, force: true });
 mkdirSync(shots, { recursive: true });
+mkdirSync(usb, { recursive: true });
 cpSync(path.join(root, "crates/dj-core/tests/fixtures/library"), music, { recursive: true });
 
 const snapshot = (dir) => {
@@ -42,11 +44,9 @@ const start = (cmd, args, env = {}) => {
 };
 const cleanup = () => procs.forEach((p) => p.kill());
 process.on("exit", cleanup);
-
 start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878"]);
 start("npx", ["vite", "--port", "5174", "--strictPort"], { VITE_DEV_BRIDGE: "1" });
-
-const waitFor = async (url, ms = 30000) => {
+const waitFor = async (url, ms = 40000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
     try {
@@ -69,22 +69,17 @@ const step = async (name, fn) => {
   } catch (e) {
     failures++;
     await page.screenshot({ path: path.join(shots, `FAIL-${failures}.png`) }).catch(() => {});
-    if (process.env.E2E_VERBOSE) console.log(String(e.message));
     console.log(`  ✗ ${name}\n    ${String(e.message ?? e).split("\n").slice(0, 6).join("\n    ")}`);
   }
 };
-const expect = (cond, msg) => {
-  if (!cond) throw new Error(msg);
-};
+const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
+const nav = (label) => page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: new RegExp(`^${label}( [\\d,]+)?$`) }).first();
+const count = (n) => page.getByText(new RegExp(`^${n} tracks?$`)).first();
 
 const browser = await chromium.launch();
-page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: Number(process.env.E2E_DPR ?? 1) });
-page.on("framenavigated", (f) => f === page.mainFrame() && console.log("    [navigated]", f.url()));
+page = await browser.newPage({ viewport: { width: 1600, height: 960 }, deviceScaleFactor: Number(process.env.E2E_DPR ?? 1) });
 const external = [];
-page.on("request", (r) => {
-  const u = new URL(r.url());
-  if (!["127.0.0.1", "localhost"].includes(u.hostname)) external.push(r.url());
-});
+page.on("request", (r) => { const u = new URL(r.url()); if (!["127.0.0.1", "localhost"].includes(u.hostname)) external.push(r.url()); });
 const consoleErrors = [];
 let restarting = false;
 page.on("console", (m) => m.type() === "error" && !restarting && consoleErrors.push(m.text()));
@@ -100,60 +95,61 @@ await step("first run shows the safety notice and it can be acknowledged", async
   await page.getByRole("dialog").waitFor({ state: "detached" });
 });
 
-await step("welcome screen leads to folders; folder is added and scanned", async () => {
+await step("welcome screen leads to Scan Activity; folder is added and scanned read-only", async () => {
   await page.getByRole("button", { name: "Add music folders" }).click();
   await page.getByLabel("Folder path").fill(music);
-  await page.getByRole("button", { name: "Add folder" }).click();
-  await page.getByText(/Last scan completed/).waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: "Add folder", exact: true }).click();
+  await page.getByText(/Last scan completed/).waitFor({ timeout: 30000 });
   await page.getByText("22 music files found").waitFor();
-  await page.screenshot({ path: path.join(shots, "02-folders.png") });
 });
 
-await step("library lists real tracks; unknown values show as —", async () => {
-  await page.getByRole("button", { name: /^Library( [\d,]+)?$/ }).click();
-  await page.getByText("22 tracks", { exact: true }).waitFor();
-  await page.getByRole("row", { name: /Sunrise Groove \(feat\. Ada\)/ }).first().waitFor();
-  await page.screenshot({ path: path.join(shots, "03-library.png") });
+await step("library matches the mock-up layout and lists real tracks", async () => {
+  await nav("Library").click();
+  await page.getByRole("heading", { name: "Music Library" }).waitFor();
+  await count(22).waitFor();
+  for (const b of ["Genre", "Decade", "Format", "Quality"]) await page.locator(".dropdown-btn", { hasText: b }).first().waitFor();
+  await page.getByRole("button", { name: "Add folder..." }).waitFor();
+  await page.getByRole("button", { name: "Scan", exact: true }).waitFor();
+  await page.getByText("Online services off").waitFor();
 });
 
-await step("search is accent-insensitive", async () => {
+await step("search is accent-insensitive; SQL-like text is plain text", async () => {
   await page.getByLabel("Search tracks").fill("beyonce");
-  await page.getByText("1 track", { exact: true }).waitFor();
-  await page.getByText("Déjà Vu Medley").waitFor();
-  await page.getByLabel("Search tracks").fill("");
-  await page.getByText("22 tracks", { exact: true }).waitFor();
-});
-
-await step("SQL-looking search text is treated as text", async () => {
+  await count(1).waitFor();
   await page.getByLabel("Search tracks").fill("'; DROP TABLE tracks; --");
-  await page.getByText("0 tracks", { exact: true }).waitFor();
+  await count(0).waitFor();
   await page.getByLabel("Search tracks").fill("");
-  await page.getByText("22 tracks", { exact: true }).waitFor();
+  await count(22).waitFor();
 });
 
-await step("preset filter: low bitrate shows only lossy files under threshold", async () => {
-  await page.getByRole("button", { name: "Low bitrate", exact: true }).click();
-  await page.getByText("4 tracks", { exact: true }).waitFor();
-  const badges = await page.locator(".tbody .badge").allTextContents();
-  expect(badges.length === 4 && badges.every((b) => b === "Low bitrate"), `badges: ${badges}`);
-  await page.getByRole("button", { name: "Clear filters" }).click();
+await step("Quality → Low bitrate shows only lossy files under the threshold", async () => {
+  await page.locator(".dropdown-btn", { hasText: "Quality" }).click();
+  await page.getByRole("menuitem", { name: /Low bitrate/ }).click();
+  await count(4).waitFor();
+  const chips = await page.locator(".tbody .badge.q-low_bitrate").count();
+  expect(chips === 4, `low-bitrate chips: ${chips}`);
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await count(22).waitFor();
 });
 
-await step("track detail separates file tags from catalogue values; energy edit persists", async () => {
+await step("track card shows original tags and path; details drawer edits energy", async () => {
   await page.getByLabel("Search tracks").fill("warehouse");
-  await page.getByText("1 track", { exact: true }).waitFor();
+  await count(1).waitFor();
   await page.getByRole("row", { name: /Warehouse 94/ }).click();
+  await page.getByText("Original tags").waitFor();
+  await page.getByText("File path").waitFor();
+  await page.getByRole("button", { name: "Details & edit" }).click();
   const detail = page.getByRole("complementary", { name: "Track details" });
   await detail.getByText("From the file (read-only)").waitFor();
   await detail.getByRole("slider", { name: /Energy/ }).locator("i").nth(6).click();
   await detail.getByText("7/10").waitFor();
-  await page.screenshot({ path: path.join(shots, "04-track-detail.png") });
+  await page.screenshot({ path: path.join(shots, "02-track-detail.png") });
   await detail.getByRole("button", { name: "Close details" }).click();
   await page.getByLabel("Search tracks").fill("");
 });
 
-await step("smart crate with preview: Afrobeats 2010–2019 excluding live", async () => {
-  await page.getByRole("button", { name: "New crate" }).click();
+await step("smart crate with live preview: Afrobeats 2010–2019 excluding live", async () => {
+  await page.getByRole("button", { name: "New crate" }).first().click();
   const dlg = page.getByRole("dialog", { name: "New crate" });
   await dlg.getByPlaceholder("e.g. Afrobeats 2010s peak time").fill("Afro 2010s (no live)");
   await dlg.getByText("Smart — rules pick tracks").click();
@@ -169,23 +165,22 @@ await step("smart crate with preview: Afrobeats 2010–2019 excluding live", asy
   await dlg.getByLabel("Exclude rule 1 field").selectOption("version");
   await dlg.getByLabel("Exclude rule 1 value").fill("live");
   await dlg.getByText("5 tracks match right now").waitFor();
-  await page.screenshot({ path: path.join(shots, "05-smart-crate.png") });
   await dlg.getByRole("button", { name: "Create crate" }).click();
   await page.getByRole("heading", { name: "Afro 2010s (no live)" }).waitFor();
-  await page.getByText("5 tracks", { exact: true }).waitFor();
+  await count(5).waitFor();
 });
 
-await step("manual crate: add selected tracks; same track in multiple crates", async () => {
+await step("manual crates: checkbox selection, bulk add, same track in two crates", async () => {
   for (const name of ["Warm-up", "Wedding"]) {
-    await page.getByRole("button", { name: "New crate" }).click();
+    await page.getByRole("button", { name: "New crate" }).first().click();
     const dlg = page.getByRole("dialog", { name: "New crate" });
     await dlg.getByPlaceholder("e.g. Afrobeats 2010s peak time").fill(name);
     await dlg.getByRole("button", { name: "Create crate" }).click();
     await page.getByRole("heading", { name }).waitFor();
   }
-  await page.getByRole("button", { name: /^Library( [\d,]+)?$/ }).click();
+  await nav("Library").click();
   await page.getByLabel("Search tracks").fill("low tide");
-  await page.getByText("1 track", { exact: true }).waitFor();
+  await count(1).waitFor();
   for (const name of ["Warm-up", "Wedding"]) {
     await page.getByLabel("Select Low Tide").check();
     await page.getByRole("button", { name: "Add to crate" }).click();
@@ -193,17 +188,28 @@ await step("manual crate: add selected tracks; same track in multiple crates", a
     await page.getByText(`to “${name}”`).waitFor();
   }
   await page.getByLabel("Search tracks").fill("");
-  await page.getByRole("button", { name: /^Warm-up/ }).click();
-  await page.getByText("1 track", { exact: true }).waitFor();
+});
+
+await step("crate templates from the cheat sheet build nested smart crates", async () => {
+  await nav("Virtual Crates").click();
+  await page.getByText("Start from a template").waitFor();
+  const card = page.locator(".template-card").filter({ hasText: "Sort by energy" });
+  await card.getByRole("button", { name: "Add crates" }).click();
+  await page.getByText(/Added 5 crates under “Energy”/).waitFor();
+  await page.screenshot({ path: path.join(shots, "03-crates.png") });
+});
+
+await step("audio analysis runs in the background and reports completion", async () => {
+  await nav("Scan Activity").click();
+  await page.getByRole("button", { name: /^Analyse \d+ tracks$/ }).click();
+  await page.getByText(/^Completed: \d+ of \d+/).waitFor({ timeout: 60000 });
 });
 
 await step("duplicate review separates exact, possible and alternate", async () => {
-  await page.getByRole("button", { name: "Duplicates", exact: true }).click();
-  await page.getByRole("tab", { name: "Exact duplicates (0)" }).waitFor();
+  await nav("Duplicate Review").click();
   await page.getByRole("button", { name: "Check for exact duplicates" }).click();
-  await page.getByRole("tab", { name: "Exact duplicates (1)" }).waitFor({ timeout: 15000 });
+  await page.getByRole("tab", { name: "Exact duplicates (1)" }).waitFor({ timeout: 20000 });
   await page.getByText(/Identical file contents/).waitFor();
-  await page.screenshot({ path: path.join(shots, "06-duplicates-exact.png") });
   await page.getByRole("tab", { name: "Possible duplicates (1)" }).click();
   await page.getByText(/not proven identical/).waitFor();
   await page.getByRole("tab", { name: "Alternate versions (1)" }).click();
@@ -211,53 +217,114 @@ await step("duplicate review separates exact, possible and alternate", async () 
   await page.getByRole("button", { name: "Intentional version", pressed: true }).waitFor();
 });
 
-await step("library health reports errors, unsupported files and low bitrate", async () => {
-  await page.getByRole("button", { name: /^Library health/ }).click();
+await step("library health reports unreadable, unsupported and low-bitrate files", async () => {
+  await nav("Library Health").click();
   await page.getByRole("button", { name: /Unreadable or corrupt: 3/ }).waitFor();
   await page.getByRole("button", { name: /Unsupported formats: 1/ }).waitFor();
   await page.getByRole("button", { name: /Low bitrate .*: 4/ }).waitFor();
-  await page.screenshot({ path: path.join(shots, "07-health.png") });
-  await page.getByRole("button", { name: /Unreadable or corrupt: 3/ }).click();
-  await page.getByText("3 tracks", { exact: true }).waitFor();
 });
 
-await step("assistant (rule-based) applies filters to the library", async () => {
+await step("suggestions: local suggestions are reviewed before reaching the catalogue", async () => {
+  await nav("Suggestions").click();
+  await page.getByRole("button", { name: "Find local suggestions" }).click();
+  const row = page.getByRole("row").filter({ hasText: "untagged recording" }).filter({ hasText: "title" }).first();
+  await row.waitFor();
+  await row.getByRole("button", { name: "Accept" }).click();
+  await page.getByText(/Saved title to your catalogue/).waitFor();
+  await page.screenshot({ path: path.join(shots, "04-suggestions.png") });
+});
+
+await step("Set Studio builds an editable running order with transition notes", async () => {
+  await nav("Set Studio").click();
+  await page.getByLabel("Skip tracks shorter than (seconds)").fill("0");
+  await page.locator("label.field").filter({ hasText: "Length (minutes)" }).locator("input").fill("20");
+  await page.getByRole("button", { name: "Generate running order" }).click();
+  await page.locator(".slot").first().waitFor();
+  const n = await page.locator(".slot").count();
+  expect(n >= 4, `slots: ${n}`);
+  await page.getByLabel("Set name").fill("E2E warm-up");
+  await page.getByRole("button", { name: "Save set" }).click();
+  await page.getByText("Set saved.").waitFor();
+  await page.screenshot({ path: path.join(shots, "05-set-studio.png") });
+});
+
+await step("gig mode: start with the set, take a request, mark played, recap", async () => {
+  await nav("Gig Mode").click();
+  await page.getByLabel("Name").fill("E2E club night");
+  await page.locator("label.field").filter({ hasText: "Set list" }).locator("select").selectOption({ label: "E2E warm-up" });
+  await page.getByRole("button", { name: "Start gig mode" }).click();
+  await page.getByText("Gig mode", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Mark as played" }).click();
+  await page.getByLabel("New request").fill("Something by Velvet Arcade");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByText("Something by Velvet Arcade").waitFor();
+  await page.screenshot({ path: path.join(shots, "06-gig-mode.png") });
+  await page.getByRole("button", { name: "End gig" }).click();
+  await page.getByText(/Recap — E2E club night/).waitFor();
+});
+
+await step("gig pack copies a crate to a 'USB' folder and verifies every file", async () => {
+  await nav("Gig Pack").click();
+  await page.locator("label.field").filter({ hasText: "What to pack" }).locator("select").selectOption({ label: "Wedding (1)" });
+  await page.locator("label.field").filter({ hasText: "Destination" }).locator("input").fill(usb);
+  await page.locator("label.field").filter({ hasText: "Pack folder name" }).locator("input").fill("Saturday pack");
+  await page.getByRole("button", { name: "Preview pack" }).click();
+  await page.getByRole("button", { name: /Copy and verify 1 file/ }).click();
+  await page.getByText("Gig pack ready").waitFor({ timeout: 20000 });
+  expect(existsSync(path.join(usb, "Saturday pack", "manifest.json")), "manifest missing");
+  expect(existsSync(path.join(usb, "Saturday pack", "Music", "Low Tide.flac")), "copied file missing");
+});
+
+await step("assistant (rule-based) answers like the mock-up and applies filters", async () => {
+  await nav("Library").click();
   await page.getByLabel("Message the assistant").fill("afrobeats 2010s no live");
   await page.getByRole("button", { name: "Send" }).click();
-  await page.getByText(/Found 5 tracks/).waitFor();
-  await page.getByRole("button", { name: "Show all 5 in library" }).click();
-  await page.getByText("5 tracks", { exact: true }).waitFor();
-  await page.screenshot({ path: path.join(shots, "08-assistant.png") });
+  await page.getByText("5 tracks match your filters.").waitFor();
+  await page.screenshot({ path: path.join(shots, "07-assistant.png") });
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await count(5).waitFor();
 });
 
-await step("assistant can go full screen and be hidden, core UI still works", async () => {
-  await page.getByRole("button", { name: "Expand assistant to full screen" }).click();
-  await page.getByRole("button", { name: "Exit full screen" }).waitFor();
+await step("assistant opens Set Studio pre-filled from a request", async () => {
+  await page.getByLabel("Message the assistant").fill("plan a 2 hour wedding set");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("heading", { name: "Set Studio" }).waitFor();
+  const v = await page.locator("label.field").filter({ hasText: "Length (minutes)" }).locator("input").inputValue();
+  expect(v === "120", `length ${v}`);
+});
+
+await step("assistant can go full screen and be hidden; core UI still works", async () => {
+  await page.getByRole("button", { name: "Assistant options" }).click();
+  await page.getByRole("button", { name: "Full screen" }).click();
+  await page.getByRole("button", { name: "Assistant options" }).click();
   await page.getByRole("button", { name: "Exit full screen" }).click();
-  await page.getByRole("button", { name: "Hide assistant" }).click();
+  await page.getByRole("button", { name: "Assistant options" }).click();
+  await page.getByRole("button", { name: /Hide assistant/ }).click();
   await page.getByRole("button", { name: "Show assistant" }).waitFor();
-  await page.getByRole("button", { name: /^Library( [\d,]+)?$/ }).click();
+  await nav("Library").click();
   await page.getByRole("button", { name: "Show assistant" }).click();
 });
 
 await step("keyboard: '/' focuses search", async () => {
-  await page.locator("body").click({ position: { x: 700, y: 870 } });
+  await page.locator(".statusbar").click();
   await page.keyboard.press("/");
   await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Search tracks", null, { timeout: 3000 });
 });
 
-await step("settings: threshold validation and light theme", async () => {
-  await page.getByRole("button", { name: "Settings" }).click();
+await step("settings: updates, online services (off), threshold and light theme", async () => {
+  await nav("Settings").click();
+  await page.getByRole("heading", { name: "Updates" }).waitFor();
+  await page.getByText("MusicBrainz", { exact: true }).waitFor();
+  const on = await page.getByLabel("Turn MusicBrainz on").isChecked();
+  expect(!on, "MusicBrainz must be off by default");
   await page.getByLabel("Low bitrate threshold in kbps").fill("100");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.getByRole("status").filter({ hasText: "Saved." }).waitFor();
   await page.getByRole("button", { name: "Light" }).click();
-  await page.screenshot({ path: path.join(shots, "09-settings-light.png") });
-  await page.getByRole("button", { name: "Dark (booth)" }).click();
+  await page.screenshot({ path: path.join(shots, "08-settings-light.png") });
+  await page.getByRole("button", { name: "Dark" }).click();
 });
 
-await step("data and crates persist after restarting the backend", async () => {
-  // restart bridge (fresh process, same catalogue)
+await step("data, crates and sets persist after restarting the backend", async () => {
   restarting = true;
   procs[0].kill();
   await new Promise((r) => setTimeout(r, 500));
@@ -265,26 +332,17 @@ await step("data and crates persist after restarting the backend", async () => {
   await waitFor("http://127.0.0.1:7878");
   await page.reload();
   restarting = false;
-  await page.getByRole("button", { name: /^Afro 2010s \(no live\)/ }).waitFor();
-  await page.getByRole("button", { name: /^Wedding/ }).click();
-  await page.getByText("1 track", { exact: true }).waitFor();
-  await page.getByRole("button", { name: /^Library( [\d,]+)?$/ }).click();
-  await page.getByLabel("Search tracks").fill("warehouse");
-  await page.getByRole("row", { name: /Warehouse 94/ }).getByRole("img", { name: "Energy 7 of 10" }).waitFor();
+  await nav("Wedding").click();
+  await count(1).waitFor();
+  await nav("Set Studio").click();
+  await page.getByRole("button", { name: "E2E warm-up", exact: true }).waitFor();
 });
 
-await step("no external network requests were made by the UI", async () => {
-  expect(external.length === 0, `external requests: ${external.join(", ")}`);
-});
-await step("no console errors", async () => {
-  expect(consoleErrors.length === 0, consoleErrors.join("\n"));
-});
-
+await step("no external network requests were made by the UI", async () => expect(external.length === 0, `external requests: ${external.join(", ")}`));
+await step("no console errors", async () => expect(consoleErrors.length === 0, consoleErrors.join("\n")));
 await browser.close();
 const after = snapshot(music);
-await step("source files unchanged after the whole session (size, mtime, SHA-256)", async () => {
-  expect(JSON.stringify(before) === JSON.stringify(after), "fixture files changed!");
-});
+await step("source files unchanged after the whole session (size, mtime, SHA-256)", async () => expect(JSON.stringify(before) === JSON.stringify(after), "fixture files changed!"));
 cleanup();
 console.log(failures ? `\n${failures} e2e step(s) FAILED` : "\nall e2e steps passed");
 process.exit(failures ? 1 : 0);

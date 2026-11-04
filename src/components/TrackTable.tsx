@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { TrackQuery, TrackRow } from "../types";
 import { bpm, duration, text } from "../lib/format";
-import { EnergyMeter, QualityBadge, Stars, StatusText } from "./ui";
+import { EnergyMeter, Stars, StatusText } from "./ui";
 import { Icon } from "./Icon";
 
 const PAGE = 200;
@@ -18,42 +18,52 @@ export interface Column {
   render: (t: TrackRow) => React.ReactNode;
 }
 
+const src = (s: string | null) => (s === "analysis" ? <span className="src" title="Estimated by local analysis">est</span> : s === "you" ? <span className="src" title="Your catalogue value">you</span> : null);
+
 export const COLUMNS: Column[] = [
-  { id: "artist", label: "Artist", width: "minmax(120px, 1.2fr)", sort: "artist", render: (t) => <span className="cell strong" title={t.artist ?? ""}>{text(t.artist)}</span> },
   {
     id: "title",
     label: "Title",
-    width: "minmax(160px, 1.8fr)",
+    width: "minmax(170px, 1.6fr)",
     sort: "title",
     render: (t) => (
-      <span className="cell" title={t.title ?? t.file_name}>
-        {t.title ?? <span className="faint">{t.file_name}</span>}
-        {t.clean_explicit && <> <span className="ce" title={t.clean_explicit}>{t.clean_explicit === "clean" ? "C" : "E"}</span></>}
-        {t.status !== "ok" && <> <StatusText s={t.status} /></>}
+      <span className="title-cell" title={t.title ?? t.file_name}>
+        <Icon name="music" size={16} />
+        <span className="cell">
+          {t.title ?? <span className="faint">{t.file_name}</span>}
+          {t.version && <> <span className="version">{t.version}</span></>}
+          {t.clean_explicit && <> <span className="ce" title={t.clean_explicit}>{t.clean_explicit === "clean" ? "C" : "E"}</span></>}
+          {t.status !== "ok" && <> <StatusText s={t.status} /></>}
+        </span>
       </span>
     ),
   },
-  { id: "version", label: "Version", minTable: 980, width: "minmax(70px, 0.6fr)", render: (t) => <span className="cell version">{t.version ?? ""}</span> },
-  { id: "genre", label: "Genre", minTable: 640, width: "minmax(80px, 0.8fr)", sort: "genre", render: (t) => <span className="cell">{text(t.genre)}</span> },
-  { id: "year", label: "Year", minTable: 720, width: "48px", sort: "year", num: true, render: (t) => <span className="cell num">{text(t.year)}</span> },
-  { id: "bpm", label: "BPM", minTable: 560, width: "48px", sort: "bpm", num: true, render: (t) => <span className="cell num">{bpm(t.bpm)}</span> },
-  { id: "key", label: "Key", minTable: 760, width: "40px", sort: "key", render: (t) => <span className="cell">{text(t.key)}</span> },
-  { id: "energy", label: "Energy", width: "82px", sort: "energy", render: (t) => <EnergyMeter value={t.energy} /> },
-  { id: "rating", label: "Rating", minTable: 1080, width: "64px", sort: "rating", render: (t) => <Stars value={t.rating} /> },
-  { id: "time", label: "Time", minTable: 700, width: "50px", sort: "duration", num: true, render: (t) => <span className="cell num">{duration(t.duration_ms)}</span> },
-  { id: "quality", label: "Quality", width: "92px", sort: "bitrate", render: (t) => <QualityBadge t={t} /> },
+  { id: "artist", label: "Artist", width: "minmax(120px, 1.2fr)", sort: "artist", render: (t) => <span className="cell" title={t.artist ?? ""}>{text(t.artist)}</span> },
+  { id: "genre", label: "Genre", minTable: 1050, width: "minmax(80px, 0.8fr)", sort: "genre", render: (t) => <span className="cell muted">{text(t.genre)}</span> },
+  { id: "year", label: "Year", minTable: 640, width: "50px", sort: "year", render: (t) => <span className="cell">{text(t.year)}</span> },
+  { id: "bpm", label: "BPM", minTable: 720, width: "78px", sort: "bpm", render: (t) => <span className="cell" style={{ overflow: "visible" }}>{bpm(t.bpm)}{src(t.bpm_source)}</span> },
+  { id: "key", label: "Key", minTable: 780, width: "66px", sort: "key", render: (t) => <span className="cell" style={{ overflow: "visible" }}>{text(t.key)}{src(t.key_source)}</span> },
+  { id: "energy", label: "Energy", minTable: 560, width: "70px", sort: "energy", render: (t) => <EnergyMeter value={t.energy} estimate={t.energy_source === "analysis"} /> },
+  { id: "rating", label: "Rating", minTable: 1180, width: "64px", sort: "rating", render: (t) => <Stars value={t.rating} /> },
+  { id: "time", label: "Time", minTable: 980, width: "48px", sort: "duration", num: true, render: (t) => <span className="cell num">{duration(t.duration_ms)}</span> },
+  { id: "format", label: "Format", minTable: 880, width: "70px", sort: "format", render: (t) => <span className="cell">{(t.format ?? "—").replace("M4A (", "").replace(")", "")}</span> },
   {
-    id: "format",
-    label: "Format",
-    minTable: 880,
-    width: "minmax(70px, 0.6fr)",
-    sort: "format",
-    render: (t) => (
-      <span className="cell small">
-        {text(t.format)}
-        {t.bitrate_kbps != null && <span className="faint"> {t.bitrate_kbps}k</span>}
-      </span>
-    ),
+    id: "bitrate",
+    label: "Bitrate",
+    width: "104px",
+    sort: "bitrate",
+    render: (t) =>
+      t.quality === "low_bitrate" ? (
+        <span className="badge q-low_bitrate" title="Lossy file under your low-bitrate threshold. Bitrate alone does not prove quality.">
+          <Icon name="warn" size={13} /> {t.bitrate_kbps} kbps
+        </span>
+      ) : t.quality === "lossless" ? (
+        <span className="badge q-lossless" title={`Lossless${t.bitrate_kbps ? `, ${t.bitrate_kbps} kbps average` : ""}`}>Lossless</span>
+      ) : t.bitrate_kbps != null ? (
+        <span className="cell">{t.bitrate_kbps} kbps</span>
+      ) : (
+        <span className="cell faint" title="Bitrate unknown — not flagged">—</span>
+      ),
   },
 ];
 
@@ -130,10 +140,10 @@ export function TrackTable({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [scroll, setScroll] = useState(0);
   const [height, setHeight] = useState(600);
-  const rowH = 34;
+  const rowH = 38;
   const [width, setWidth] = useState(1200);
   const columns = useMemo(() => COLUMNS.filter((c) => !c.minTable || width >= c.minTable), [width]);
-  const cols = "22px " + columns.map((c) => c.width).join(" ");
+  const cols = "18px " + columns.map((c) => c.width).join(" ");
   const anchor = useRef<number | null>(null);
 
   useEffect(() => onTotal?.(total), [total, onTotal]);

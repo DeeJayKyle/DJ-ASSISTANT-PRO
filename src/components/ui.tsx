@@ -36,15 +36,16 @@ export function Dialog({ title, onClose, children, footer, narrow }: { title: Re
   );
 }
 
-export function EnergyMeter({ value, onChange, big }: { value: number | null; onChange?: (v: number | null) => void; big?: boolean }) {
+export function EnergyMeter({ value, onChange, big, estimate }: { value: number | null; onChange?: (v: number | null) => void; big?: boolean; estimate?: boolean }) {
   if (value == null && !onChange) return <span className="unknown-energy" title="Energy not rated yet">—</span>;
   const segs = Array.from({ length: 10 }, (_, i) => i + 1);
   const tone = (i: number) => (i <= 4 ? "lo" : i <= 7 ? "mid" : "hi");
   return (
     <span
-      className={`meter${big ? " big" : ""}${onChange ? " edit" : ""}`}
+      className={`meter${big ? " big" : ""}${onChange ? " edit" : ""}${estimate ? " est" : ""}`}
+      title={estimate ? "Estimated by local analysis — set your own value in the track details" : undefined}
       role={onChange ? "slider" : "img"}
-      aria-label={value == null ? "Energy not rated" : `Energy ${value} of 10`}
+      aria-label={value == null ? "Energy not rated" : `Energy ${value} of 10${estimate ? " (estimate)" : ""}`}
       aria-valuemin={onChange ? 1 : undefined}
       aria-valuemax={onChange ? 10 : undefined}
       aria-valuenow={onChange ? (value ?? undefined) : undefined}

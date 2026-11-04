@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
-import type { TrackDetail as Detail } from "../types";
+import { api, openUrl } from "../api";
+import type { Suggestion, TrackDetail as Detail } from "../types";
+import { Waveform } from "./Waveform";
 import { bpm, bytes, dateTime, duration, text } from "../lib/format";
 import { ColorPicker, EnergyMeter, QualityBadge } from "./ui";
 import { Icon } from "./Icon";
@@ -18,8 +19,10 @@ function KV({ items }: { items: [string, React.ReactNode][] }) {
   );
 }
 
-export function TrackDetail({ id, onClose, onChanged, toast }: { id: number; onClose: () => void; onChanged: () => void; toast: (m: string, err?: boolean) => void }) {
+export function TrackDetail({ id, onClose, onChanged, toast, onWrite }: { id: number; onClose: () => void; onChanged: () => void; toast: (m: string, err?: boolean) => void; onWrite?: (id: number) => void }) {
   const [d, setD] = useState<Detail | null>(null);
+  const [sugg, setSugg] = useState<Suggestion[]>([]);
+  const [links, setLinks] = useState<{ store: string; url: string }[] | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [tagInput, setTagInput] = useState("");
   const load = () =>
@@ -42,6 +45,8 @@ export function TrackDetail({ id, onClose, onChanged, toast }: { id: number; onC
       .catch((e) => toast(String(e.message ?? e), true));
   useEffect(() => {
     load();
+    api.suggestions("pending", id).then(setSugg).catch(() => setSugg([]));
+    setLinks(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -98,6 +103,61 @@ export function TrackDetail({ id, onClose, onChanged, toast }: { id: number; onC
             <strong>Could not read this file.</strong> {d.read_error}. The file was not changed.
           </div>
         </div>
+      )}
+
+      {d.analysis?.status === "ok" ? (
+        <section>
+          <h3>Analysis (estimates)</h3>
+          <Waveform a={d.analysis} />
+          <dl className="kv" style={{ marginTop: 8 }}>
+            <dt>BPM</dt>
+            <dd>
+              {bpm(d.analysis.bpm)} {d.analysis.bpm_alt != null && <span className="faint">(or {bpm(d.analysis.bpm_alt)})</span>} <span className="faint small">conf. {Math.round((d.analysis.bpm_confidence ?? 0) * 100)}%</span>
+              {d.analysis.bpm != null && <button className="btn ghost small" onClick={() => patch({ bpm: d.analysis!.bpm })}>Use</button>}
+            </dd>
+            <dt>Key</dt>
+            <dd>
+              {text(d.analysis.key)} {d.analysis.camelot && <span className="tag">{d.analysis.camelot}</span>} <span className="faint small">conf. {Math.round((d.analysis.key_confidence ?? 0) * 100)}%</span>
+              {d.analysis.camelot && <button className="btn ghost small" onClick={() => patch({ key: d.analysis!.camelot })}>Use</button>}
+            </dd>
+            <dt>Energy</dt>
+            <dd>
+              {text(d.analysis.energy)}/10 {d.analysis.energy != null && <button className="btn ghost small" onClick={() => patch({ energy: d.analysis!.energy })}>Use</button>}
+            </dd>
+            <dt>Loudness</dt>
+            <dd>{d.analysis.loudness_lufs != null ? `${d.analysis.loudness_lufs.toFixed(1)} LUFS` : "—"} · peak {d.analysis.peak_dbfs ?? "—"} dBFS</dd>
+            <dt>Intro / outro</dt>
+            <dd>{duration((d.analysis.intro_end_ms ?? 0) - (d.analysis.silence_start_ms ?? 0))} / {d.analysis.outro_start_ms != null && d.analysis.duration_ms != null ? duration(d.analysis.duration_ms - (d.analysis.silence_end_ms ?? 0) - d.analysis.outro_start_ms) : "—"}</dd>
+            <dt>Cue ideas</dt>
+            <dd>{d.analysis.cues.map((c) => `${c.label} ${duration(c.ms)}`).join(" · ") || "—"}</dd>
+          </dl>
+          {d.analysis.warnings.map((w) => <p key={w} className="note">{w}</p>)}
+          <p className="note">Estimates from {d.analysis.method} v{d.analysis.version}. They can be wrong (half/double tempo, modal keys) — your values always win. Serato's own cues and beatgrids are not read or changed.</p>
+        </section>
+      ) : (
+        <section>
+          <h3>Analysis</h3>
+          <p className="muted small">{d.analysis?.status === "error" ? `Could not analyse: ${d.analysis.error}` : "Not analysed yet."}</p>
+          <button className="btn small" onClick={() => api.startAnalysis([id], true).then(() => toast("Analysing in the background…")).catch((e) => toast(e.message, true))}>
+            <Icon name="gauge" size={14} /> Analyse this track
+          </button>
+        </section>
+      )}
+
+      {sugg.length > 0 && (
+        <section>
+          <h3>Suggestions ({sugg.length})</h3>
+          {sugg.slice(0, 6).map((s) => (
+            <div key={s.id} className="list-row" style={{ alignItems: "flex-start" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div><strong>{s.field}</strong>: <span className="faint">{s.current_value ?? "∅"}</span> → {s.suggested_value}</div>
+                <div className="small muted">{s.source} · {Math.round((s.confidence ?? 0) * 100)}% · {s.evidence}</div>
+              </div>
+              <button className="btn small" onClick={() => api.acceptSuggestion(s.id).then(() => { setSugg(sugg.filter((x) => x.id !== s.id)); load(); onChanged(); })}>Accept</button>
+              <button className="btn small ghost" aria-label="Reject" onClick={() => api.rejectSuggestion(s.id).then(() => setSugg(sugg.filter((x) => x.id !== s.id)))}><Icon name="close" size={14} /></button>
+            </div>
+          ))}
+        </section>
       )}
 
       <section>
@@ -231,6 +291,36 @@ export function TrackDetail({ id, onClose, onChanged, toast }: { id: number; onC
       <section>
         <h3>Location</h3>
         <div className="path">{String(t.path)}</div>
+        <p className="small muted" style={{ marginTop: 6 }}>Played {d.plays} time{d.plays === 1 ? "" : "s"} (gig mode and imported history).</p>
+      </section>
+
+      <section>
+        <h3>Find or buy</h3>
+        {links ? (
+          <div className="tagline">
+            {links.map((l) => (
+              <button key={l.store} className="btn small" onClick={() => openUrl(l.url)}>
+                {l.store} <Icon name="external" size={12} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button className="btn small" onClick={() => api.storeLinks(d.row.artist ?? "", d.row.title ?? d.row.file_name).then(setLinks)}>Show store search links</button>
+        )}
+        <p className="note">Links open legitimate stores in your browser. DJ Assistant never downloads, rips or buys anything.</p>
+        <div className="row wrap" style={{ marginTop: 8 }}>
+          <button className="btn small" onClick={() => api.lookupMusicBrainz({ ids: [id] }).then(() => toast("Looking up on MusicBrainz… see Suggestions.")).catch((e) => toast(e.message, true))}>
+            <Icon name="wand" size={14} /> MusicBrainz lookup
+          </button>
+          <button className="btn small" onClick={() => api.lastfmTrack(id).then((r) => toast(`${r.found} similar tracks added to Discovery.`)).catch((e) => toast(e.message, true))}>
+            <Icon name="compass" size={14} /> Similar on Last.fm
+          </button>
+          {onWrite && (
+            <button className="btn small" onClick={() => onWrite(id)}>
+              <Icon name="edit" size={14} /> Write tags to file…
+            </button>
+          )}
+        </div>
       </section>
 
       <section>
