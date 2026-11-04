@@ -283,7 +283,7 @@ export function TrackTable({
               const style: React.CSSProperties = { position: "absolute", top: i * rowH, left: 0, right: 0 };
               if (!t)
                 return (
-                  <div key={i} className="trow dim" style={style}>
+                  <div key={`loading-${i}`} className="trow dim" style={style}>
                     <span />
                     <span className="cell faint">Loading…</span>
                   </div>
@@ -291,7 +291,7 @@ export function TrackTable({
               const sel = selected.has(t.id);
               return (
                 <div
-                  key={t.id}
+                  key={`t-${t.id}`}
                   className={`trow${sel ? " selected" : ""}${cursor === i ? " cursor" : ""}${t.status !== "ok" ? " dim" : ""}`}
                   style={style}
                   role="row"

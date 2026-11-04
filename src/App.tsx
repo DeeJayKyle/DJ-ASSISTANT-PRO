@@ -17,7 +17,7 @@ import { GigPackView } from "./components/GigPackView";
 import { FilesView } from "./components/FilesView";
 import { SettingsView, SAFETY_POINTS } from "./components/SettingsView";
 import { QuickPrepView } from "./components/quick/QuickPrepView";
-import { ChatPanel } from "./components/ChatPanel";
+import { ChatPanel, type UiAction } from "./components/ChatPanel";
 import { StatusBar } from "./components/StatusBar";
 import { CrateDialog } from "./components/CrateDialog";
 import { Dialog } from "./components/ui";
@@ -31,6 +31,13 @@ type ChatMode = "open" | "full" | "hidden";
 export default function App() {
   const [view, setView] = useState<View>("library");
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [healthFix, setHealthFix] = useState<{ category: string; n: number } | null>(null);
+  // The status bar's "online services" list must follow AI provider changes at once.
+  useEffect(() => {
+    const on = () => setVersion((v) => v + 1);
+    window.addEventListener("dj-ai-changed", on);
+    return () => window.removeEventListener("dj-ai-changed", on);
+  }, []);
   const [info, setInfo] = useState<{ version: string; db_path: string } | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [crates, setCrates] = useState<Crate[]>([]);
@@ -173,6 +180,26 @@ export default function App() {
     const map: Record<string, View> = { folders: "activity" };
     setView((map[target] ?? target) as View);
   };
+  // Screen changes requested by the AI assistant or a /command.
+  const onAiUi = (a: UiAction) => {
+    if (a.type === "show_tracks") {
+      applyAssistant({ reply: "", understood: [], action: "search", target: null, text: a.text ?? null, filters: a.filters ?? null, total: null, sample: [] });
+      return;
+    }
+    if (a.view === "crate" && a.crate_id != null) setView(`crate:${a.crate_id}` as View);
+    else if (a.view === "health-fix") {
+      setHealthFix({ category: a.category ?? "missing_genre", n: Date.now() });
+      setView("health");
+    } else if (a.view === "set-studio") {
+      if (a.set_params) setSetParams(a.set_params);
+      setView("set-studio");
+    } else setView(a.view as View);
+    if (chat === "full") setChatMode("open");
+  };
+  const refreshAfterChat = () => {
+    bump();
+    api.getSettings().then(setSettings).catch(() => {});
+  };
 
   if (fatal) return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><h2>DJ Assistant could not start</h2><p>{fatal}</p></div>;
   if (!settings) return <div className="empty" style={{ height: "100%", justifyContent: "center" }}><div className="spin"><Icon name="disc" size={32} /></div></div>;
@@ -212,7 +239,7 @@ export default function App() {
       />
     );
   } else if (view === "quick") main = <QuickPrepView crates={crates} roots={roots} toast={toast} bump={bump} />;
-  else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} /></div>;
+  else if (view === "health") main = <div className="page"><HealthView version={version} onOpen={openHealth} toast={toast} bump={bump} startFix={healthFix} /></div>;
   else if (view === "duplicates") main = <div className="page"><DuplicatesView version={version} toast={toast} /></div>;
   else if (view === "activity") main = <ActivityView scan={scan} version={version} bump={bump} toast={toast} health={health} />;
   else if (view === "crates") main = <CratesView crates={crates} version={version} bump={bump} toast={toast} setView={setView} onNewCrate={() => setCrateDialog({ crate: null })} />;
@@ -231,7 +258,7 @@ export default function App() {
       <div className={`workspace${chat === "full" ? " chat-full" : chat === "hidden" ? " no-chat" : ""}`}>
         <Sidebar view={view} setView={setView} crates={crates} roots={roots} stats={stats} pending={pending} onNewCrate={() => setCrateDialog({ crate: null })} docsEnabled={settings.docs_enabled} />
         <main>{main}</main>
-        {chat !== "hidden" && <ChatPanel mode={chat} setMode={setChatMode} onApply={(r) => { applyAssistant(r); }} onNavigate={navigate} />}
+        {chat !== "hidden" && <ChatPanel mode={chat} setMode={setChatMode} onApply={(r) => { applyAssistant(r); }} onNavigate={navigate} onUi={onAiUi} onOpenSettings={() => setView("settings")} onChanged={refreshAfterChat} toast={toast} />}
       </div>
       <StatusBar scan={scan} jobs={jobs} version={info?.version ?? ""} onlineOn={onlineOn} chatHidden={chat === "hidden"} onShowChat={() => setChatMode("open")} onOpen={(v) => setView(v as View)} />
       {crateDialog && (

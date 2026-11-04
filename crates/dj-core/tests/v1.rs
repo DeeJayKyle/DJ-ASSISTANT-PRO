@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 struct FakeOnline;
+static LLM_SEEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 impl Online for FakeOnline {
     fn musicbrainz_recordings(
         &self,
@@ -79,43 +80,77 @@ impl Online for FakeOnline {
             url: None,
         }])
     }
-    fn ai_chat(
+    /// A scripted model: deterministic turns that exercise the agent loop.
+    fn llm_chat(
         &self,
-        base_url: &str,
-        key: Option<&str>,
-        model: &str,
-        messages: &[(String, String)],
-    ) -> Result<String, String> {
-        assert_eq!(
-            (base_url, key, model),
-            (
-                "https://api.groq.com/openai/v1",
-                Some("gsk_test"),
-                "openai/gpt-oss-120b"
-            )
-        );
-        let (sys, user) = (&messages[0].1, &messages.last().unwrap().1);
-        let tmp = std::env::temp_dir();
+        cfg: &dj_core::agent::LlmConfig,
+        system: &str,
+        tools: &[Value],
+        messages: &[Value],
+    ) -> Result<Value, String> {
         assert!(
-            !user.contains(tmp.to_str().unwrap()) && !user.contains("Afrobeats/"),
-            "file paths are never sent: {user}"
+            system.contains("Camelot wheel"),
+            "guide must be the system prompt"
         );
-        if sys.contains("tidy their music library") {
-            let items: Vec<Value> = serde_json::from_str(user).unwrap();
-            let out: Vec<Value> = items.iter().map(|t| json!({"id": t["id"], "artist": "Lagos Lights", "title": "Sunrise Groove", "mix": "Radio Edit", "genre": "afrobeats"})).collect();
-            Ok(json!({"tracks": out}).to_string())
-        } else if sys.contains("planning a set") {
-            let list: Vec<Value> =
-                serde_json::from_str(user.split("Tracks: ").nth(1).unwrap()).unwrap();
-            let mut ids: Vec<Value> = list.iter().map(|t| t["id"].clone()).collect();
-            ids.reverse();
-            Ok(format!(
-                "Sure! {}",
-                json!({"order": ids, "note": "Reversed."})
-            ))
-        } else {
-            Ok("{\"ok\":true}".into())
+        assert!(tools.iter().any(|t| t["name"] == "create_crate"));
+        let last = messages.last().unwrap();
+        let blocks = last["content"].as_array().cloned().unwrap_or_default();
+        LLM_SEEN.lock().unwrap().push(last.to_string());
+        if blocks.iter().any(|b| b["type"] == "tool_result") {
+            let summary: Vec<String> = blocks
+                .iter()
+                .map(|b| {
+                    format!(
+                        "{}{}",
+                        if b["is_error"] == true { "ERR:" } else { "" },
+                        b["content"]
+                            .as_str()
+                            .unwrap_or("")
+                            .chars()
+                            .take(60)
+                            .collect::<String>()
+                    )
+                })
+                .collect();
+            return Ok(
+                json!({"model": cfg.model, "stop_reason": "end_turn", "content": [{"type": "text", "text": format!("Done: {}", summary.join(" | "))}]}),
+            );
         }
+        let text = blocks
+            .iter()
+            .filter_map(|b| b["text"].as_str())
+            .filter(|t| !t.starts_with("<app_state>"))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        let afro = json!({"match": "all", "rules": [{"kind": "condition", "field": "genre", "op": "equals", "value": "Afrobeats"}]});
+        let content = if text.contains("crate") {
+            json!([{"type": "thinking", "thinking": "", "signature": "sig"},
+                   {"type": "text", "text": "Afrobeats crate coming up."},
+                   {"type": "tool_use", "id": "t1", "name": "search_tracks", "input": {"filters": afro, "limit": 5}},
+                   {"type": "tool_use", "id": "t2", "name": "create_crate", "input": {"name": "AI Afrobeats", "kind": "smart", "rules": afro, "color": "green"}},
+                   {"type": "tool_use", "id": "t3", "name": "change_setting", "input": {"setting": "key_notation", "value": "musical"}}])
+        } else if text.contains("show") {
+            json!([{"type": "tool_use", "id": "s1", "name": "show_tracks", "input": {"filters": afro, "label": "Afrobeats"}},
+                   {"type": "tool_use", "id": "s2", "name": "open_view", "input": {"view": "library"}}])
+        } else if text.contains("detail") {
+            json!([{"type": "tool_use", "id": "d1", "name": "get_track", "input": {"id": 1}},
+                   {"type": "tool_use", "id": "d2", "name": "library_overview", "input": {}},
+                   {"type": "tool_use", "id": "d3", "name": "delete_files", "input": {}}])
+        } else {
+            json!([{"type": "text", "text": "Hello! Ask me about your library."}])
+        };
+        let stop = if content
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b["type"] == "tool_use")
+        {
+            "tool_use"
+        } else {
+            "end_turn"
+        };
+        Ok(json!({"model": cfg.model, "stop_reason": stop, "content": content}))
     }
 }
 
@@ -1489,6 +1524,182 @@ fn corrupt_video_headers_are_rejected_without_panicking() {
 }
 
 #[test]
+fn ai_assistant_uses_tools_and_waits_for_approval() {
+    let e = env();
+    let app = app_with_fake(&e);
+    add_and_scan(&app, &e.music);
+    let before = snapshot(&e.music);
+    // Off by default; no key -> clear errors.
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(st["provider"], "off");
+    assert_eq!(st["ready"], false);
+    assert!(app.dispatch("ai_chat", json!({"message": "hi"})).is_err());
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_provider", "value": "claude"}),
+    );
+    let err = app
+        .dispatch("ai_chat", json!({"message": "hi"}))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("API key"), "{err}");
+    assert!(app
+        .dispatch(
+            "set_secret",
+            json!({"service": "anthropic", "value": "not-a-key"})
+        )
+        .is_err());
+    call(
+        &app,
+        "set_secret",
+        json!({"service": "anthropic", "value": "sk-ant-test-123"}),
+    );
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(
+        (st["ready"].as_bool(), st["model"].as_str()),
+        (Some(true), Some("claude-opus-5-5"))
+    );
+    assert!(st["sends"].as_str().unwrap().contains("Never audio"));
+    // The status bar's online services list shows the AI as on.
+    let svc = call(&app, "services", json!({}));
+    assert!(svc
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|s| s["id"] == "anthropic" && s["enabled"] == true && s["has_key"] == true));
+
+    // Plain answer, first message carries the app state.
+    let t = call(&app, "ai_chat", json!({"message": "hello"}));
+    assert_eq!(t["text"], "Hello! Ask me about your library.");
+    assert!(LLM_SEEN
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .contains("<app_state>tracks:"));
+    let conv = t["conversation_id"].as_str().unwrap().to_string();
+
+    // Read runs now; actions wait as cards and change nothing until approved.
+    let crates_before = call(&app, "list_crates", json!({}))
+        .as_array()
+        .unwrap()
+        .len();
+    let t = call(
+        &app,
+        "ai_chat",
+        json!({"conversation_id": conv, "message": "make me an afrobeats crate"}),
+    );
+    assert_eq!(t["looked_up"], json!(["search tracks"]));
+    let pending = t["pending"].as_array().unwrap();
+    assert_eq!(pending.len(), 2);
+    assert_eq!(pending[0]["tool"], "create_crate");
+    assert!(
+        pending[0]["summary"]
+            .as_str()
+            .unwrap()
+            .starts_with("Create smart crate “AI Afrobeats” — "),
+        "{}",
+        pending[0]["summary"]
+    );
+    assert_eq!(pending[1]["summary"], "Change key_notation to musical");
+    assert_eq!(
+        call(&app, "list_crates", json!({}))
+            .as_array()
+            .unwrap()
+            .len(),
+        crates_before
+    );
+    // Approve the crate, skip the setting.
+    let t = call(
+        &app,
+        "ai_confirm",
+        json!({"conversation_id": conv, "decisions": {"t2": true, "t3": false}}),
+    );
+    let done = t["done"].as_array().unwrap();
+    assert_eq!(done[0]["ok"], true);
+    assert_eq!(done[1]["skipped"], true);
+    let text = t["text"].as_str().unwrap();
+    assert!(text.starts_with("Done: {"), "{text}");
+    assert!(
+        text.contains("ERR:The DJ chose not to run this action."),
+        "{text}"
+    );
+    let crates = call(&app, "list_crates", json!({}));
+    assert!(crates
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["name"] == "AI Afrobeats" && c["kind"] == "smart"));
+    assert_eq!(
+        call(&app, "get_settings", json!({}))["key_notation"],
+        "camelot"
+    );
+    assert!(app
+        .dispatch(
+            "ai_confirm",
+            json!({"conversation_id": conv, "decisions": {}})
+        )
+        .is_err());
+
+    // UI tools come back for the front end to apply.
+    let t = call(
+        &app,
+        "ai_chat",
+        json!({"conversation_id": conv, "message": "show afrobeats"}),
+    );
+    let ui = t["ui_actions"].as_array().unwrap();
+    assert_eq!(ui[0]["type"], "show_tracks");
+    assert_eq!(ui[0]["filters"]["rules"][0]["value"], "Afrobeats");
+    assert_eq!(ui[1]["view"], "library");
+
+    // Tool results never carry file paths; unknown tools are refused.
+    LLM_SEEN.lock().unwrap().clear();
+    call(
+        &app,
+        "ai_chat",
+        json!({"conversation_id": conv, "message": "track detail please"}),
+    );
+    let seen = LLM_SEEN.lock().unwrap().join("\n");
+    let music = e.music.to_string_lossy().to_string();
+    assert!(!seen.contains(&music), "a path leaked to the model");
+    assert!(seen.contains("Unknown tool 'delete_files'"));
+
+    // A new message while actions wait skips them.
+    let t = call(
+        &app,
+        "ai_chat",
+        json!({"conversation_id": conv, "message": "another crate"}),
+    );
+    assert_eq!(t["pending"].as_array().unwrap().len(), 2);
+    call(
+        &app,
+        "ai_chat",
+        json!({"conversation_id": conv, "message": "never mind"}),
+    );
+    assert!(LLM_SEEN
+        .lock()
+        .unwrap()
+        .last()
+        .unwrap()
+        .contains("The DJ did not run this action."));
+    call(&app, "ai_reset", json!({"conversation_id": conv}));
+    // Only the local model server on this computer is accepted.
+    assert!(app
+        .dispatch(
+            "set_setting",
+            json!({"key": "ai_local_url", "value": "http://example.com:11434"})
+        )
+        .is_err());
+    call(
+        &app,
+        "set_setting",
+        json!({"key": "ai_local_url", "value": "http://127.0.0.1:11434"}),
+    );
+    assert_eq!(before, snapshot(&e.music));
+}
+
+#[test]
 fn quick_prep_exports_layouts_zip_and_tagged_copies() {
     let e = env();
     let before = snapshot(&e.music);
@@ -1655,47 +1866,82 @@ fn quick_prep_exports_layouts_zip_and_tagged_copies() {
     );
 }
 
+/// A model that answers Quick Prep's plain requests (Messages format).
+struct QuickModel;
+impl Online for QuickModel {
+    fn musicbrainz_recordings(&self, _: &str, _: &str) -> Result<Vec<MbRecording>, String> {
+        Err("n/a".into())
+    }
+    fn musicbrainz_artist_releases(&self, _: &str) -> Result<Vec<ReleaseItem>, String> {
+        Err("n/a".into())
+    }
+    fn acoustid_lookup(&self, _: &str, _: u32, _: &str) -> Result<Vec<AcoustidMatch>, String> {
+        Err("n/a".into())
+    }
+    fn lastfm_similar_artists(&self, _: &str, _: &str) -> Result<Vec<SimilarItem>, String> {
+        Err("n/a".into())
+    }
+    fn lastfm_similar_tracks(&self, _: &str, _: &str, _: &str) -> Result<Vec<SimilarItem>, String> {
+        Err("n/a".into())
+    }
+    fn llm_chat(
+        &self,
+        cfg: &dj_core::agent::LlmConfig,
+        system: &str,
+        tools: &[Value],
+        messages: &[Value],
+    ) -> Result<Value, String> {
+        assert!(tools.is_empty(), "Quick Prep sends no tools");
+        assert_eq!(cfg.api_key.as_deref(), Some("sk-ant-test-123"));
+        let user = messages[0]["content"].as_str().unwrap();
+        let tmp = std::env::temp_dir();
+        assert!(
+            !user.contains(tmp.to_str().unwrap()),
+            "file paths are never sent: {user}"
+        );
+        let text = if system.contains("tidy their music library") {
+            let items: Vec<Value> = serde_json::from_str(user).unwrap();
+            let out: Vec<Value> = items.iter().map(|t| json!({"id": t["id"], "artist": "Lagos Lights", "title": "Sunrise Groove", "mix": "Radio Edit", "genre": "afrobeats"})).collect();
+            json!({"tracks": out}).to_string()
+        } else {
+            let list: Vec<Value> =
+                serde_json::from_str(user.split("Tracks: ").nth(1).unwrap()).unwrap();
+            let ids: Vec<Value> = list.iter().rev().map(|t| t["id"].clone()).collect();
+            format!("Sure! {}", json!({"order": ids, "note": "Reversed."}))
+        };
+        Ok(
+            json!({"model": cfg.model, "stop_reason": "end_turn", "content": [{"type": "text", "text": text}]}),
+        )
+    }
+}
+
 #[test]
-fn quick_prep_ai_is_opt_in_and_sends_no_paths() {
+fn quick_prep_ai_uses_the_assistant_model_and_sends_no_paths() {
     let e = env();
-    let app = app_with_fake(&e);
+    let app = App::open_with(
+        &e.db(),
+        Arc::new(QuickModel),
+        Arc::new(MemorySecrets::default()),
+    )
+    .unwrap();
     add_and_scan(&app, &e.music);
     let id = id_of(&app, "Lagos Lights - Sunrise Groove.mp3");
     let other = id_of(&app, "Low Tide.flac");
     assert!(
-        app.dispatch("ai_test", json!({})).is_err(),
-        "off until switched on"
+        app.dispatch("ai_order", json!({"request": "x", "ids": [id, other]}))
+            .is_err(),
+        "off while the assistant is off"
     );
-    assert!(app
-        .dispatch(
-            "ai_configure",
-            json!({"base_url": "http://example.com/v1", "model": "m"})
-        )
-        .is_err());
     call(
         &app,
-        "ai_configure",
-        json!({"preset": "groq", "base_url": "https://api.groq.com/openai/v1/", "model": "openai/gpt-oss-120b"}),
+        "set_setting",
+        json!({"key": "ai_provider", "value": "claude"}),
     );
     call(
         &app,
         "set_secret",
-        json!({"service": "ai", "value": "gsk_test"}),
+        json!({"service": "anthropic", "value": "sk-ant-test-123"}),
     );
-    let st = call(&app, "ai_settings", json!({}));
-    assert_eq!(
-        (
-            st["enabled"].as_bool(),
-            st["has_key"].as_bool(),
-            st["presets"].as_array().unwrap().len()
-        ),
-        (Some(true), Some(true), 4)
-    );
-    assert!(
-        st.to_string().find("gsk_test").is_none(),
-        "the key is never sent back"
-    );
-    assert_eq!(call(&app, "ai_test", json!({}))["ok"], true);
     let r = call(
         &app,
         "ai_tidy",
@@ -1714,12 +1960,4 @@ fn quick_prep_ai_is_opt_in_and_sends_no_paths() {
     // Suggestions only: nothing was saved to the catalogue.
     let row = &search(&app, json!({"text": "sunrise groove"}))["rows"][0];
     assert!(row["version"].as_str() != Some("Radio Edit"), "{row}");
-    call(
-        &app,
-        "set_service",
-        json!({"service": "ai", "enabled": false}),
-    );
-    assert!(app
-        .dispatch("ai_order", json!({"request": "x", "ids": [id, other]}))
-        .is_err());
 }

@@ -6,7 +6,6 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { createServer } from "node:http";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const data = path.join(root, "e2e/.data");
@@ -27,7 +26,6 @@ cpSync(fx("Lossless/untagged recording.wav"), path.join(messy, "01_-_dj_kozi-sun
 cpSync(fx("Lossless/untagged recording.wav"), path.join(messy, "deep_house_groove__clean_.wav"));
 cpSync(fx("Lossless/untagged recording.wav"), path.join(messy, "track02 final FINAL v3.wav"));
 cpSync(fx("House/Old School/Basement Hours.mp3"), path.join(messy, "basement-hours_FINAL.mp3"));
-
 
 const snapshot = (dir) => {
   const out = {};
@@ -57,7 +55,7 @@ const start = (cmd, args, env = {}) => {
 };
 const cleanup = () => procs.forEach((p) => p.kill());
 process.on("exit", cleanup);
-start(bridgeBin, ["--data", path.join(data, "app"), "--port", "7878", "--online"]);
+start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878", "--demo-ai"]);
 start("npx", ["vite", "--port", "5174", "--strictPort"], { VITE_DEV_BRIDGE: "1" });
 const waitFor = async (url, ms = 40000) => {
   const t0 = Date.now();
@@ -98,27 +96,7 @@ let restarting = false;
 page.on("console", (m) => m.type() === "error" && !restarting && consoleErrors.push(m.text()));
 page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
-
-// A stand-in for an OpenAI-compatible AI service on Ollama's local address (AI help is optional).
-const aiCalls = [];
-const aiServer = createServer((req, res) => {
-  let body = "";
-  req.on("data", (c) => (body += c));
-  req.on("end", () => {
-    const { messages = [] } = JSON.parse(body || "{}");
-    const sys = messages[0]?.content ?? "";
-    const user = messages.at(-1)?.content ?? "";
-    aiCalls.push({ sys: sys.slice(0, 40), user });
-    let content = '{"ok":true}';
-    if (/tidy their music library/.test(sys)) content = JSON.stringify({ tracks: JSON.parse(user).map((t) => (/deep_house/.test(t.file) ? { id: t.id, artist: "Groove Unit", title: "Deep House Groove", mix: "Clean", genre: "deep house" } : { id: t.id, ...t.suggestion })) });
-    else if (/planning a set/.test(sys)) content = JSON.stringify({ order: JSON.parse(user.split("Tracks: ")[1]).map((t) => t.id).reverse(), note: "Reversed by the test AI." });
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ message: { content } }] }));
-  });
-});
-await new Promise((r) => aiServer.listen(11434, "127.0.0.1", r));
 const bridge = (cmd, args = {}) => fetch("http://127.0.0.1:7878", { method: "POST", body: JSON.stringify({ cmd, args }) }).then((r) => r.json());
-
 console.log("running e2e steps…");
 await page.goto("http://127.0.0.1:5174");
 
@@ -400,6 +378,55 @@ await step("premium UI switch repaints with the Midnight Pro palette and back", 
   expect((await page.evaluate(() => document.documentElement.dataset.palette)) === undefined, "palette not removed");
 });
 
+await step("AI assistant: turn on Claude with a key (scripted model in tests)", async () => {
+  await nav("Settings").click();
+  await page.getByRole("heading", { name: "AI assistant" }).waitFor();
+  await page.getByRole("button", { name: "Claude (online)" }).click();
+  await page.getByText(/Add your Anthropic API key/).first().waitFor();
+  await page.getByLabel("Anthropic API key").fill("sk-ant-e2e-demo");
+  await page.getByRole("button", { name: "Save API key" }).click();
+  await page.getByText("Ready", { exact: true }).waitFor();
+  await page.getByText(/sent to Anthropic/).first().waitFor();
+  await page.getByRole("contentinfo").getByText(/AI assistant \(Claude\)/).waitFor();
+});
+
+await step("AI assistant looks things up, filters the library and proposes a crate that runs only on approval", async () => {
+  const chat = page.getByLabel("Message the assistant");
+  await page.getByRole("heading", { name: /AI assistant/ }).first().waitFor();
+  await chat.fill("show me my afrobeats");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText(/Afrobeats tracks\. I can put them/).waitFor();
+  await page.getByText(/Looked up: search tracks/).waitFor();
+  await page.getByText(/Showing Afrobeats in the library/).waitFor();
+  const before = await page.getByRole("navigation", { name: "Main" }).getByText("Afrobeats (AI)").count();
+  expect(before === 0, "crate existed before approval");
+  await chat.fill("yes, make that a crate");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText(/Create smart crate “Afrobeats \(AI\)” — \d+ tracks? match now/).waitFor();
+  expect((await page.getByRole("navigation", { name: "Main" }).getByText("Afrobeats (AI)").count()) === 0, "crate created before Run");
+  await page.screenshot({ path: path.join(shots, "10-ai-action-card.png") });
+  await page.getByRole("button", { name: /^Run/ }).click();
+  await page.getByText(/All done\. The crate/).waitFor();
+  await page.getByRole("navigation", { name: "Main" }).getByText("Afrobeats (AI)").first().waitFor();
+});
+
+await step("slash commands run app tasks directly", async () => {
+  const chat = page.getByLabel("Message the assistant");
+  await chat.fill("/");
+  await page.getByRole("listbox", { name: "Commands" }).waitFor();
+  await chat.fill("/keys musical");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText("Keys now show in musical notation.").waitFor();
+  await chat.fill("/fix genre");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("heading", { name: "Fix: Missing genre" }).waitFor();
+  await chat.fill("/keys camelot");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText("Keys now show in camelot notation.").waitFor();
+  await chat.fill("/nope");
+  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByText(/Unknown command \/nope/).waitFor();
+});
 
 // ---------------------------------------------------------------- Quick Prep
 const listFiles = (dir) => { const out = []; const walk = (d, rel) => { for (const n of readdirSync(d)) { const p = path.join(d, n); if (statSync(p).isDirectory()) walk(p, `${rel}${n}/`); else out.push(`${rel}${n}`); } }; walk(dir, ""); return out.sort(); };
@@ -455,8 +482,7 @@ await step("Quick Prep: playlist sorts by BPM and exports as one ZIP with number
   await page.getByRole("button", { name: "All paths" }).click();
   await page.getByRole("button", { name: /Build a playlist/ }).click();
   await page.getByRole("button", { name: "Ascending BPM" }).click();
-  await page.getByLabel("Describe how to order the playlist").fill("warm up to the peak");
-  await page.getByRole("button", { name: "Sort", exact: true }).click();
+  await page.getByRole("button", { name: "Warm-up → peak" }).click();
   await page.getByRole("button", { name: "Warm-up → peak", pressed: true }).waitFor();
   await page.getByLabel("Playlist name").fill("Friday Set");
   await page.screenshot({ path: path.join(shots, "23-quick-playlist.png") });
@@ -511,12 +537,7 @@ await step("Quick Prep: previews stream catalogued tracks only (range requests)"
   expect((await fetch("http://127.0.0.1:7878/track/999999")).status === 404, "unknown ids must not resolve");
 });
 
-await step("AI help (optional): set up in Settings, then improves names and orders a set", async () => {
-  await nav("Settings").click();
-  const row = page.locator(".list-row", { hasText: "AI help" });
-  await row.getByLabel("AI service").selectOption("ollama");
-  await row.getByRole("button", { name: "Save and test" }).click();
-  await page.getByText("AI help is working.").waitFor();
+await step("Quick Prep AI help uses the assistant's model: better names and a set order", async () => {
   await nav("Quick Prep").click();
   await page.getByRole("button", { name: "All paths" }).click();
   await page.getByRole("button", { name: /Clean names/ }).click();
@@ -525,12 +546,11 @@ await step("AI help (optional): set up in Settings, then improves names and orde
   const names = await page.locator(".qp-name").evaluateAll((els) => els.map((e) => e.value));
   expect(names.includes("Groove Unit - Deep House Groove (Clean)"), `AI name missing: ${names}`);
   expect(names.includes("Mara Vey - Last Train"), "your own edit must be kept");
-  expect(!aiCalls.some((c) => c.user.includes(messy)), "file paths were sent to the AI");
   await page.getByRole("button", { name: "All paths" }).click();
   await page.getByRole("button", { name: /Build a playlist/ }).click();
   await page.getByLabel("Describe how to order the playlist").fill("something dreamy that slowly opens up");
   await page.getByRole("button", { name: "Sort", exact: true }).click();
-  await page.getByText("Reversed by the test AI.").waitFor();
+  await page.getByText("Reversed by the demo AI.").waitFor();
 });
 
 // ---------------------------------------------------------------- local accounts
@@ -554,7 +574,7 @@ await step("data, crates and sets persist after restarting the backend", async (
   restarting = true;
   procs[0].kill();
   await new Promise((r) => setTimeout(r, 500));
-  procs[0] = start(bridgeBin, ["--data", path.join(data, "app"), "--port", "7878", "--online"]);
+  procs[0] = start(bridgeBin, ["--db", path.join(data, "app/catalogue.sqlite3"), "--port", "7878", "--demo-ai"]);
   await waitFor("http://127.0.0.1:7878");
   await page.reload();
   restarting = false;
@@ -569,7 +589,6 @@ await step("no console errors", async () => expect(consoleErrors.length === 0, c
 await browser.close();
 const after = snapshot(music);
 await step("source files unchanged after the whole session (size, mtime, SHA-256)", async () => expect(JSON.stringify(before) === JSON.stringify(after), "fixture files changed!"));
-aiServer.close();
 cleanup();
 console.log(failures ? `\n${failures} e2e step(s) FAILED` : "\nall e2e steps passed");
 process.exit(failures ? 1 : 0);

@@ -11,20 +11,31 @@ fn main() {
     let mut data = PathBuf::from("e2e/.data/app");
     let mut online = false;
     let mut port: u16 = 7878;
+    let mut demo_ai = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
+            // Local accounts: a data folder holds accounts.json and one catalogue per account.
             "--data" => data = PathBuf::from(args.next().expect("--data <dir>")),
-            // Lets e2e tests reach a local stand-in AI service; off by default.
+            "--db" => {
+                let db = PathBuf::from(args.next().expect("--db <path>"));
+                data = db.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+            }
+            // Lets tests reach a local stand-in service; off by default.
             "--online" => online = true,
             "--port" => port = args.next().expect("--port <n>").parse().expect("port"),
+            "--demo-ai" => demo_ai = true,
             _ => {
-                eprintln!("usage: dj-devbridge [--data dir] [--port n] [--online]");
+                eprintln!("usage: dj-devbridge [--data dir] [--port n] [--demo-ai] [--online]");
                 std::process::exit(2);
             }
         }
     }
-    let net: Arc<dyn dj_core::online::Online> = if online {
+    // A scripted stand-in for the AI model (--demo-ai) lets the UI flow be
+    // tested without network access or an API key. Never used by the real app.
+    let net: Arc<dyn dj_core::online::Online> = if demo_ai {
+        Arc::new(DemoAi(std::sync::Mutex::new(0)))
+    } else if online {
         Arc::new(dj_online::Http::new())
     } else {
         Arc::new(dj_core::online::NoOnline)
@@ -101,5 +112,127 @@ fn main() {
             r.add_header(h.clone());
         }
         let _ = req.respond(r);
+    }
+}
+
+/// Scripted "model": picks tools from keywords so the e2e test can exercise
+/// read tools, screen changes and approval cards deterministically.
+struct DemoAi(std::sync::Mutex<u64>);
+impl dj_core::online::Online for DemoAi {
+    fn musicbrainz_recordings(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<Vec<dj_core::online::MbRecording>, String> {
+        Err("offline demo".into())
+    }
+    fn musicbrainz_artist_releases(
+        &self,
+        _: &str,
+    ) -> Result<Vec<dj_core::online::ReleaseItem>, String> {
+        Err("offline demo".into())
+    }
+    fn acoustid_lookup(
+        &self,
+        _: &str,
+        _: u32,
+        _: &str,
+    ) -> Result<Vec<dj_core::online::AcoustidMatch>, String> {
+        Err("offline demo".into())
+    }
+    fn lastfm_similar_artists(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> Result<Vec<dj_core::online::SimilarItem>, String> {
+        Err("offline demo".into())
+    }
+    fn lastfm_similar_tracks(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<Vec<dj_core::online::SimilarItem>, String> {
+        Err("offline demo".into())
+    }
+    fn llm_chat(
+        &self,
+        cfg: &dj_core::agent::LlmConfig,
+        system: &str,
+        _t: &[Value],
+        messages: &[Value],
+    ) -> Result<Value, String> {
+        let last = messages.last().cloned().unwrap_or(Value::Null);
+        // Quick Prep's AI help: one plain request with a JSON answer.
+        if let Some(user) = last["content"].as_str() {
+            let text = if system.contains("tidy their music library") {
+                let items: Vec<Value> = serde_json::from_str(user).unwrap_or_default();
+                let out: Vec<Value> = items.iter().map(|t| {
+                    if t["file"].as_str().unwrap_or("").contains("deep_house") {
+                        json!({"id": t["id"], "artist": "Groove Unit", "title": "Deep House Groove", "mix": "Clean", "genre": "deep house"})
+                    } else {
+                        let mut v = t["suggestion"].clone();
+                        v["id"] = t["id"].clone();
+                        v
+                    }
+                }).collect();
+                json!({"tracks": out}).to_string()
+            } else if system.contains("planning a set") {
+                let list: Vec<Value> =
+                    serde_json::from_str(user.split("Tracks: ").nth(1).unwrap_or("[]"))
+                        .unwrap_or_default();
+                let ids: Vec<Value> = list.iter().rev().map(|t| t["id"].clone()).collect();
+                json!({"order": ids, "note": "Reversed by the demo AI."}).to_string()
+            } else {
+                "{}".to_string()
+            };
+            return Ok(
+                json!({"model": cfg.model, "stop_reason": "end_turn", "content": [{"type": "text", "text": text}]}),
+            );
+        }
+        let blocks = last["content"].as_array().cloned().unwrap_or_default();
+        let mut n = self.0.lock().unwrap();
+        *n += 1;
+        let id = |k: &str| format!("demo_{k}_{n}");
+        if let Some(r) = blocks.iter().find(|b| b["type"] == "tool_result") {
+            let body: Value = serde_json::from_str(r["content"].as_str().unwrap_or("null"))
+                .unwrap_or(Value::Null);
+            let text = if r["is_error"] == true {
+                "Okay, I left that alone.".to_string()
+            } else if let Some(t) = body.get("total") {
+                format!("You have **{t}** Afrobeats tracks. I can put them in a smart crate that stays up to date — want me to?")
+            } else {
+                "All done. The crate **Afrobeats (AI)** is in your sidebar and updates itself as you add music.".to_string()
+            };
+            return Ok(
+                json!({"model": cfg.model, "stop_reason": "end_turn", "content": [{"type": "text", "text": text}]}),
+            );
+        }
+        let text = blocks
+            .iter()
+            .filter_map(|b| b["text"].as_str())
+            .filter(|t| !t.starts_with("<app_state>"))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        let afro = json!({"match": "all", "rules": [{"kind": "condition", "field": "genre", "op": "equals", "value": "Afrobeats"}]});
+        let content = if text.contains("crate") {
+            json!([{"type": "text", "text": "Here's the crate I'd make:"}, {"type": "tool_use", "id": id("c"), "name": "create_crate", "input": {"name": "Afrobeats (AI)", "kind": "smart", "rules": afro, "color": "green"}}])
+        } else if text.contains("afrobeats") {
+            json!([{"type": "tool_use", "id": id("s"), "name": "search_tracks", "input": {"filters": afro, "limit": 5}}, {"type": "tool_use", "id": id("v"), "name": "show_tracks", "input": {"filters": afro, "label": "Afrobeats"}}])
+        } else {
+            json!([{"type": "text", "text": "Hi Herbie! I know every corner of DJ Assistant. Ask me about your library, or tell me what to prepare."}])
+        };
+        let stop = if content
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b["type"] == "tool_use")
+        {
+            "tool_use"
+        } else {
+            "end_turn"
+        };
+        Ok(json!({"model": cfg.model, "stop_reason": stop, "content": content}))
     }
 }

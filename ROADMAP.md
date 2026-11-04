@@ -12,8 +12,14 @@ Every item still needs **manual testing on a real Windows PC with a real library
 | Quick Prep | Export as verified folder copy, ZIP, or playlists only; layouts with sub-folders and a playlist per folder | Tested (Rust integration + e2e) |
 | Quick Prep | Clean tags written into new copies only (MP3, FLAC, M4A), audio data verified unchanged | Tested (MP3, FLAC) |
 | Quick Prep | Track previews (read-only `track:` protocol with range requests, catalogued tracks only) and waveform | Tested (bridge); desktop protocol needs a manual check on Windows |
-| Quick Prep | Optional AI help (OpenAI-compatible: Groq, Gemini, OpenRouter, Ollama), off by default | Tested with fakes and a local stand-in; live services not verified |
+| Quick Prep | AI help for names, genres and set orders, using the assistant's model (Claude or local) | Tested with a fake model and the scripted demo model |
 | Accounts | Several local accounts, no sign-in; separate catalogues; rename/remove; existing catalogue migrates | Tested (Rust + e2e) |
+| AI assistant | Built-in app knowledge (docs/ASSISTANT_GUIDE.md as the system prompt, cached) | Tested |
+| AI assistant | 31 tools over the app's commands: read (auto), screen (auto), actions (approval cards) | Tested (scripted model) |
+| AI assistant | Claude provider (Messages API, raw HTTPS, refusal fallback, prompt caching) | Implemented; request shape unit-tested, no live call possible here |
+| AI assistant | Local provider (Ollama, loopback only) | Tested against a fake server; not against a real Ollama |
+| AI assistant | No file paths in tool results; no file-changing tools | Tested |
+| Chat | /commands for app tasks, with or without AI | Tested (e2e) |
 
 ## v1.1
 

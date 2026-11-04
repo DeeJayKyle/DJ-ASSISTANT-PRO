@@ -37,7 +37,7 @@ const setTracks = (ts: QTrack[]) => ts.map((t) => ({ id: String(t.id), bpm: t.bp
 
 function useAi() {
   const [on, setOn] = useState(false);
-  useEffect(() => { api.aiSettings().then((s) => setOn(s.enabled && (s.has_key || s.preset === "ollama") && !!s.model)).catch(() => setOn(false)); }, []);
+  useEffect(() => { api.aiStatus().then((s) => setOn(s.ready)).catch(() => setOn(false)); }, []);
   return on;
 }
 
@@ -135,7 +135,7 @@ export function CleanNames(ctx: Ctx) {
         <div className="seg" role="group" aria-label="Name format">
           {(["artist-title", "title-artist"] as const).map((f) => <button key={f} aria-pressed={st.format === f} onClick={() => patch({ format: f })}>{f === "artist-title" ? "Artist – Title" : "Title – Artist"}</button>)}
         </div>
-        <button className="btn" onClick={improve} disabled={busy || !ai} title={ai ? "Uses the AI service you set up in Settings" : "Set up AI help in Settings → Online services (optional)"}><Icon name="sparkles" size={16} /> {busy ? "Asking AI…" : "Improve with AI"}</button>
+        <button className="btn" onClick={improve} disabled={busy || !ai} title={ai ? "Uses the AI model chosen for the assistant" : "Turn on the AI assistant in Settings (optional)"}><Icon name="sparkles" size={16} /> {busy ? "Asking AI…" : "Improve with AI"}</button>
         <button className="btn ghost" onClick={rerun}><Icon name="refresh" size={16} /> Re-run</button>
         <button className="btn" onClick={saveAll}><Icon name="check" size={16} /> Save names to catalogue</button>
       </div>
@@ -218,7 +218,7 @@ export function Playlist(ctx: Ctx) {
     const simple = parseSortRequest(text);
     if (!ai) {
       if (simple) { sortBy(simple); setAsk(""); }
-      else toast("Try “warm-up to peak”, “by BPM”, “fastest first” or “harmonic” — or set up AI help in Settings for anything else.");
+      else toast("Try “warm-up to peak”, “by BPM”, “fastest first” or “harmonic” — or turn on the AI assistant in Settings for anything else.");
       return;
     }
     setBusy(true);

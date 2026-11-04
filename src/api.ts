@@ -2,10 +2,10 @@
 // The HTTP bridge is compiled in ONLY for development/e2e builds
 // (VITE_DEV_BRIDGE=1) and talks to 127.0.0.1 — release builds never contain it.
 import type {
-  FixList,
+  AiStatus, AiTurn, FixList,
   ChangeLogEntry, CrateGaps, CrateTemplate, DiscoveryItem, DocHit, DocsReport, Gig, GigRecap, JobState, Labels, Overplayed, PackPlan,
   PlannedChange, Preferences, Recommendation, SavedSet, Service, SetParams, SetPlan, Suggestion, TracklistMatch, WatchItem,
-  AccountList, AiSettings, PackOptions,
+  AccountList, PackOptions,
   AssistantReply, Crate, DupGroup, FieldInfo, HashProgress, Health, Root, RuleSet,
   ScanProgress, Settings, Stats, TrackDetail, TrackPage, TrackQuery,
 } from "./types";
@@ -143,6 +143,11 @@ export const api = {
   lookupAcoustid: (sel: Selection) => call("lookup_acoustid", { ...sel, confirmed: true }),
   services: () => call<Service[]>("services"),
   setService: (service: string, enabled: boolean) => call("set_service", { service, enabled }),
+  aiStatus: () => call<AiStatus>("ai_status"),
+  aiChat: (message: string, conversation_id?: string | null) => call<AiTurn>("ai_chat", { message, conversation_id: conversation_id ?? null }),
+  aiConfirm: (conversation_id: string, decisions: Record<string, boolean>) => call<AiTurn>("ai_confirm", { conversation_id, decisions }),
+  aiReset: (conversation_id: string) => call("ai_reset", { conversation_id }),
+  aiLocalModels: () => call<string[]>("ai_local_models"),
   setSecret: (service: string, value: string) => call("set_secret", { service, value }),
   deleteSecret: (service: string) => call("delete_secret", { service }),
   crateTemplates: () => call<CrateTemplate[]>("crate_templates"),
@@ -213,10 +218,7 @@ export const api = {
   accountRename: (id: string, name: string) => call<AccountList>("account_rename", { id, name }),
   accountDelete: (id: string) => call<AccountList & { kept_backups: string | null }>("account_delete", { id }),
 
-  // ---- Quick Prep: optional AI help ----
-  aiSettings: () => call<AiSettings>("ai_settings"),
-  aiConfigure: (preset: string, base_url: string, model: string) => call("ai_configure", { preset, base_url, model }),
-  aiTest: () => call<{ ok: boolean }>("ai_test"),
+  // ---- Quick Prep: AI help (uses the assistant's model) ----
   aiTidy: (tracks: { id: number; current: Record<string, string> }[], genres: string[]) => call<{ id: number; artist: string; title: string; mix: string; genre: string | null }[]>("ai_tidy", { tracks, genres }),
   aiOrder: (request: string, ids: number[]) => call<{ order: number[]; note: string }>("ai_order", { request, ids }),
 };

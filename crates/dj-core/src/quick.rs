@@ -1,100 +1,28 @@
 //! Quick Prep's optional AI help: sharper clean names and genres, and set
-//! orders from a request typed in plain words. Off by default (service `ai`),
-//! it uses the DJ's own key with an OpenAI-compatible service of their choice
-//! (Groq, Gemini, OpenRouter, or Ollama on this computer).
+//! orders from a request typed in plain words. It uses the model chosen for
+//! the AI assistant (Claude with the DJ's key, or a local model), and is off
+//! while the assistant is off.
 //!
 //! Only file names, tag text and the BPM/key/energy DJ Assistant already
 //! knows are sent — never audio, paths or listening history. Answers are
 //! suggestions: the UI shows them and the DJ's own edits always win.
-use crate::db;
-use crate::error::{invalid, Error, Result};
+use crate::error::{Error, Result};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
-pub struct Preset {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub base_url: &'static str,
-    pub model: &'static str,
-    pub key_url: &'static str,
-    pub note: &'static str,
-}
-
-pub const PRESETS: &[Preset] = &[
-    Preset {
-        id: "groq",
-        label: "Groq",
-        base_url: "https://api.groq.com/openai/v1",
-        model: "openai/gpt-oss-120b",
-        key_url: "https://console.groq.com/keys",
-        note: "Free and very fast.",
-    },
-    Preset {
-        id: "gemini",
-        label: "Google Gemini",
-        base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
-        model: "gemini-3.8-flash",
-        key_url: "https://aistudio.google.com/apikey",
-        note: "Free with a Google account.",
-    },
-    Preset {
-        id: "openrouter",
-        label: "OpenRouter",
-        base_url: "https://openrouter.ai/api/v1",
-        model: "openrouter/free",
-        key_url: "https://openrouter.ai/keys",
-        note: "Free models from many labs.",
-    },
-    Preset {
-        id: "ollama",
-        label: "Ollama on this computer",
-        base_url: "http://127.0.0.1:11434/v1",
-        model: "llama3.2",
-        key_url: "https://ollama.com/download",
-        note: "Runs locally; no key needed.",
-    },
-];
-
-pub struct Config {
-    pub base_url: String,
-    pub model: String,
-    pub preset: String,
-}
-
-/// Only https, or plain http to this computer (Ollama).
-pub fn check_base_url(u: &str) -> Result<String> {
-    let u = u.trim().trim_end_matches('/');
-    let local = ["http://127.0.0.1", "http://localhost", "http://[::1]"]
-        .iter()
-        .any(|p| {
-            u.starts_with(p)
-                && u[p.len()..]
-                    .chars()
-                    .next()
-                    .is_none_or(|c| c == ':' || c == '/')
-        });
-    if !(u.starts_with("https://") || local)
-        || u.len() > 300
-        || u.chars().any(|c| c.is_whitespace() || c.is_control())
-    {
-        return invalid("the service address must start with https:// (or http://127.0.0.1 for a service on this computer)");
-    }
-    Ok(u.to_string())
-}
-
-pub fn config(conn: &Connection) -> Result<Option<Config>> {
-    let base_url = db::get_setting(conn, "ai_base_url")?.unwrap_or_default();
-    let model = db::get_setting(conn, "ai_model")?.unwrap_or_default();
-    if base_url.is_empty() || model.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(Config {
-        base_url,
-        model,
-        preset: db::get_setting(conn, "ai_preset")?.unwrap_or_default(),
-    }))
+/// The text of a model reply in the Messages format ({"content": [{"type":"text","text":…}]}).
+pub fn reply_text(v: &Value) -> String {
+    v["content"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|b| b["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
 }
 
 /// Pulls the JSON object out of a model's answer (it may add ``` fences or prose).
@@ -299,12 +227,9 @@ mod tests {
     }
 
     #[test]
-    fn only_https_or_this_computer() {
-        assert!(check_base_url("https://api.groq.com/openai/v1/").is_ok());
-        assert!(check_base_url("http://127.0.0.1:11434/v1").is_ok());
-        assert!(check_base_url("http://localhost:11434/v1").is_ok());
-        assert!(check_base_url("http://example.com/v1").is_err());
-        assert!(check_base_url("http://127.0.0.1.evil.com/v1").is_err());
-        assert!(check_base_url("file:///etc/passwd").is_err());
+    fn reads_reply_text() {
+        let v = json!({"content": [{"type": "text", "text": "{\"order\":[]}"}]});
+        assert_eq!(reply_text(&v), "{\"order\":[]}");
+        assert_eq!(reply_text(&json!({})), "");
     }
 }

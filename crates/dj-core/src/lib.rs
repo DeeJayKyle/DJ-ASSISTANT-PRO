@@ -6,6 +6,7 @@
 //! backed up, verified and reversible).
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub mod accounts;
+pub mod agent;
 pub mod analysis;
 pub mod analysis_store;
 pub mod api;

@@ -87,7 +87,7 @@ These need a real Windows 10/11 PC. Please record date, Windows version and resu
 1. On Windows, open Quick Prep, choose a folder of real downloads, and check the names, BPM and key it shows.
 2. Press play on a few tracks (MP3, FLAC, WAV, M4A) and click the waveform to jump — this exercises the desktop `track:` protocol, which automated tests cover only through the dev bridge.
 3. Export each path to a USB stick as a folder and as a ZIP; import the `.m3u8` files into Serato and check names, BPM, key and any cue points in the tagged copies.
-4. Turn on AI help with a real free key (Groq, Gemini or OpenRouter) and with Ollama; try *Improve with AI* and a typed playlist request.
+4. With the AI assistant on (Claude with a real key, and a local Ollama model), try *Improve with AI* and a typed playlist request in Quick Prep.
 5. Create a second account, add a different folder, switch back and forth, rename and remove an account; restart the app and check it reopens the last account.
 
 ## Serato
