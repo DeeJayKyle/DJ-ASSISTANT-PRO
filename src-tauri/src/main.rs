@@ -1,6 +1,7 @@
 // Prevents an extra console window on Windows in release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use dj_core::online::Secrets;
 use dj_core::App;
 use serde_json::Value;
 use std::io::Write;
@@ -16,7 +17,7 @@ struct State {
 
 impl State {
     /// Local log: command name and error text only. No arguments are logged,
-    /// so search text and file paths typed by the user are not recorded.
+    /// so search text, file paths and API keys typed by the user are not recorded.
     fn log(&self, line: &str) {
         let Some(p) = &self.log_path else { return };
         let _g = self.log_lock.lock();
@@ -26,6 +27,31 @@ impl State {
             .open(p)
         {
             let _ = writeln!(f, "{} {}", dj_core::db::now_ms(), line);
+        }
+    }
+}
+
+/// API keys live in Windows Credential Manager (never in the catalogue,
+/// logs or source). They are never sent back to the UI.
+struct CredentialStore;
+impl CredentialStore {
+    fn entry(service: &str) -> Result<keyring::Entry, String> {
+        keyring::Entry::new("DJ Assistant", service).map_err(|e| e.to_string())
+    }
+}
+impl Secrets for CredentialStore {
+    fn get(&self, service: &str) -> Option<String> {
+        Self::entry(service).ok()?.get_password().ok()
+    }
+    fn set(&self, service: &str, value: &str) -> Result<(), String> {
+        Self::entry(service)?
+            .set_password(value)
+            .map_err(|e| e.to_string())
+    }
+    fn delete(&self, service: &str) -> Result<(), String> {
+        match Self::entry(service)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
         }
     }
 }
@@ -47,9 +73,22 @@ async fn api(state: tauri::State<'_, State>, cmd: String, args: Value) -> Result
     })
 }
 
+/// Reveal a catalogued file in Explorer (read-only action).
+#[tauri::command]
+fn reveal(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("file not found (drive offline?)".into());
+    }
+    tauri_plugin_opener::reveal_item_in_dir(p).map_err(|e| e.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir().expect("app data dir");
             std::fs::create_dir_all(&data_dir)?;
@@ -60,8 +99,12 @@ fn main() {
                     .map(|_| d.join("dj-assistant.log"))
             });
             let db_path = data_dir.join("catalogue.sqlite3");
-            let core = App::open(&db_path)
-                .map_err(|e| format!("could not open catalogue at {}: {e}", db_path.display()))?;
+            let core = App::open_with(
+                &db_path,
+                Arc::new(dj_online::Http::new()),
+                Arc::new(CredentialStore),
+            )
+            .map_err(|e| format!("could not open catalogue at {}: {e}", db_path.display()))?;
             let state = State {
                 app: Arc::new(core),
                 log_path,
@@ -71,7 +114,7 @@ fn main() {
             app.manage(state);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![api])
+        .invoke_handler(tauri::generate_handler![api, reveal])
         .run(tauri::generate_context!())
         .expect("error while running DJ Assistant");
 }

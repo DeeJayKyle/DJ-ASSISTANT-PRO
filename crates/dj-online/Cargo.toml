@@ -1,0 +1,13 @@
+[package]
+name = "dj-online"
+description = "Optional online services for DJ Assistant (MusicBrainz, AcoustID, Last.fm). Only used when the DJ enables a service."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+dj-core = { path = "../dj-core" }
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "3", default-features = false, features = ["rustls", "json", "gzip"] }

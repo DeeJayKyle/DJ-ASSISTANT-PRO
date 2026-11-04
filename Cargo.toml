@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["crates/dj-core", "crates/dj-devbridge", "src-tauri"]
+members = ["crates/dj-core", "crates/dj-online", "crates/dj-devbridge", "src-tauri"]
 default-members = ["crates/dj-core"]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["DeeJayKyle"]

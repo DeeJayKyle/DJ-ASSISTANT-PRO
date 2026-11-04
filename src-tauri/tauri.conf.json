@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "DJ Assistant",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.deejaykyle.djassistant",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,11 +14,15 @@
       {
         "label": "main",
         "title": "DJ Assistant",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 980,
-        "minHeight": 620,
-        "dragDropEnabled": false
+        "width": 1480,
+        "height": 920,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "dragDropEnabled": false,
+        "decorations": false,
+        "transparent": false,
+        "center": true,
+        "shadow": true
       }
     ],
     "security": {
@@ -29,19 +33,42 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "DeeJayKyle",
     "copyright": "Copyright (c) 2026 DeeJayKyle. MIT licence.",
     "category": "Music",
     "shortDescription": "Local-first, read-only DJ library assistant",
-    "longDescription": "DJ Assistant catalogues your music folders without changing them: search, smart crates, low-bitrate warnings and conservative duplicate review. Works offline.",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "longDescription": "DJ Assistant organises and searches your music folders without changing them: crates and smart crates, audio analysis, suggestions, discovery, Set Studio, gig mode and gig packs. Works offline; online services are optional.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
         "displayLanguageSelector": false
       },
-      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI3Qjc4RDg3ODk1Q0REMjMKUldRajNWeUpoNDIzSnlBNW5HZHRqa05jUlN5QWU3R2ZlUFY0MEFYYlg4OTA1bzl0Y2Z4MGFVOTAK",
+      "endpoints": [
+        "https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

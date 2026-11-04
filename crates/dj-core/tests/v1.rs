@@ -1060,3 +1060,30 @@ fn new_text_inputs_cannot_execute_sql() {
     call(&app, "gig_end", json!({}));
     assert_eq!(search(&app, json!({}))["total"], 22);
 }
+
+#[test]
+fn assistant_routes_v1_requests() {
+    let e = env();
+    let app = e.app();
+    let r = call(
+        &app,
+        "assistant",
+        json!({"message": "plan a 2 hour clean wedding set"}),
+    );
+    assert_eq!(r["target"], "set-studio");
+    assert_eq!(r["params"]["duration_min"], 120);
+    assert_eq!(r["params"]["curve"], "wedding");
+    assert_eq!(r["params"]["clean_only"], true);
+    assert_eq!(
+        call(&app, "assistant", json!({"message": "start gig mode"}))["target"],
+        "gig"
+    );
+    assert_eq!(
+        call(&app, "assistant", json!({"message": "make a gig pack"}))["target"],
+        "gig-pack"
+    );
+    assert_eq!(
+        call(&app, "assistant", json!({"message": "scan"}))["target"],
+        "activity"
+    );
+}

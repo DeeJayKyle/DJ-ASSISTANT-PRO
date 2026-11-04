@@ -19,6 +19,8 @@ pub struct AssistantReply {
     pub filters: Option<RuleSet>,
     pub total: Option<i64>,
     pub sample: Vec<library::TrackRow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
 }
 
 fn cond(field: &str, op: &str, value: serde_json::Value) -> RuleNode {
@@ -34,6 +36,7 @@ const HELP: &str = "I'm a local, rule-based helper (not an AI model). I can turn
 • \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n\
 • \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n\
 • \"show duplicates\"  • \"library health\"  • \"scan\"\n\
+• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\n\
 Everything stays on this computer. I can't edit files, tags or Serato data.";
 
 fn parse_range(s: &str) -> Option<(f64, f64)> {
@@ -90,6 +93,7 @@ pub fn handle(conn: &Connection, message: &str) -> Result<AssistantReply> {
         filters: None,
         total: None,
         sample: vec![],
+        params: None,
     };
     if msg.is_empty()
         || ["help", "?", "what can you do", "hi", "hello", "hey"].contains(&msg.as_str())
@@ -103,7 +107,84 @@ pub fn handle(conn: &Connection, message: &str) -> Result<AssistantReply> {
             filters: None,
             total: None,
             sample: vec![],
+            params: None,
         });
+    }
+    // Set planning: "plan a 2 hour wedding set", "90 minute warm up set"
+    if msg.contains(" set")
+        && (msg.contains("plan")
+            || msg.contains("build")
+            || msg.contains("make")
+            || msg.contains("hour")
+            || msg.contains("minute")
+            || msg.contains("min "))
+    {
+        let words: Vec<&str> = msg.split_whitespace().collect();
+        let mut minutes: Option<u32> = None;
+        for w in words.windows(2) {
+            if let Ok(n) = w[0].parse::<f64>() {
+                if w[1].starts_with("hour") || w[1] == "h" || w[1] == "hr" || w[1] == "hrs" {
+                    minutes = Some((n * 60.0) as u32);
+                } else if w[1].starts_with("min") {
+                    minutes = Some(n as u32);
+                }
+            }
+        }
+        let event = [
+            "wedding",
+            "club",
+            "festival",
+            "corporate",
+            "birthday",
+            "lounge",
+            "house party",
+            "private party",
+            "latin night",
+        ]
+        .iter()
+        .find(|e| msg.contains(*e))
+        .map(|e| e.to_string());
+        let curve = if msg.contains("warm") {
+            "warmup"
+        } else if msg.contains("peak") {
+            "peak"
+        } else if msg.contains("wedding") {
+            "wedding"
+        } else if msg.contains("lounge") || msg.contains("chill") {
+            "lounge"
+        } else {
+            "journey"
+        };
+        let clean = msg.contains("clean");
+        let mut r = nav("set-studio", "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.");
+        r.understood = vec![
+            format!("length {} min", minutes.unwrap_or(60)),
+            format!("energy journey: {curve}"),
+        ];
+        if let Some(e) = &event {
+            r.understood.push(format!("event: {e}"));
+        }
+        if clean {
+            r.understood.push("clean tracks only".into());
+        }
+        r.params = Some(
+            serde_json::json!({"duration_min": minutes.unwrap_or(60), "event_type": event, "curve": curve, "clean_only": clean}),
+        );
+        return Ok(r);
+    }
+    for (words, target, reply) in [
+        (&["gig mode", "start gig", "start a gig", "requests"][..], "gig", "Opening Gig Mode: set list, requests and notes, with background work paused."),
+        (&["gig pack", "usb", "copy to drive", "pack"][..], "gig-pack", "Opening Gig Pack: choose tracks and a drive; copies are verified and nothing is overwritten."),
+        (&["suggestion", "fix tags", "metadata", "musicbrainz"][..], "suggestions", "Opening Suggestions: review each one before it reaches your catalogue."),
+        (&["discover", "recommend", "similar", "tracklist", "gaps"][..], "discovery", "Opening Discovery: recommendations always show their reason and source."),
+        (&["analyse", "analyze", "analysis", "detect bpm", "detect key"][..], "activity", "Opening Scan & Analysis. Analysis reads your files and stores estimates you can override."),
+        (&["template", "cheat sheet", "organise crates", "organize crates"][..], "crates", "Opening Virtual Crates, where you can add crate templates (genre, energy, utility, events, ratings)."),
+        (&["personal files", "documents"][..], "files", "Opening Personal Files (opt-in, separate from music)."),
+        (&["update"][..], "settings", "Opening Settings → Updates."),
+    ] {
+        if words.iter().any(|w| msg.contains(w)) {
+            return Ok(nav(target, reply));
+        }
     }
     if msg.contains("duplicate") || msg.contains("dupes") {
         return Ok(nav("duplicates", "Opening Duplicate review. Exact matches (identical file contents) are shown separately from possible matches and alternate versions. Nothing is deleted."));
@@ -120,7 +201,7 @@ pub fn handle(conn: &Connection, message: &str) -> Result<AssistantReply> {
         || msg.starts_with("rescan")
         || msg.contains("add folder")
     {
-        return Ok(nav("folders", "Opening Folders. Choose a folder to add, then press Scan. Scanning only reads your files."));
+        return Ok(nav("activity", "Opening Scan & Analysis. Choose a folder to add, then press Scan. Scanning only reads your files."));
     }
 
     let mut rules: Vec<RuleNode> = Vec::new();
@@ -423,5 +504,6 @@ pub fn handle(conn: &Connection, message: &str) -> Result<AssistantReply> {
         filters: Some(filters),
         total: Some(page.total),
         sample: page.rows,
+        params: None,
     })
 }
