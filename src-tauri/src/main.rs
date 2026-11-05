@@ -240,17 +240,24 @@ fn main() {
                 .map(|s| s.to_string());
             std::thread::spawn(move || {
                 let path = id.and_then(|id| session.app()?.playable_path(id));
+                // The app's pages (tauri.localhost) read tracks with fetch() for the
+                // Studio, which is cross-origin on Windows: allow it, or WebView2
+                // blocks the read and reports "Failed to fetch".
+                let cors = |mut b: tauri::http::response::Builder| {
+                    for (k, v) in dj_core::media::STREAM_CORS {
+                        b = b.header(k, v);
+                    }
+                    b
+                };
                 let resp = match path.map(|p| dj_core::media::serve(&p, range.as_deref())) {
                     Some(Ok(piece)) => {
-                        let mut b = tauri::http::Response::builder().status(piece.status);
+                        let mut b = cors(tauri::http::Response::builder().status(piece.status));
                         for (k, v) in piece.headers {
                             b = b.header(k, v);
                         }
                         b.body(piece.body)
                     }
-                    _ => tauri::http::Response::builder()
-                        .status(404)
-                        .body(Vec::new()),
+                    _ => cors(tauri::http::Response::builder().status(404)).body(Vec::new()),
                 };
                 responder.respond(resp.unwrap_or_else(|_| tauri::http::Response::new(Vec::new())));
             });

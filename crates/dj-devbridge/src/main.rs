@@ -91,7 +91,10 @@ fn main() {
                             r.add_header(tiny_http::Header::from_bytes(k, v.as_bytes()).unwrap());
                         }
                     }
-                    r.add_header(cors[0].clone());
+                    // exactly the desktop app's headers, so the e2e catches a missing one
+                    for (k, v) in dj_core::media::STREAM_CORS {
+                        r.add_header(tiny_http::Header::from_bytes(k, v).unwrap());
+                    }
                     r
                 }
                 None => tiny_http::Response::from_data(Vec::new()).with_status_code(404),

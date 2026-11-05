@@ -62,8 +62,9 @@ export class StudioEngine {
     const hit = this.songs.get(song.id);
     // most-recently used last, so the oldest is evicted first
     if (hit) { this.songs.delete(song.id); this.songs.set(song.id, hit); return hit; }
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Could not read the file');
+    let res: Response;
+    try { res = await fetch(url); } catch { throw new Error('Could not read this song from your library. Check the file still exists, then try again.'); }
+    if (!res.ok) throw new Error(res.status === 404 ? 'This song’s file can’t be found (moved or on a drive that isn’t connected).' : 'Could not read the file');
     const buf = await res.arrayBuffer();
     let audio: AudioBuffer;
     try { audio = await this.ctx.decodeAudioData(buf); } catch { throw new Error('This file can’t be decoded (AIFF and some codecs aren’t supported here).'); }

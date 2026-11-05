@@ -53,6 +53,17 @@ fn parse_range(h: &str, size: u64) -> Option<(u64, u64)> {
 }
 
 /// Reads the requested bytes of `path` (never writes).
+/// Headers every track stream must carry: the Studio reads tracks with fetch(), which is
+/// cross-origin in the desktop app (tauri.localhost -> track.localhost) and in development.
+/// Without them the browser engine blocks the read ("Failed to fetch").
+pub const STREAM_CORS: [(&str, &str); 2] = [
+    ("Access-Control-Allow-Origin", "*"),
+    (
+        "Access-Control-Expose-Headers",
+        "Content-Length, Content-Range, Accept-Ranges",
+    ),
+];
+
 pub fn serve(path: &Path, range: Option<&str>) -> std::io::Result<Piece> {
     let mut f = std::fs::File::open(path)?;
     let size = f.metadata()?.len();
