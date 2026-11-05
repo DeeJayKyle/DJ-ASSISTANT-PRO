@@ -158,10 +158,11 @@ class AnalysisStore {
   }
 
   /// Scales energy 1–10 against the DJ's own library: half percentile rank, half
-  /// absolute score. Needs at least 8 analysed tracks.
+  /// absolute score. Needs at least 8 analysed tracks. Ties are ranked by track
+  /// (1.x leaves their order to the database, so tied tracks could swap).
   int rescaleEnergy() {
     final rows = cat.db.select(
-      "SELECT track_id, energy_raw FROM analysis WHERE status='ok' AND energy_raw IS NOT NULL ORDER BY energy_raw",
+      "SELECT track_id, energy_raw FROM analysis WHERE status='ok' AND energy_raw IS NOT NULL ORDER BY energy_raw, track_id",
     );
     if (rows.length < 8) return 0;
     final n = rows.length.toDouble();

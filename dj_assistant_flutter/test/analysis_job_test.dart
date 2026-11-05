@@ -89,6 +89,10 @@ void main() {
       final name = w['file_name'];
       for (final k in w.keys) {
         final x = w[k], y = r[k];
+        if (k == 'energy' &&
+            want.where((o) => o['energy_raw'] == w['energy_raw']).length > 1) {
+          continue; // tied raw energy: checked as a group below
+        }
         if (k == 'peak_dbfs' && name == 'Driftwood.aiff') {
           expect(
             y,
@@ -101,6 +105,20 @@ void main() {
           expect(y, x, reason: '$name $k');
         }
       }
+    }
+
+    // Tracks with the same raw energy may be ranked in either order (1.x leaves
+    // ties to the database): their rescaled energies must match as a group.
+    for (final raw in want.map((w) => w['energy_raw']).toSet()) {
+      final idx = [
+        for (var i = 0; i < want.length; i++)
+          if (want[i]['energy_raw'] == raw) i,
+      ];
+      if (idx.length < 2) continue;
+      expect(
+        [for (final i in idx) rows[i]['energy'] as int?]..sort(_cmp),
+        [for (final i in idx) want[i]['energy'] as int?]..sort(_cmp),
+      );
     }
 
     final sugg = cat.db.select(
@@ -178,3 +196,5 @@ void main() {
     await jobs.shutdown();
   });
 }
+
+int _cmp(int? a, int? b) => (a ?? -1).compareTo(b ?? -1);
