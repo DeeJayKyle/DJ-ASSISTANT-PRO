@@ -69,6 +69,31 @@ fn main() {
             let _ = req.respond(r);
             continue;
         }
+        // GET /pack/<pack>/<file>: installed pack files, as pack://localhost/... in the app.
+        if req.method() == &tiny_http::Method::Get && req.url().starts_with("/pack/") {
+            let rest = req.url()[6..].split('?').next().unwrap_or("").to_string();
+            let mut parts = rest.splitn(2, '/');
+            let (id, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+            let mut r = match session
+                .pack_file(id, name)
+                .and_then(|p| std::fs::read(p).ok())
+            {
+                Some(bytes) => {
+                    let mut r = tiny_http::Response::from_data(bytes);
+                    r.add_header(
+                        tiny_http::Header::from_bytes("Content-Type", dj_core::packs::mime(name))
+                            .unwrap(),
+                    );
+                    r
+                }
+                None => tiny_http::Response::from_data(Vec::new()).with_status_code(404),
+            };
+            for (k, v) in dj_core::media::STREAM_CORS {
+                r.add_header(tiny_http::Header::from_bytes(k, v).unwrap());
+            }
+            let _ = req.respond(r);
+            continue;
+        }
         // GET /track/<id>: the same read-only preview stream as the desktop app.
         if req.method() == &tiny_http::Method::Get && req.url().starts_with("/track/") {
             let id: Option<i64> = req.url()[7..]
@@ -167,6 +192,21 @@ impl dj_core::online::Online for DemoAi {
     }
     fn llm_local_start(&self) -> Result<(), String> {
         self.1.llm_local_start()
+    }
+    fn download(
+        &self,
+        url: &str,
+        dest: &std::path::Path,
+        p: &mut dyn FnMut(u64) -> bool,
+    ) -> Result<(), String> {
+        // e2e: DJA_PACK_MIRROR=http://127.0.0.1:port/ serves pack files locally
+        match std::env::var("DJA_PACK_MIRROR") {
+            Ok(m) => {
+                let name = url.rsplit('/').next().unwrap_or("");
+                self.1.download(&format!("{m}{name}"), dest, p)
+            }
+            Err(_) => Err("offline test build".into()),
+        }
     }
     fn llm_list_models(&self, cfg: &dj_core::agent::LlmConfig) -> Result<Vec<String>, String> {
         self.1.llm_list_models(cfg)

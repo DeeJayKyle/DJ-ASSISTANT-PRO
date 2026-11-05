@@ -30,6 +30,7 @@ pub mod media;
 pub mod metadata;
 pub mod online;
 pub mod organize;
+pub mod packs;
 pub mod paths;
 pub mod profile;
 pub mod quick;

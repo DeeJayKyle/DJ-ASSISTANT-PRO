@@ -47,6 +47,15 @@ export default function App() {
     window.addEventListener("dj-ai-changed", on);
     return () => window.removeEventListener("dj-ai-changed", on);
   }, []);
+  // "Get Pro Stems AI" in the Studio opens Settings at the Packs panel.
+  useEffect(() => {
+    const on = () => {
+      setView("settings");
+      setTimeout(() => document.getElementById("packs")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    };
+    window.addEventListener("dj-open-packs", on);
+    return () => window.removeEventListener("dj-open-packs", on);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [info, setInfo] = useState<{ version: string; db_path: string } | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [crates, setCrates] = useState<Crate[]>([]);

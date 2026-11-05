@@ -88,6 +88,16 @@ pub trait Online: Send + Sync {
         artist: &str,
         title: &str,
     ) -> Result<Vec<SimilarItem>, String>;
+    /// Download `url` into `dest`, appending to what is already there (resume).
+    /// `progress(bytes_in_file)` returns false to stop early.
+    fn download(
+        &self,
+        _url: &str,
+        _dest: &std::path::Path,
+        _progress: &mut dyn FnMut(u64) -> bool,
+    ) -> Result<(), String> {
+        Err("downloads are not available in this build".into())
+    }
     /// Search the free Deezer and Apple Music catalogues (no key) for a track.
     fn catalog_lookup(&self, _artist: &str, _title: &str) -> Result<Vec<CatalogMatch>, String> {
         Err("music catalogue lookups are not available in this build".into())

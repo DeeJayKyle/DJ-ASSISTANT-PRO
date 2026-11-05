@@ -1,4 +1,4 @@
-import { api, call, isDesktop, pickFolder, pickSave, reveal, trackUrl, isBridge, bridgeUrl } from "../api";
+import { api, call, isDesktop, pickFolder, pickSave, reveal, trackUrl, packUrl, isBridge, bridgeUrl } from "../api";
 import type { StudioHost } from "../studio/ui/host";
 import { keyName } from "../lib/format";
 
@@ -56,6 +56,11 @@ export function makeStudioHost(toast: (m: string, err?: boolean) => void): Studi
       return (await call<{ text: string }>("ai_complete", { system, user })).text;
     },
     reveal: (p) => void reveal(p),
+    async aiStems() {
+      const p = (await api.packs()).find((x) => x.id === "stems-ai");
+      return p?.installed ? { modelUrl: packUrl("stems-ai", "htdemucs_embedded.onnx"), wasmUrl: packUrl("stems-ai", "ort-wasm-simd-threaded.asyncify.wasm") } : null;
+    },
+    openPacks: () => window.dispatchEvent(new Event("dj-open-packs")),
     toast,
   };
 }

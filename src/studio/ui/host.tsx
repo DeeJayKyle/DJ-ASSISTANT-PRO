@@ -15,6 +15,10 @@ export interface StudioHost {
   /** Optional AI help: one system + user message, reply text. */
   ai?: (system: string, user: string) => Promise<string>;
   reveal?(path: string): void;
+  /** Optional: the installed Pro Stems AI pack (model + runtime URLs), or null when it isn't installed. */
+  aiStems?(): Promise<{ modelUrl: string; wasmUrl: string } | null>;
+  /** Optional: open the host's pack manager so the user can install Pro Stems AI. */
+  openPacks?(): void;
   toast(message: string, error?: boolean): void;
 }
 

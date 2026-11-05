@@ -13,6 +13,7 @@ rusqlite = { version = "0.41", features = ["bundled", "functions"] }
 lofty = "0.25"
 walkdir = "2.5"
 blake3 = "1.8"
+sha2 = "0.10"
 thiserror = "2"
 crossbeam-channel = "0.5"
 unicode-normalization = "0.1"

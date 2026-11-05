@@ -28,7 +28,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' track: http://track.localhost; connect-src ipc: http://ipc.localhost track: http://track.localhost",
+      "csp": "default-src 'self'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; media-src 'self' blob: track: http://track.localhost; connect-src ipc: http://ipc.localhost track: http://track.localhost pack: http://pack.localhost; worker-src 'self' blob:",
       "freezePrototype": true
     },
     "withGlobalTauri": false

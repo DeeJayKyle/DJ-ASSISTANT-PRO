@@ -153,6 +153,10 @@ export const api = {
   aiReset: (conversation_id: string) => call("ai_reset", { conversation_id }),
   aiLocalModels: () => call<string[]>("ai_local_models"),
   aiListModels: () => call<string[]>("ai_list_models"),
+  packs: () => call<PackInfo[]>("packs"),
+  packInstall: (id: string) => call("pack_install", { id }),
+  packCancel: (id: string) => call("pack_cancel", { id }),
+  packRemove: (id: string) => call<PackInfo[]>("pack_remove", { id }),
   aiLocalSetup: () => call<any>("ai_local_setup"), // eslint-disable-line @typescript-eslint/no-explicit-any
   aiLocalStart: () => call<{ running: boolean }>("ai_local_start"),
   aiLocalPull: (model?: string) => call<{ started: boolean }>("ai_local_pull", { model: model ?? null }),
@@ -249,5 +253,13 @@ export function trackUrl(id: number): string {
   if (BRIDGE && !isDesktop()) return `${BRIDGE_URL}/track/${id}`;
   return navigator.userAgent.includes("Windows") ? `http://track.localhost/${id}` : `track://localhost/${id}`;
 }
+
+/** A file of an installed pack (AI models, runtimes), served read-only by the app. */
+export function packUrl(pack: string, file: string): string {
+  if (BRIDGE && !isDesktop()) return `${BRIDGE_URL}/pack/${pack}/${file}`;
+  return navigator.userAgent.includes("Windows") ? `http://pack.localhost/${pack}/${file}` : `pack://localhost/${pack}/${file}`;
+}
+
+export type PackInfo = { id: string; name: string; description: string; credits: string; size: number; installed: boolean; download: { state: string; done: number; total: number; message: string | null } };
 
 export type Selection = { ids?: number[]; crate_id?: number; set_id?: number; query?: TrackQuery };

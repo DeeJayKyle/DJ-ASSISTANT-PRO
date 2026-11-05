@@ -22,10 +22,27 @@ export function StemsPage({ onSendToRemix, onSendToDeck }: { onSendToRemix?: (s:
   const [playing, setPlaying] = useState(false);
   const [dl, setDl] = useState<Set<string>>(new Set(['vocals', 'drums', 'bass', 'melodies', 'instrumental']));
   const [midiBusy, setMidiBusy] = useState(false);
+  const [aiReady, setAiReady] = useState<boolean | null>(host.aiStems ? null : false);
+  const [method, setMethod] = useState<'ai' | 'fast'>('fast');
+  useEffect(() => {
+    if (!host.aiStems) return;
+    let live = true;
+    let first = true;
+    const check = () => host.aiStems!().then((p) => {
+      if (!live) return;
+      engine.ai = p; setAiReady(!!p);
+      if (p && first) setMethod('ai'); // prefer AI once it's installed; the user can switch back
+      if (!p) setMethod('fast');
+      first = false;
+    }).catch(() => live && setAiReady(false));
+    check();
+    window.addEventListener('focus', check);
+    return () => { live = false; window.removeEventListener('focus', check); };
+  }, [host]); // eslint-disable-line react-hooks/exhaustive-deps
   const player = useRef<{ nodes: AudioBufferSourceNode[]; gains: Map<StemName, GainNode>; startedAt: number; offset: number } | null>(null);
   const buffers = useRef<Map<StemName, AudioBuffer>>(new Map());
 
-  const pick = async (s: SongRef) => {
+  const pick = async (s: SongRef, how: 'ai' | 'fast' = method) => {
     stop();
     setSong(s); setLoaded(null); setError(''); setPhase('loading'); setProgress(0); buffers.current.clear(); setPos(0);
     try {
@@ -34,11 +51,18 @@ export function StemsPage({ onSendToRemix, onSendToDeck }: { onSendToRemix?: (s:
       await engine.analyse(l);
       setPhase('splitting');
       const t0 = performance.now();
-      await engine.separate(l, setProgress);
+      let note = '';
+      try {
+        await engine.separate(l, setProgress, how === 'ai' && engine.ai ? 'ai' : 'fast');
+      } catch (e) {
+        if (!(e as { fallback?: boolean }).fallback) throw e;
+        note = ` ${errText(e)}`;
+      }
       for (const st of STEMS) buffers.current.set(st, engine.toBuffer(l.stems![st], l.sampleRate));
       markSplit(s.id);
       setLoaded(l); setPhase('ready');
-      host.toast(`Split into 4 stems in ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+      const by = l.stemsBy === 'ai' ? ` with AI (${engine.aiDevice === 'gpu' ? 'graphics card' : 'processor'})` : '';
+      host.toast(`Split into 4 stems${by} in ${((performance.now() - t0) / 1000).toFixed(1)} s.${note}`, !!note);
     } catch (e) {
       setError(errText(e)); setPhase('idle');
     }
@@ -114,7 +138,18 @@ export function StemsPage({ onSendToRemix, onSendToDeck }: { onSendToRemix?: (s:
       <section className="st-panel">
         <h2 className="st-h2">Pick a song</h2>
         <p className="st-muted st-small">Split it into vocals, drums, bass and melodies, find its key, tempo and chords, and turn the parts into MIDI. It all runs on this computer.</p>
-        <SongPicker onPick={pick} label="Song to split" />
+        {host.aiStems && (
+          <div className="st-row st-wrap" style={{ margin: '6px 0 10px' }}>
+            <span className="st-small st-muted">Separation</span>
+            <div className="st-seg" role="group" aria-label="Separation method">
+              <button className={`st-chip${method === 'ai' ? ' on' : ''}`} aria-pressed={method === 'ai'} disabled={!aiReady} onClick={() => setMethod('ai')} title={aiReady ? 'HTDemucs AI model: the cleanest stems' : 'Install Pro Stems AI first'}>AI (best)</button>
+              <button className={`st-chip${method === 'fast' ? ' on' : ''}`} aria-pressed={method === 'fast'} onClick={() => setMethod('fast')}>Fast</button>
+            </div>
+            {aiReady === false && <button className="st-btn small" onClick={() => host.openPacks?.()}>Get Pro Stems AI</button>}
+            {song && loaded && loaded.stemsBy !== method && phase === 'ready' && <button className="st-btn small" onClick={() => pick(song, method)}>Split again with {method === 'ai' ? 'AI' : 'Fast'}</button>}
+          </div>
+        )}
+        <SongPicker onPick={(s) => pick(s)} label="Song to split" />
       </section>
       <section className="st-panel st-col">
         {!song && <div className="st-empty">Choose a song to split it into stems.</div>}
@@ -135,7 +170,7 @@ export function StemsPage({ onSendToRemix, onSendToDeck }: { onSendToRemix?: (s:
             </div>
             {error && <p className="st-error" role="alert">{error}</p>}
             {phase === 'loading' && <><p className="st-muted">Reading the song…</p><Bar value={0.05} /></>}
-            {phase === 'splitting' && <><p className="st-muted">Separating stems on {engine.workers} cores… {Math.round(progress * 100)}%</p><Bar value={progress} label="Separating" /></>}
+            {phase === 'splitting' && <><p className="st-muted">{method === 'ai' && engine.ai ? `Separating with AI${engine.aiDevice ? ` on the ${engine.aiDevice === 'gpu' ? 'graphics card' : 'processor'}` : ''}… ${Math.round(progress * 100)}%` : `Separating stems on ${engine.workers} cores… ${Math.round(progress * 100)}%`}</p><Bar value={progress} label="Separating" />{method === 'ai' && engine.ai && <button className="st-btn" onClick={() => engine.cancelAi()}>Stop</button>}</>}
             {phase === 'ready' && loaded && peaks && (
               <>
                 <div className="st-row">
@@ -166,7 +201,7 @@ export function StemsPage({ onSendToRemix, onSendToDeck }: { onSendToRemix?: (s:
                   <button className="st-btn primary" onClick={downloadStems} disabled={!dl.size}>Download stems (WAV)</button>
                   <button className="st-btn" onClick={downloadMidi} disabled={midiBusy}>{midiBusy ? 'Making MIDI…' : 'Download MIDI'}</button>
                 </div>
-                <p className="st-muted st-tiny">Separation here uses signal processing, not an AI model: it's private and fast, but parts can bleed into each other more than with AI separators. MIDI has a track each for bass, melody, vocal melody, chords and drums.</p>
+                <p className="st-muted st-tiny">{loaded.stemsBy === 'ai' ? 'Separated with the HTDemucs AI model on this computer.' : 'Separated with fast signal processing: private and quick, but parts can bleed into each other more than with the AI model.'} MIDI has a track each for bass, melody, vocal melody, chords and drums.</p>
               </>
             )}
           </>

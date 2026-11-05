@@ -54,6 +54,8 @@ pub struct Session {
     secrets: Arc<dyn Secrets>,
     book: Mutex<Book>,
     current: Mutex<Option<Current>>,
+    /// Pack downloads (shared by every account on this computer).
+    pack_jobs: Arc<crate::jobs::Jobs>,
 }
 
 fn clean_name(name: &str) -> Result<String> {
@@ -87,6 +89,7 @@ impl Session {
             secrets,
             book: Mutex::new(Book::default()),
             current: Mutex::new(None),
+            pack_jobs: Arc::new(crate::jobs::Jobs::default()),
         };
         let mut book = s.read_book()?;
         if book.accounts.is_empty() && base.join("catalogue.sqlite3").exists() {
@@ -294,6 +297,11 @@ impl Session {
 
     /// The single entry point for the UI: account commands here, everything
     /// else goes to the open account's catalogue.
+    /// A file of an installed pack, for the app's pack:// server.
+    pub fn pack_file(&self, id: &str, name: &str) -> Option<PathBuf> {
+        crate::packs::file_path(&self.base, id, name)
+    }
+
     pub fn dispatch(&self, cmd: &str, args: Value) -> Result<Value> {
         match cmd {
             "accounts" => Ok(self.summary()),
@@ -314,6 +322,34 @@ impl Session {
                 let mut s = self.summary();
                 s["kept_backups"] = r["kept_backups"].clone();
                 Ok(s)
+            }
+            "packs" => Ok(crate::packs::list(&self.base, &self.pack_jobs)),
+            "pack_install" => {
+                let id: String = arg(&args, "id")?;
+                let p = crate::packs::pack(&id)
+                    .ok_or_else(|| crate::error::Error::Invalid("unknown pack".into()))?;
+                let (base, online) = (self.base.clone(), self.online.clone());
+                self.pack_jobs
+                    .start(&format!("pack:{id}"), false, move |ctl, prog| {
+                        let dl = |url: &str, dest: &Path, f: &mut dyn FnMut(u64) -> bool| {
+                            online.download(url, dest, f)
+                        };
+                        crate::packs::install(&base, p, &dl, ctl, prog)
+                    })?;
+                Ok(json!({"started": true}))
+            }
+            "pack_cancel" => {
+                self.pack_jobs
+                    .cancel(&format!("pack:{}", arg::<String>(&args, "id")?));
+                Ok(json!({"ok": true}))
+            }
+            "pack_remove" => {
+                let id: String = arg(&args, "id")?;
+                if self.pack_jobs.running(&format!("pack:{id}")) {
+                    return invalid("stop the download first");
+                }
+                crate::packs::remove(&self.base, &id)?;
+                Ok(crate::packs::list(&self.base, &self.pack_jobs))
             }
             _ => match self.app() {
                 Some(app) => app.dispatch(cmd, args),

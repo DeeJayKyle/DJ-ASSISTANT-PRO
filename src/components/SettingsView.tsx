@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, isDesktop, openUrl, pickFile, pickFolder } from "../api";
+import { api, isDesktop, openUrl, pickFile, pickFolder, type PackInfo } from "../api";
 import type { AiService, AiStatus, ChangeLogEntry, Labels, Service, Settings } from "../types";
 import { checkForUpdate, type UpdateInfo } from "../lib/updater";
 import { dateTime } from "../lib/format";
@@ -251,6 +251,67 @@ export function AiPicker({ st, onPick, online = false }: { st: AiStatus; onPick:
   );
 }
 
+/** Settings → Packs: big optional parts (AI models, libraries) downloaded once, not in every update. */
+export function PacksPanel({ toast, extra }: { toast: (m: string, e?: boolean) => void; extra?: React.ReactNode }) {
+  const [packs, setPacks] = useState<PackInfo[] | null>(null);
+  const load = () => api.packs().then(setPacks).catch(() => setPacks([]));
+  useEffect(() => { load(); }, []);
+  const busy = packs?.some((p) => p.download.state === "running");
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(load, 800);
+    return () => clearInterval(t);
+  }, [busy]);
+  const prev = useRef<Record<string, string>>({});
+  useEffect(() => {
+    for (const p of packs ?? []) {
+      const was = prev.current[p.id];
+      if (was === "running" && p.download.state === "completed" && p.installed) toast(`${p.name} is installed.`);
+      if (was === "running" && p.download.state === "failed") toast(p.download.message ?? `${p.name} couldn't be installed.`, true);
+      prev.current[p.id] = p.download.state;
+    }
+  }, [packs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const act = (f: Promise<unknown>) => f.then(load).catch((e) => toast(e.message, true));
+  return (
+    <section className="panel" id="packs">
+      <h2 style={{ marginBottom: 6 }}>Packs</h2>
+      <p className="small muted" style={{ marginTop: 0 }}>Optional extras that are too big to ship in every update. Each one downloads once from DJ Assistant's GitHub releases, is checked against its known checksum, and then works offline. You can stop a download; it picks up where it left off.</p>
+      <div className="col" style={{ gap: 10 }}>
+        {(packs ?? []).map((p) => {
+          const d = p.download;
+          const running = d.state === "running";
+          return (
+            <div key={p.id} className="list-row" style={{ alignItems: "flex-start" }}>
+              <div className="grow col" style={{ gap: 4 }}>
+                <div className="row wrap" style={{ gap: 8 }}><strong>{p.name}</strong><span className="small faint">{gb(p.size)}</span>{p.installed && <span className="badge q-lossless">Installed</span>}</div>
+                <span className="small muted">{p.description}</span>
+                <span className="small faint">{p.credits}</span>
+                {running && (
+                  <div className="col" style={{ gap: 4, marginTop: 4 }}>
+                    <div className="progress" aria-label={`${p.name} download progress`}><div style={{ width: `${d.total ? Math.min(100, (d.done / d.total) * 100) : 2}%` }} /></div>
+                    <span className="small muted">{d.message} {d.total ? `${gb(d.done)} of ${gb(d.total)}` : ""}</span>
+                  </div>
+                )}
+                {d.state === "failed" && <span className="small s-error">{d.message}</span>}
+              </div>
+              <div className="row" style={{ gap: 6 }}>
+                {running ? (
+                  <button className="btn small" onClick={() => act(api.packCancel(p.id))}>Stop</button>
+                ) : p.installed ? (
+                  <button className="btn small ghost danger" onClick={() => act(api.packRemove(p.id))}>Remove</button>
+                ) : (
+                  <button className="btn small primary" onClick={() => act(api.packInstall(p.id))} aria-label={`Install ${p.name}`}><Icon name="download" size={14} /> Install</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {extra}
+      </div>
+    </section>
+  );
+}
+
 /** Spotify needs an app's Client ID and Client secret (stored together as one secret). */
 function SpotifyKeys({ has, toast, onSaved }: { has: boolean; toast: (m: string, e?: boolean) => void; onSaved: () => void }) {
   const [id, setId] = useState("");
@@ -449,6 +510,8 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
         </section>
 
         <AiSettings toast={toast} onProvider={() => api.getSettings().then(onChange).catch(() => {})} />
+
+        <PacksPanel toast={toast} />
 
         <section className="panel">
           <h2 style={{ marginBottom: 12 }}>Appearance</h2>

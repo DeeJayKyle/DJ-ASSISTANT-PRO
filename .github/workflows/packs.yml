@@ -1,0 +1,58 @@
+name: Publish packs
+
+# Mirrors the files of the optional packs (Settings → Packs) into the `packs-1`
+# release, from pinned upstream sources, after checking them against the checksums
+# built into the app (crates/dj-core/src/packs.rs). Run by hand when a pack changes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pack files from their pinned sources
+        run: |
+          mkdir -p packs && cd packs
+          # HTDemucs ONNX export (MIT), pinned to a Hugging Face revision
+          curl -fsSL -o htdemucs_embedded.onnx \
+            https://huggingface.co/timcsy/demucs-web-onnx/resolve/92e33df61cfc9eb820272aaa62d2ef6dcf4d950d/htdemucs_embedded.onnx
+          # ONNX Runtime Web 1.23.2 (MIT) WebAssembly, from the npm package the app is built with
+          curl -fsSL -o ort.tgz https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.23.2.tgz
+          tar xzf ort.tgz package/dist/ort-wasm-simd-threaded.asyncify.wasm
+          mv package/dist/ort-wasm-simd-threaded.asyncify.wasm . && rm -rf package ort.tgz
+          cat > NOTICE.txt <<'TXT'
+          Pro Stems AI pack
+          - HTDemucs: Copyright (c) Meta Platforms, Inc. and affiliates. MIT licence. https://github.com/facebookresearch/demucs
+          - ONNX export: timcsy/demucs-web (MIT). https://github.com/timcsy/demucs-web
+          - ONNX Runtime Web: Copyright (c) Microsoft Corporation. MIT licence. https://github.com/microsoft/onnxruntime
+          TXT
+          ls -la
+      - name: Check against the checksums built into the app
+        run: |
+          cd packs
+          python3 - <<'PY'
+          import hashlib, re, sys
+          src = open('../crates/dj-core/src/packs.rs').read()
+          for name, size, sha in re.findall(r'name: "([^"]+)",\s*url: [^,]+,\s*size: ([\d_]+),\s*sha256: "([0-9a-f]{64})"', src):
+              data = open(name, 'rb').read()
+              got = hashlib.sha256(data).hexdigest()
+              ok = got == sha and len(data) == int(size.replace('_', ''))
+              print(('OK  ' if ok else 'BAD '), name, len(data), got)
+              if not ok: sys.exit(1)
+          PY
+      - name: Upload to the packs-1 release (pre-release, so it never becomes "latest")
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd packs
+          if gh release view packs-1 >/dev/null 2>&1; then
+            gh release upload packs-1 htdemucs_embedded.onnx ort-wasm-simd-threaded.asyncify.wasm NOTICE.txt --clobber
+          else
+            gh release create packs-1 htdemucs_embedded.onnx ort-wasm-simd-threaded.asyncify.wasm NOTICE.txt \
+              --prerelease --latest=false --title "Packs (optional downloads)" \
+              --notes "Files for Settings → Packs in DJ Assistant. Downloaded by the app itself and checked against built-in checksums; you don't need to download these by hand. See NOTICE.txt for credits and licences."
+          fi

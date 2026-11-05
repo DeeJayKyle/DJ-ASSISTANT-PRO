@@ -27,6 +27,8 @@ pub struct Http {
     ai_agent: ureq::Agent,
     /// Loopback only, never through a proxy (local model server).
     local_agent: ureq::Agent,
+    /// Large downloads (packs): no overall time limit, only connect/idle limits.
+    dl_agent: ureq::Agent,
     last_mb: Mutex<Option<Instant>>,
     last_deezer: Mutex<Option<Instant>>,
     last_itunes: Mutex<Option<Instant>>,
@@ -77,10 +79,18 @@ impl Http {
             .http_status_as_error(false)
             .proxy(None)
             .build();
+        let dl = ureq::Agent::config_builder()
+            .timeout_connect(Some(Duration::from_secs(20)))
+            .timeout_recv_body(Some(Duration::from_secs(120)))
+            .user_agent(USER_AGENT)
+            .http_status_as_error(false)
+            .proxy(ureq::Proxy::try_from_env())
+            .build();
         Http {
             agent: cfg.into(),
             ai_agent: ai.into(),
             local_agent: local.into(),
+            dl_agent: dl.into(),
             last_mb: Mutex::new(None),
             last_deezer: Mutex::new(None),
             last_itunes: Mutex::new(None),
@@ -998,6 +1008,56 @@ impl Online for Http {
             &[("query", &q), ("fmt", "json"), ("limit", "5")],
         )?;
         Ok(parse_mb_recordings(&v))
+    }
+
+    fn download(
+        &self,
+        url: &str,
+        dest: &std::path::Path,
+        progress: &mut dyn FnMut(u64) -> bool,
+    ) -> Result<(), String> {
+        use std::io::{Read, Write};
+        let have = std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0);
+        let mut req = self.dl_agent.get(url);
+        if have > 0 {
+            req = req.header("Range", &format!("bytes={have}-"));
+        }
+        let mut res = req.call().map_err(|e| format!("download failed: {e}"))?;
+        let status = res.status().as_u16();
+        if status == 416 {
+            return Ok(()); // already complete
+        }
+        if status >= 400 {
+            return Err(format!("download failed (HTTP {status})"));
+        }
+        // 206 resumes; 200 means the server sent the whole file again
+        let resumed = status == 206;
+        let mut out = std::fs::OpenOptions::new()
+            .create(true)
+            .append(resumed)
+            .write(true)
+            .truncate(!resumed)
+            .open(dest)
+            .map_err(|e| format!("can't write {}: {e}", dest.display()))?;
+        let mut written = if resumed { have } else { 0 };
+        let mut body = res.body_mut().with_config().limit(u64::MAX).reader();
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = body
+                .read(&mut buf)
+                .map_err(|e| format!("download interrupted: {e}"))?;
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buf[..n])
+                .map_err(|e| format!("can't write: {e}"))?;
+            written += n as u64;
+            if !progress(written) {
+                break;
+            }
+        }
+        out.flush().map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     fn catalog_lookup(&self, artist: &str, title: &str) -> Result<Vec<CatalogMatch>, String> {

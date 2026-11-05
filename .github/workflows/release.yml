@@ -120,6 +120,20 @@ jobs:
             Get-Content latest.json
           }
           Pop-Location
+      - name: Build the offline installer (includes WebView2, for PCs without it or offline)
+        shell: pwsh
+        run: |
+          # The small installer above is the one the auto-updater uses, so updates stay small.
+          # This second one packs Microsoft's WebView2 installer inside, for fresh installs anywhere.
+          Remove-Item "target/release/bundle/nsis/*" -Force -ErrorAction SilentlyContinue
+          npx tauri build --ci --config src-tauri/tauri.offline.conf.json
+          $exe = Get-ChildItem "target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          $name = ($exe.Name -replace ' ', '-') -replace '-setup\.exe$', '-offline-setup.exe'
+          Copy-Item $exe.FullName (Join-Path release $name)
+          Push-Location release
+          "$((Get-FileHash $name -Algorithm SHA256).Hash.ToLower())  $name" | Out-File -Append -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+          Pop-Location
       - name: Verify checksums before publishing
         shell: pwsh
         working-directory: release

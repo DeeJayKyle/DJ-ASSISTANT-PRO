@@ -9,7 +9,10 @@ import workletUrl from './deck.worklet.ts?worker&url';
  */
 export interface SongRef { id: string; title: string; artist?: string | null; bpm?: number | null; key?: string | null; durationSec?: number | null }
 export interface Analysis { bpm: number; firstBeat: number; key: { tonic: number; mode: 'major' | 'minor'; short: string; camelot: string }; chords: ChordSegment[] }
-export interface Loaded { song: SongRef; sampleRate: number; mix: Float32Array[]; analysis?: Analysis; stems?: Stems }
+export interface Loaded { song: SongRef; sampleRate: number; mix: Float32Array[]; analysis?: Analysis; stems?: Stems; stemsBy?: StemMethod; aiStems?: Stems; fastStems?: Stems }
+/** How stems were made: the AI model (Pro Stems AI pack) or the built-in signal processing. */
+export type StemMethod = 'ai' | 'fast';
+export interface AiStemsPack { modelUrl: string; wasmUrl: string }
 
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void; progress?: (f: number) => void };
 
@@ -85,9 +88,59 @@ export class StudioEngine {
     return l.analysis;
   }
 
-  /** Four stems, using every worker. */
-  async separate(l: Loaded, onProgress?: (f: number) => void): Promise<Stems> {
-    if (l.stems) return l.stems;
+  /** The Pro Stems AI pack, when the host has it installed (set by the Stems page). */
+  ai: AiStemsPack | null = null;
+  private aiWorker: Worker | null = null;
+  /** Where the last AI run happened: 'gpu' or 'cpu'. */
+  aiDevice: string | null = null;
+
+  /** HTDemucs in its own worker (WebGPU when available). */
+  private separateAi(l: Loaded, pack: AiStemsPack, onProgress?: (f: number) => void): Promise<Stems> {
+    if (!this.aiWorker) this.aiWorker = new Worker(new URL('./aistems.worker.ts', import.meta.url), { type: 'module' });
+    const w = this.aiWorker;
+    const id = Math.random().toString(36).slice(2);
+    return new Promise((resolve, reject) => {
+      const on = (e: MessageEvent) => {
+        const m = e.data;
+        if (m.type === 'loading') { onProgress?.(m.total ? 0.05 * (m.done / m.total) : 0.02); return; }
+        if (m.id !== id) return;
+        if (m.progress !== undefined) { this.aiDevice = m.device; onProgress?.(0.05 + 0.95 * m.progress); return; }
+        w.removeEventListener('message', on);
+        if (m.error) return reject(new Error(m.error));
+        this.aiDevice = m.result.device;
+        const s = m.result.stems;
+        resolve({ vocals: s.vocals, drums: s.drums, bass: s.bass, melodies: s.other });
+      };
+      w.addEventListener('message', on);
+      const ch = l.mix.map((c) => c.slice());
+      w.postMessage({ id, channels: ch, sampleRate: l.sampleRate, modelUrl: pack.modelUrl, wasmUrl: pack.wasmUrl }, ch.map((c) => c.buffer));
+    });
+  }
+
+  /** Stops an AI separation in progress. */
+  cancelAi() { this.aiWorker?.postMessage({ type: 'cancel' }); }
+
+  /** Four stems: with the AI model when `method` is 'ai' and the pack is installed (falling back to
+   * the built-in splitter if the model can't run), otherwise with signal processing on every worker. */
+  async separate(l: Loaded, onProgress?: (f: number) => void, method: StemMethod = this.ai ? 'ai' : 'fast'): Promise<Stems> {
+    if (method === 'ai' && this.ai) {
+      if (!l.aiStems) {
+        try {
+          l.aiStems = await this.separateAi(l, this.ai, onProgress);
+        } catch (e) {
+          if (e instanceof Error && e.message === 'cancelled') throw e;
+          console.warn('AI stems failed, using the built-in splitter', e);
+          this.aiDevice = null;
+          l.stems = await this.separate(l, onProgress, 'fast');
+          l.stemsBy = 'fast';
+          throw Object.assign(new Error(`The AI model couldn't run here (${e instanceof Error ? e.message : e}); used the built-in splitter instead.`), { fallback: true });
+        }
+      }
+      l.stems = l.aiStems; l.stemsBy = 'ai';
+      return l.stems;
+    }
+    if (l.fastStems) { l.stems = l.fastStems; l.stemsBy = 'fast'; return l.stems; }
+    if (l.stems && l.stemsBy !== 'ai') return l.stems;
     const len = l.mix[0].length;
     const plans = planParts(len, this.pool.workers.length);
     const prog = plans.map(() => 0);
@@ -99,6 +152,7 @@ export class StudioEngine {
       });
     }));
     l.stems = mergeParts(parts, len);
+    l.fastStems = l.stems; l.stemsBy = 'fast';
     return l.stems;
   }
 

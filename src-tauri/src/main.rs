@@ -262,6 +262,32 @@ fn main() {
                 responder.respond(resp.unwrap_or_else(|_| tauri::http::Response::new(Vec::new())));
             });
         })
+        // Installed packs (AI models, runtimes): `pack://localhost/<pack>/<file>`.
+        // Only files listed in the pack catalogue of an installed pack resolve.
+        .register_asynchronous_uri_scheme_protocol("pack", |ctx, req, responder| {
+            let session = ctx.app_handle().state::<State>().session.clone();
+            let path = req.uri().path().trim_matches('/').to_string();
+            std::thread::spawn(move || {
+                let mut parts = path.splitn(2, '/');
+                let (id, name) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+                let mut b = tauri::http::Response::builder();
+                for (k, v) in dj_core::media::STREAM_CORS {
+                    b = b.header(k, v);
+                }
+                let resp = match session
+                    .pack_file(id, name)
+                    .and_then(|p| std::fs::read(p).ok())
+                {
+                    Some(bytes) => b
+                        .status(200)
+                        .header("Content-Type", dj_core::packs::mime(name))
+                        .header("Content-Length", bytes.len().to_string())
+                        .body(bytes),
+                    None => b.status(404).body(Vec::new()),
+                };
+                responder.respond(resp.unwrap_or_else(|_| tauri::http::Response::new(Vec::new())));
+            });
+        })
         .invoke_handler(tauri::generate_handler![api, reveal, studio_write])
         .run(tauri::generate_context!())
         .expect("error while running DJ Assistant");

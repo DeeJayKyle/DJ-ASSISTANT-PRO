@@ -11,6 +11,9 @@ pub enum Error {
     Invalid(String),
     #[error("not found: {0}")]
     NotFound(String),
+    /// A download or online request failed; the message is already user-facing.
+    #[error("{0}")]
+    Network(String),
     #[error("busy: {0}")]
     Busy(String),
     #[error("serialization error: {0}")]

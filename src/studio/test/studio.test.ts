@@ -251,3 +251,43 @@ describe('drum sequencer', () => {
     expect(kicks[1].tick).toBe(480);
   });
 });
+
+describe('AI stems signal path (HTDemucs pre/post-processing)', () => {
+  it('rebuilds the input exactly through the spectrogram and the waveform branches', async () => {
+    const { separateAi, SEG, BINS, FRAMES } = await import('../audio/aistems');
+    const sr = 44100, n = Math.round(sr * 18); // > two segments, so overlaps are exercised
+    const L = new Float32Array(n), R = new Float32Array(n);
+    for (let i = 0; i < n; i++) { L[i] = 0.5 * Math.sin((2 * Math.PI * 220 * i) / sr) + 0.2 * Math.sin((2 * Math.PI * 3100 * i) / sr); R[i] = 0.4 * Math.sin((2 * Math.PI * 330 * i) / sr); }
+    let calls = 0;
+    // fake model: drums = the input spectrogram (spec branch), vocals = the input waveform (time branch)
+    const run = async (waveform: Float32Array, spec: Float32Array) => {
+      calls++;
+      const plane = 4 * BINS * FRAMES;
+      const freq = new Float32Array(4 * plane);
+      freq.set(spec, 0);
+      const time = new Float32Array(4 * 2 * SEG);
+      time.set(waveform, 3 * 2 * SEG);
+      return { freq, time };
+    };
+    const seen: number[] = [];
+    const r = await separateAi([L, R], sr, run, (d, t) => seen.push(d / t));
+    expect(calls).toBe(3);
+    expect(seen.at(-1)).toBe(1);
+    const err = (a: Float32Array, b: Float32Array) => { let e = 0, s = 0; for (let i = 2048; i < n - 2048; i++) { e += (a[i] - b[i]) ** 2; s += b[i] ** 2; } return Math.sqrt(e / s); };
+    expect(err(r.drums[0], L)).toBeLessThan(1e-3);
+    expect(err(r.drums[1], R)).toBeLessThan(1e-3);
+    expect(err(r.vocals[0], L)).toBeLessThan(1e-4);
+    expect(Math.max(...r.bass[0].subarray(0, 50000).map(Math.abs))).toBe(0);
+  }, 120_000);
+
+  it('works at other sample rates (resampled to 44.1 kHz and back)', async () => {
+    const { separateAi, SEG } = await import('../audio/aistems');
+    const sr = 48000, n = sr * 3;
+    const L = new Float32Array(n).map((_, i) => Math.sin((2 * Math.PI * 440 * i) / sr));
+    const run = async (waveform: Float32Array) => { const time = new Float32Array(8 * SEG); time.set(waveform, 6 * SEG); return { freq: null, time }; };
+    const r = await separateAi([L, L], sr, run);
+    expect(r.vocals[0].length).toBe(n);
+    let e = 0; for (let i = 1000; i < n - 1000; i++) e = Math.max(e, Math.abs(r.vocals[0][i] - L[i]));
+    expect(e).toBeLessThan(0.02);
+  });
+});

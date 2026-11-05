@@ -786,6 +786,21 @@ await step("Online catalogues: Deezer & Apple Music can be turned on and checked
   expect(!(await bridge("set_service", { service: "catalogs", enabled: false })).error, "turn off");
 });
 
+await step("Packs: Pro Stems AI is offered, a failed download is reported, and the Studio links to it", async () => {
+  await nav("Stems").click();
+  await page.getByRole("group", { name: "Separation method" }).waitFor();
+  expect(await page.getByRole("button", { name: "AI (best)" }).isDisabled(), "AI should need the pack");
+  await page.getByRole("button", { name: "Get Pro Stems AI" }).click();
+  await page.getByRole("heading", { name: "Packs", exact: true }).waitFor();
+  await page.getByText("Pro Stems AI").first().waitFor();
+  await page.getByRole("button", { name: "Install Pro Stems AI" }).click();
+  // the test build is offline: the failure is shown, nothing is installed
+  await page.getByText(/offline test build. Check your internet connection/).first().waitFor({ timeout: 15000 });
+  const packs = (await bridge("packs")).ok;
+  expect(packs.some((p) => p.id === "stems-ai" && !p.installed && p.size > 200e6), `packs: ${JSON.stringify(packs)}`);
+  await page.locator("#packs").screenshot({ path: path.join(shots, "18-packs.png") });
+});
+
 await step("a second local account has its own empty library, and switching back restores yours", async () => {
   await page.getByRole("button", { name: /Herbie/ }).first().click();
   await page.getByRole("menuitem", { name: "Manage accounts…" }).click();
