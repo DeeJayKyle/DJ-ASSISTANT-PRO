@@ -8,11 +8,24 @@ use std::path::Path;
 fn write_metadata_golden() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/library");
     let mut out = serde_json::Map::new();
-    let mut files: Vec<_> = walkdir::WalkDir::new(&root).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()).collect();
+    let mut files: Vec<_> = walkdir::WalkDir::new(&root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
     files.sort_by(|a, b| a.path().cmp(b.path()));
     for e in files {
-        let rel = e.path().strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
-        let ext = e.path().extension().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
+        let rel = e
+            .path()
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        let ext = e
+            .path()
+            .extension()
+            .map(|x| x.to_string_lossy().to_string())
+            .unwrap_or_default();
         let kind = format!("{:?}", dj_core::metadata::classify_extension(&ext));
         let v: Value = match dj_core::metadata::read_media_meta(e.path()) {
             Ok(m) => json!({
@@ -28,7 +41,12 @@ fn write_metadata_golden() {
         };
         out.insert(rel, v);
     }
-    let dest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../dj_assistant_flutter/test/golden/metadata.json");
+    let dest = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../dj_assistant_flutter/test/golden/metadata.json");
     std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
-    std::fs::write(&dest, serde_json::to_string_pretty(&Value::Object(out)).unwrap()).unwrap();
+    std::fs::write(
+        &dest,
+        serde_json::to_string_pretty(&Value::Object(out)).unwrap(),
+    )
+    .unwrap();
 }
