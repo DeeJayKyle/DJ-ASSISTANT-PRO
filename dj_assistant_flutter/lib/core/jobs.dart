@@ -170,7 +170,7 @@ class JobsController {
     exit.listen((_) => finish('failed', 'the job stopped unexpectedly'));
     await Isolate.spawn(
       _jobMain,
-      (port.sendPort, body),
+      (port.sendPort, body, paused),
       onError: errors.sendPort,
       onExit: exit.sendPort,
     );
@@ -213,9 +213,11 @@ class JobsController {
   }
 }
 
-Future<void> _jobMain((SendPort, JobBody) args) async {
-  final (out, body) = args;
-  final ctx = JobContext._(out);
+Future<void> _jobMain((SendPort, JobBody, bool) args) async {
+  final (out, body, startPaused) = args;
+  // Start paused when asked, so not even one item is processed before the
+  // pause message could arrive.
+  final ctx = JobContext._(out)..paused = startPaused;
   final control = ReceivePort();
   out.send(control.sendPort);
   control.listen((m) {
