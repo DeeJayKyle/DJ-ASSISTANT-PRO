@@ -202,6 +202,8 @@ function LocalSetup({ toast, onChanged }: { toast: (m: string, e?: boolean) => v
   return (
     <div className="col" style={{ gap: 12 }}>
       <p className="small muted" style={{ margin: 0 }}>Runs the assistant on this computer with <strong>Ollama</strong> (free). Nothing leaves your computer. Local models are slower and less reliable than Claude at multi-step tasks.</p>
+      <AssistantAiPack toast={toast} />
+      <p className="small faint" style={{ margin: 0 }}>Or do it step by step:</p>
       <ol className="setup-steps">
         {step(probe.installed, 1, probe.installed ? "Ollama is installed" : "Install Ollama", (
           <div className="col" style={{ gap: 8 }}>
@@ -248,6 +250,50 @@ export function AiPicker({ st, onPick, online = false }: { st: AiStatus; onPick:
       </optgroup>
       {!online && <optgroup label="On this computer (private)"><option value="local">Local model (Ollama)</option></optgroup>}
     </select>
+  );
+}
+
+/** One click: install Ollama, start it, download the recommended model, switch the assistant to it. */
+export function AssistantAiPack({ toast }: { toast: (m: string, e?: boolean) => void }) {
+  const [job, setJob] = useState<{ state: string; done: number; total: number; message: string | null } | null>(null);
+  const [ready, setReady] = useState(false);
+  const load = () => {
+    api.jobStatus("ai_pack").then(setJob).catch(() => {});
+    api.aiStatus().then((s) => setReady(s.provider === "local" && s.ready)).catch(() => {});
+  };
+  useEffect(() => { load(); }, []);
+  const running = job?.state === "running";
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(load, 800);
+    return () => clearInterval(t);
+  }, [running]);
+  const prev = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prev.current === "running" && job?.state === "completed") { toast(job.message ?? "The assistant runs on this computer now."); window.dispatchEvent(new Event("dj-ai-changed")); }
+    if (prev.current === "running" && job?.state === "failed") toast(job.message ?? "Setup didn't finish.", true);
+    prev.current = job?.state;
+  }, [job?.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="list-row" style={{ alignItems: "flex-start" }}>
+      <div className="grow col" style={{ gap: 4 }}>
+        <div className="row wrap" style={{ gap: 8 }}><strong>Assistant AI (private)</strong><span className="small faint">about 5 GB</span>{ready && <span className="badge q-lossless">Ready</span>}</div>
+        <span className="small muted">Runs the AI assistant on this computer with nothing sent online. One click installs Ollama (free), starts it and downloads the recommended model (qwen2.5:7b), then switches the assistant to it.</span>
+        <span className="small faint">Ollama (MIT licence). Qwen2.5 by Alibaba Cloud (Apache 2.0 licence).</span>
+        {running && (
+          <div className="col" style={{ gap: 4, marginTop: 4 }}>
+            <div className="progress" aria-label="Assistant AI setup progress"><div style={{ width: `${job!.total ? Math.min(100, (job!.done / job!.total) * 100) : 3}%` }} /></div>
+            <span className="small muted">{job!.message} {job!.total ? `${gb(job!.done)} of ${gb(job!.total)}` : ""}</span>
+          </div>
+        )}
+        {job?.state === "failed" && <span className="small s-error">{job.message}</span>}
+      </div>
+      {running ? (
+        <button className="btn small" onClick={() => api.cancelJob("ai_pack").then(load)}>Stop</button>
+      ) : (
+        <button className="btn small primary" disabled={ready} onClick={() => api.aiPackSetup().then(load).catch((e) => toast(e.message, true))}><Icon name="download" size={14} /> {ready ? "Installed" : "Set up"}</button>
+      )}
+    </div>
   );
 }
 
@@ -511,7 +557,7 @@ export function SettingsView({ settings, onChange, info, toast, bump }: { settin
 
         <AiSettings toast={toast} onProvider={() => api.getSettings().then(onChange).catch(() => {})} />
 
-        <PacksPanel toast={toast} />
+        <PacksPanel toast={toast} extra={<AssistantAiPack toast={toast} />} />
 
         <section className="panel">
           <h2 style={{ marginBottom: 12 }}>Appearance</h2>

@@ -222,6 +222,75 @@ impl App {
                 }
                 json!({"running": false})
             }
+            // One click: install Ollama if needed, start it, download the recommended model,
+            // and switch the assistant to it. Steps already done are skipped.
+            "ai_pack_setup" => {
+                let model: String = arg::<Option<String>>(a, "model")?
+                    .unwrap_or_else(|| crate::agent::DEFAULT_LOCAL_MODEL.into());
+                if !crate::agent::valid_model_name(&model) {
+                    return invalid("that doesn't look like a model name");
+                }
+                let url = crate::agent::config(self)?.local_url;
+                let (online, db) = (self.online.clone(), self.db_path.clone());
+                self.jobs.start("ai_pack", false, move |ctl, p| {
+                    let stop = || crate::jobs::wait_or_cancelled(ctl);
+                    let set = |done: u64, total: u64, msg: String| {
+                        let mut s = crate::jobs::lock(p);
+                        s.done = done;
+                        s.total = total;
+                        s.message = Some(msg);
+                    };
+                    let mut probe = online.llm_local_probe(&url);
+                    if !probe.installed {
+                        set(0, 0, "Downloading Ollama…".into());
+                        online
+                            .llm_local_install(&mut |d, t| {
+                                set(d, t, "Downloading Ollama…".into());
+                                !stop()
+                            })
+                            .map_err(Error::Network)?;
+                        set(0, 0, "Installing Ollama…".into());
+                        probe = online.llm_local_probe(&url);
+                    }
+                    if !probe.running {
+                        set(0, 0, "Starting Ollama…".into());
+                        online.llm_local_start().map_err(Error::Network)?;
+                        for _ in 0..120 {
+                            if online.llm_local_probe(&url).running {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                        }
+                        probe = online.llm_local_probe(&url);
+                        if !probe.running {
+                            return Err(Error::Network("Ollama didn't start. Start it from the Start menu, then try again.".into()));
+                        }
+                    }
+                    let has = probe.models.iter().any(|m| m == &model || m.trim_end_matches(":latest") == model);
+                    if !has {
+                        let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
+                        online
+                            .llm_local_pull(&url, &model, &mut |done, total, status| {
+                                if last.elapsed() >= std::time::Duration::from_millis(250) || status == "success" {
+                                    last = std::time::Instant::now();
+                                    set(done, total, format!("Downloading the {model} model…"));
+                                }
+                                !stop()
+                            })
+                            .map_err(Error::Network)?;
+                        if stop() {
+                            set(0, 0, "Stopped. Press the button again to pick up where it left off.".into());
+                            return Ok(());
+                        }
+                    }
+                    let conn = db::open(&db)?;
+                    db::set_setting(&conn, "ai_local_model", &model)?;
+                    db::set_setting(&conn, "ai_provider", "local")?;
+                    set(1, 1, format!("The assistant now runs privately on this computer with {model}."));
+                    Ok(())
+                })?;
+                json!({"started": true})
+            }
             "ai_local_pull" => {
                 let cfg = crate::agent::config(self)?;
                 let model: String = arg::<Option<String>>(a, "model")?.unwrap_or(cfg.model.clone());

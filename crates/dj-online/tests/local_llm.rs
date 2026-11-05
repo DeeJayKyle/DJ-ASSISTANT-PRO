@@ -340,3 +340,22 @@ fn live_catalogues() {
         .iter()
         .any(|x| x.source == "Apple Music" && !x.genres.is_empty()));
 }
+
+/// Live: installs Pro Stems AI from the packs-1 release with the app's own code
+/// (`cargo test -p dj-online -- --ignored live_pack_install`, about 205 MB).
+#[test]
+#[ignore]
+fn live_pack_install() {
+    let http = dj_online::Http::new();
+    let base = std::env::temp_dir().join("dja-live-pack");
+    let p = dj_core::packs::pack("stems-ai").unwrap();
+    let ctl = dj_core::scanner::ScanControl::default();
+    let prog: dj_core::jobs::Progress = Default::default();
+    let dl = |url: &str, dest: &std::path::Path, f: &mut dyn FnMut(u64) -> bool| {
+        http.download(url, dest, f)
+    };
+    dj_core::packs::install(&base, p, &dl, &ctl, &prog).unwrap();
+    assert!(dj_core::packs::installed(&base, p));
+    assert!(dj_core::packs::file_path(&base, "stems-ai", "htdemucs_embedded.onnx").is_some());
+    std::fs::remove_dir_all(&base).unwrap();
+}

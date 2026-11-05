@@ -922,6 +922,68 @@ impl Online for Http {
         }
     }
 
+    fn llm_local_install(&self, progress: &mut dyn FnMut(u64, u64) -> bool) -> Result<(), String> {
+        if !cfg!(windows) {
+            return Err(
+                "one-click install is for Windows; on this system install Ollama from ollama.com"
+                    .into(),
+            );
+        }
+        let dir = std::env::temp_dir().join("dj-assistant-ollama");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let setup = dir.join("OllamaSetup.exe");
+        // Ollama's official Windows installer (MIT); it redirects to the current GitHub release.
+        let url = "https://ollama.com/download/OllamaSetup.exe";
+        // the size is only for the progress bar: unknown is fine
+        let total = self
+            .dl_agent
+            .head(url)
+            .call()
+            .ok()
+            .filter(|r| r.status().is_success())
+            .and_then(|r| {
+                r.headers()
+                    .get("content-length")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse().ok())
+            })
+            .unwrap_or(0u64);
+        let mut stopped = false;
+        self.download(url, &setup, &mut |now| {
+            let go = progress(now, total);
+            stopped = !go;
+            go
+        })?;
+        if stopped {
+            return Err("stopped".into());
+        }
+        // Inno Setup: install for this user only, with no windows or questions.
+        let mut cmd = std::process::Command::new(&setup);
+        cmd.args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let status = cmd
+            .status()
+            .map_err(|e| format!("couldn't run the Ollama installer: {e}"))?;
+        let _ = std::fs::remove_file(&setup);
+        if !status.success() {
+            return Err(format!(
+                "the Ollama installer stopped with code {:?}",
+                status.code()
+            ));
+        }
+        if ollama_exe().is_none() {
+            return Err(
+                "Ollama was installed but can't be found yet; restart DJ Assistant and try again"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
+
     fn llm_local_start(&self) -> Result<(), String> {
         let exe = ollama_exe()
             .ok_or("Ollama isn't installed on this computer. Download it free from ollama.com.")?;

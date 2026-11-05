@@ -4,7 +4,7 @@ members = ["crates/dj-core", "crates/dj-online", "crates/dj-devbridge", "src-tau
 default-members = ["crates/dj-core"]
 
 [workspace.package]
-version = "1.8.0"
+version = "1.8.1"
 edition = "2021"
 license = "MIT"
 authors = ["DeeJayKyle"]

@@ -154,6 +154,7 @@ export const api = {
   aiLocalModels: () => call<string[]>("ai_local_models"),
   aiListModels: () => call<string[]>("ai_list_models"),
   packs: () => call<PackInfo[]>("packs"),
+  aiPackSetup: (model?: string) => call("ai_pack_setup", { model: model ?? null }),
   packInstall: (id: string) => call("pack_install", { id }),
   packCancel: (id: string) => call("pack_cancel", { id }),
   packRemove: (id: string) => call<PackInfo[]>("pack_remove", { id }),

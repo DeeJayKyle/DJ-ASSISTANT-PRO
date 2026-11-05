@@ -152,6 +152,11 @@ pub trait Online: Send + Sync {
     fn llm_local_probe(&self, _url: &str) -> LocalProbe {
         LocalProbe::default()
     }
+    /// Download Ollama's installer and install it silently (Windows). `progress(done, total)`
+    /// reports the download and returns false to stop.
+    fn llm_local_install(&self, _progress: &mut dyn FnMut(u64, u64) -> bool) -> Result<(), String> {
+        Err("installing Ollama automatically is not available in this build; get it free from ollama.com".into())
+    }
     /// Start the installed Ollama in the background (no window).
     fn llm_local_start(&self) -> Result<(), String> {
         Err("starting a local model server is not available in this build".into())

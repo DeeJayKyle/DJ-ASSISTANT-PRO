@@ -903,7 +903,7 @@ dependencies = [
 
 [[package]]
 name = "dj-assistant"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "dj-core",
  "dj-online",
@@ -920,7 +920,7 @@ dependencies = [
 
 [[package]]
 name = "dj-core"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "blake3",
  "crossbeam-channel",
@@ -933,6 +933,7 @@ dependencies = [
  "rusty-chromaprint",
  "serde",
  "serde_json",
+ "sha2",
  "symphonia",
  "tempfile",
  "thiserror 2.0.21",
@@ -943,7 +944,7 @@ dependencies = [
 
 [[package]]
 name = "dj-devbridge"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "dj-core",
  "dj-online",
@@ -953,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "dj-online"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "dj-core",
  "serde",

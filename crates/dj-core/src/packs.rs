@@ -166,7 +166,11 @@ pub fn install(
                 stop = crate::jobs::wait_or_cancelled(ctl);
                 !stop
             })
-            .map_err(|e| Error::Network(format!("{e}. Check your internet connection and try again.")))?;
+            .map_err(|e| {
+                Error::Network(format!(
+                    "{e}. Check your internet connection and try again."
+                ))
+            })?;
             if stop {
                 crate::jobs::message(
                     prog,

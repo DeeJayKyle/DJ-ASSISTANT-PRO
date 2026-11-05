@@ -1,3 +1,22 @@
+DJ Assistant 1.8.1
+
+**Fix: the Studio works in the desktop app again**
+- Stems, Remix and DJ Decks failed with "Failed to fetch" for every song. The app's song server didn't allow the Studio to read the audio it plays, which Windows' WebView2 requires. It does now, and a song that really can't be read shows a clear message instead.
+
+**Packs: big extras, downloaded once** (Settings → Packs)
+- Optional parts too large to put in every update. Each downloads once from DJ Assistant's GitHub releases, is checked against its known checksum, and then works offline. Downloads can be stopped and pick up where they left off. Packs are shared by all local accounts on the computer.
+- **Pro Stems AI** (about 200 MB): AI stem separation with HTDemucs, Meta's open model (MIT licence). It gives much cleaner vocals, drums, bass and melodies than the built-in splitter.
+  - Runs on this computer: on your graphics card through WebGPU when it can, otherwise on the processor (slower).
+  - The Studio's Stems page has an **AI (best)** / **Fast** switch. If the AI model can't run on a PC, the app uses the built-in splitter and says so.
+- **Assistant AI (private)** (about 5 GB): one click installs Ollama, starts it, downloads the recommended model (qwen2.5:7b) and switches the assistant to it. Nothing is sent online. Also under Settings → AI assistant → Local model.
+
+**Offline installer**
+- Each release now also includes `…_offline-setup.exe`, which packs Microsoft's WebView2 inside. Use it for PCs with no internet, or ones without WebView2. Automatic updates keep using the small installer.
+
+**Coming in 1.8.2:** a built-in sample library and plugin (CLAP/VST3) support in the Studio.
+
+---
+
 DJ Assistant 1.8.0
 
 **More online sources for exact song information** (Settings → Online services; each one is opt-in)

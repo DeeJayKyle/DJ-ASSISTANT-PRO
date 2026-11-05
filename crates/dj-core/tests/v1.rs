@@ -2777,3 +2777,94 @@ fn spotify_and_getsongbpm_add_key_and_corroborate() {
     let bpm = find("bpm").unwrap_or_else(|| panic!("bpm: {s}"));
     assert_eq!(bpm["suggested_value"], "122");
 }
+
+/// A computer without Ollama: installing, starting and pulling flip its state.
+#[derive(Default)]
+struct FreshPc {
+    installed: std::sync::atomic::AtomicBool,
+    running: std::sync::atomic::AtomicBool,
+    pulled: std::sync::Mutex<Vec<String>>,
+}
+impl Online for FreshPc {
+    fn musicbrainz_recordings(&self, _: &str, _: &str) -> Result<Vec<MbRecording>, String> {
+        Err("n/a".into())
+    }
+    fn musicbrainz_artist_releases(&self, _: &str) -> Result<Vec<ReleaseItem>, String> {
+        Err("n/a".into())
+    }
+    fn acoustid_lookup(&self, _: &str, _: u32, _: &str) -> Result<Vec<AcoustidMatch>, String> {
+        Err("n/a".into())
+    }
+    fn lastfm_similar_artists(&self, _: &str, _: &str) -> Result<Vec<SimilarItem>, String> {
+        Err("n/a".into())
+    }
+    fn lastfm_similar_tracks(&self, _: &str, _: &str, _: &str) -> Result<Vec<SimilarItem>, String> {
+        Err("n/a".into())
+    }
+    fn llm_local_probe(&self, _: &str) -> dj_core::online::LocalProbe {
+        use std::sync::atomic::Ordering::SeqCst;
+        dj_core::online::LocalProbe {
+            installed: self.installed.load(SeqCst),
+            running: self.running.load(SeqCst),
+            models: self.pulled.lock().unwrap().clone(),
+            details: vec![],
+        }
+    }
+    fn llm_local_install(&self, p: &mut dyn FnMut(u64, u64) -> bool) -> Result<(), String> {
+        assert!(p(50, 100) && p(100, 100));
+        self.installed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+    fn llm_local_start(&self) -> Result<(), String> {
+        assert!(
+            self.installed.load(std::sync::atomic::Ordering::SeqCst),
+            "started before installing"
+        );
+        self.running
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+    fn llm_local_pull(
+        &self,
+        _: &str,
+        model: &str,
+        p: &mut dyn FnMut(u64, u64, &str) -> bool,
+    ) -> Result<(), String> {
+        assert!(
+            self.running.load(std::sync::atomic::Ordering::SeqCst),
+            "pulled before starting"
+        );
+        p(1, 2, "pulling");
+        p(2, 2, "success");
+        self.pulled.lock().unwrap().push(model.to_string());
+        Ok(())
+    }
+}
+
+#[test]
+fn assistant_ai_pack_installs_starts_pulls_and_switches_over() {
+    let e = env();
+    let pc = Arc::new(FreshPc::default());
+    let app = App::open_with(
+        &e.db(),
+        pc.clone(),
+        Arc::new(dj_core::online::MemorySecrets::default()),
+    )
+    .unwrap();
+    call(&app, "ai_pack_setup", json!({}));
+    let job = wait_job(&app, "ai_pack");
+    assert_eq!(job["state"], "completed", "{job}");
+    assert!(job["message"].as_str().unwrap().contains("qwen2.5:7b"));
+    let st = call(&app, "ai_status", json!({}));
+    assert_eq!(st["provider"], "local");
+    assert_eq!(st["model"], "qwen2.5:7b");
+    assert_eq!(st["ready"], true, "{st}");
+    // a second run skips everything already done
+    call(&app, "ai_pack_setup", json!({}));
+    assert_eq!(wait_job(&app, "ai_pack")["state"], "completed");
+    assert_eq!(pc.pulled.lock().unwrap().len(), 1);
+    assert!(app
+        .dispatch("ai_pack_setup", json!({"model": "bad model!"}))
+        .is_err());
+}
