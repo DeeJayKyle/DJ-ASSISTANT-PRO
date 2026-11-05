@@ -306,9 +306,14 @@ JobBody docsScanJob(String dbPath) => (ctx) async {
     if (size > 20000000) return ('too_large', null);
     try {
       final raf = File(path).openSync();
-      final bytes = raf.readSync(_maxText);
-      raf.closeSync();
-      return ('indexed', utf8.decode(bytes, allowMalformed: true));
+      try {
+        return (
+          'indexed',
+          utf8.decode(raf.readSync(_maxText), allowMalformed: true),
+        );
+      } finally {
+        raf.closeSync();
+      }
     } on FileSystemException {
       return ('unreadable', null);
     }
@@ -316,9 +321,11 @@ JobBody docsScanJob(String dbPath) => (ctx) async {
   List<int> head(int n) {
     try {
       final raf = File(path).openSync();
-      final b = raf.readSync(n);
-      raf.closeSync();
-      return b;
+      try {
+        return raf.readSync(n);
+      } finally {
+        raf.closeSync();
+      }
     } on FileSystemException {
       return const [];
     }
@@ -332,8 +339,11 @@ JobBody docsScanJob(String dbPath) => (ctx) async {
         [for (var i = 0; i < 8; i++) h[i] == ole[i]].every((x) => x)) {
       return ('encrypted', null);
     }
+    InputFileStream? input;
     try {
-      final z = ZipDecoder().decodeStream(InputFileStream(path));
+      // Closed in `finally`: an open handle would lock the DJ's document.
+      input = InputFileStream(path);
+      final z = ZipDecoder().decodeStream(input);
       final entry =
           z.findFile('word/document.xml') ?? z.findFile('content.xml');
       if (entry == null) return ('not_supported', null);
@@ -366,6 +376,8 @@ JobBody docsScanJob(String dbPath) => (ctx) async {
       );
     } on Exception {
       return ('unreadable', null);
+    } finally {
+      input?.closeSync();
     }
   }
   if (ext == 'pdf') {

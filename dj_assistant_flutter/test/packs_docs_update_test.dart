@@ -12,14 +12,20 @@ import 'package:dj_assistant/core/packs.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/updater.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:path/path.dart' as p;
 
+import 'open_files.dart';
+
 void main() {
   late Directory tmp;
   setUp(() => tmp = Directory.systemTemp.createTempSync('dja_'));
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() {
+    expectNoOpenFiles(tmp);
+    tmp.deleteSync(recursive: true);
+  });
 
   group('packs (1.x packs.rs)', () {
     test('the catalogue is well formed', () {

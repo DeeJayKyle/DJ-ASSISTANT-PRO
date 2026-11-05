@@ -9,10 +9,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'open_files.dart';
+
 void main() {
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('dja_ui'));
-  tearDown(() => dir.deleteSync(recursive: true));
+  tearDown(() {
+    expectNoOpenFiles(dir);
+    dir.deleteSync(recursive: true);
+  });
+
+  /// Unmounts the app so the session closes its catalogue (Windows will not
+  /// delete a folder with an open SQLite file).
+  Future<void> closeApp(
+    WidgetTester tester,
+    AccountsService accounts, [
+    ProviderContainer? container,
+  ]) async {
+    await tester.pumpWidget(const SizedBox());
+    container?.dispose();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    accounts.close();
+  }
 
   testWidgets('the shell shows the sidebar and switches pages', (tester) async {
     tester.view.physicalSize = const Size(1600, 1000);
@@ -53,6 +73,7 @@ void main() {
     await tester.tap(find.text('Virtual Crates').first);
     await tester.pump();
     expect(find.byType(Scaffold), findsWidgets);
+    await closeApp(tester, accounts);
   });
 
   testWidgets('every Studio page opens', (tester) async {
@@ -72,7 +93,6 @@ void main() {
         ),
       ],
     );
-    addTearDown(container.dispose);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -93,5 +113,6 @@ void main() {
       expect(find.text(text), findsWidgets, reason: title);
     }
     expect(tester.takeException(), isNull);
+    await closeApp(tester, accounts, container);
   });
 }
