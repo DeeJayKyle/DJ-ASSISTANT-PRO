@@ -37,7 +37,34 @@ class JobBusyException implements Exception {
 }
 
 /// What a job body sees inside its isolate.
-class JobContext {
+/// What a long task reports while it runs. [JobContext] is the isolate-backed
+/// one; [LocalProgress] runs a task in place (tests, small inline lookups).
+abstract interface class JobProgress {
+  set total(int n);
+  void tick({bool ok = true});
+  set message(String m);
+  Future<bool> checkpoint();
+}
+
+class LocalProgress implements JobProgress {
+  int totalCount = 0, done = 0, errors = 0;
+  final messages = <String>[];
+  bool cancelled = false;
+  @override
+  set total(int n) => totalCount = n;
+  @override
+  void tick({bool ok = true}) {
+    done++;
+    if (!ok) errors++;
+  }
+
+  @override
+  set message(String m) => messages.add(m);
+  @override
+  Future<bool> checkpoint() async => cancelled;
+}
+
+class JobContext implements JobProgress {
   JobContext._(this._out);
   final SendPort _out;
   bool cancelled = false;
@@ -47,17 +74,20 @@ class JobContext {
   Object? _result;
   var _lastSent = 0;
 
+  @override
   set total(int n) {
     _total = n;
     _send(force: true);
   }
 
+  @override
   void tick({bool ok = true}) {
     _done++;
     if (!ok) _errors++;
     _send();
   }
 
+  @override
   set message(String m) {
     _message = m;
     _send(force: true);
@@ -66,6 +96,7 @@ class JobContext {
   set result(Object? r) => _result = r;
 
   /// Lets control messages in, waits while paused; true when cancelled.
+  @override
   Future<bool> checkpoint() async {
     await Future<void>.delayed(Duration.zero);
     while (paused && !cancelled) {
