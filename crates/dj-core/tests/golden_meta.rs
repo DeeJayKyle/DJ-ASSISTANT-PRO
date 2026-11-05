@@ -380,3 +380,100 @@ fn write_health_golden() {
     )
     .unwrap();
 }
+
+#[test]
+#[ignore]
+fn write_assistant_golden() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/library");
+    let conn = dj_core::db::open_in_memory().unwrap();
+    dj_core::library::add_root(&conn, root.to_str().unwrap()).unwrap();
+    let ctl = dj_core::scanner::ScanControl::default();
+    let progress = std::sync::Mutex::new(dj_core::scanner::ScanProgress::default());
+    dj_core::scanner::run_scan_with_conn(&conn, None, &ctl, &progress).unwrap();
+    let phrases = [
+        "help",
+        "",
+        "hello",
+        "Afrobeats from the 2010s no live",
+        "house 120 to 128 bpm",
+        "low bitrate",
+        "show duplicates",
+        "clean",
+        "explicit hip hop",
+        "not clean",
+        "plan a 2 hour clean wedding set",
+        "90 minute warm up set",
+        "build a peak club set",
+        "start gig mode",
+        "make a gig pack",
+        "scan",
+        "rescan everything",
+        "add folder",
+        "library health",
+        "corrupt files",
+        "suggestions",
+        "fix tags",
+        "discover similar",
+        "analyse my tracks",
+        "cheat sheet",
+        "personal files",
+        "check for update",
+        "key 8A",
+        "key Am",
+        "key F# minor",
+        "f#m",
+        "11b",
+        "bpm 100-110",
+        "122 bpm",
+        "energy 6-8",
+        "high energy",
+        "low energy afro",
+        "lossless",
+        "video clips",
+        "4k",
+        "1080p videos",
+        "audio only",
+        "missing genre",
+        "missing bpm",
+        "no-genre year",
+        "1990-1999",
+        "2014",
+        "90s",
+        "1980s",
+        "'00s",
+        "4 stars",
+        "3+ stars",
+        "5star",
+        "remixes",
+        "no remix",
+        "extended mixes",
+        "acapella",
+        "without dub",
+        "afro house",
+        "afrohouse",
+        "deep house remix",
+        "warehouse",
+        "lagos lights",
+        "excluding warehouse",
+        "quantum flux capacitor",
+        "music videos",
+        "dupes",
+    ];
+    let mut out = vec![];
+    for p in phrases {
+        let r = dj_core::assistant::handle(&conn, p).unwrap();
+        let mut v = serde_json::to_value(&r).unwrap();
+        v["sample"] = json!(r
+            .sample
+            .iter()
+            .map(|t| t.file_name.clone())
+            .collect::<Vec<_>>());
+        out.push(json!({"message": p, "reply": v}));
+    }
+    std::fs::write(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../dj_assistant_flutter/test/golden/assistant.json"),
+        serde_json::to_string_pretty(&out).unwrap(),
+    )
+    .unwrap();
+}

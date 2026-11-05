@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import '../core/text.dart';
+import 'llm.dart';
 import 'online.dart';
 import 'parsers.dart';
 
@@ -560,4 +561,344 @@ class HttpOnline extends Online {
       out.closeSync();
     }
   }
+
+  // ---- AI models ----
+
+  final _seq = CallSeq();
+
+  Future<(int, Object?)> _postJson(
+    http.Client c,
+    String url,
+    Json body, {
+    Map<String, String> headers = const {},
+    Duration timeout = const Duration(seconds: 240),
+    String prefix = 'network error',
+  }) async {
+    final r = await _send(
+      () => c.post(
+        Uri.parse(url),
+        headers: {'content-type': 'application/json', ...headers},
+        body: jsonEncode(body),
+      ),
+      timeout: timeout,
+      prefix: prefix,
+    );
+    Object? v;
+    try {
+      v = jsonDecode(utf8.decode(r.bodyBytes));
+    } on FormatException {
+      v = null;
+    }
+    return (r.statusCode, v);
+  }
+
+  @override
+  Future<Json> llmChat(
+    LlmConfig cfg,
+    String system,
+    List<Json> tools,
+    List<Json> messages,
+  ) async {
+    if (cfg.provider == 'claude') {
+      final key = cfg.apiKey;
+      if (key == null) throw OnlineException('no Anthropic API key is set');
+      final (status, v) = await _postJson(
+        web,
+        anthropicUrl,
+        claudeBody(cfg.model, system, tools, messages),
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': anthropicVersion,
+          if (supportsFallback(cfg.model)) 'anthropic-beta': fallbackBeta,
+        },
+      );
+      if (v is! Map) throw OnlineException('unexpected response ($status)');
+      if (status >= 400) throw OnlineException(claudeError(status, v));
+      return Map<String, Object?>.from(v);
+    }
+    if (cfg.provider == 'local') {
+      final url = '${_trim(cfg.localUrl)}/api/chat';
+      Future<(int, Object?)> send(List<Json> t, int? ctx) async {
+        try {
+          return await _postJson(
+            localWeb,
+            url,
+            ollamaBody(cfg.model, system, t, messages, ctx),
+            timeout: const Duration(seconds: 600),
+          );
+        } on OnlineException catch (e) {
+          throw OnlineException(localUnreachable(cfg.localUrl, e.message));
+        }
+      }
+
+      var t = tools;
+      int? ctx;
+      var (status, v) = await send(t, ctx);
+      for (var i = 0; i < 2 && status == 400; i++) {
+        final tooLong = ctx == null ? ollamaTooLong(v) : null;
+        if (t.isNotEmpty && ollamaNoTools(v)) {
+          t = const []; // many local models can't call tools: plain chat instead
+        } else if (tooLong != null) {
+          ctx = fitContext(tooLong);
+        } else {
+          break;
+        }
+        (status, v) = await send(t, ctx);
+      }
+      if (status == 404) {
+        throw OnlineException(
+          "the model '${cfg.model}' isn't installed. Run: ollama pull ${cfg.model}",
+        );
+      }
+      if (status >= 400) {
+        throw OnlineException(
+          '${str(at(v, 'error')) ?? 'the local model failed'} (HTTP $status)',
+        );
+      }
+      return fromOllama(v, _seq);
+    }
+    if (cfg.baseUrl.isNotEmpty) {
+      final url = '${_trim(cfg.baseUrl)}/chat/completions';
+      Future<(int, Object?)> send(List<Json> t) => _postJson(
+        web,
+        url,
+        openaiBody(cfg.model, system, t, messages),
+        headers: {
+          if (cfg.apiKey case final k?) 'authorization': 'Bearer $k',
+          if (cfg.provider == 'openrouter') 'x-title': 'DJ Assistant',
+        },
+        prefix: '${cfg.label} could not be reached',
+      );
+      var (status, v) = await send(tools);
+      if (tools.isNotEmpty && openaiNoTools(status, v)) {
+        (status, v) = await send(const []);
+      }
+      if (status >= 400) {
+        throw OnlineException(openaiError(cfg.label, status, v));
+      }
+      return fromOpenai(v, _seq);
+    }
+    throw OnlineException("unknown AI provider '${cfg.provider}'");
+  }
+
+  static String _trim(String u) => u.replaceAll(RegExp(r'/+$'), '');
+
+  @override
+  Future<List<String>> llmListModels(LlmConfig cfg) async {
+    final r = await _send(
+      () => web.get(
+        Uri.parse('${_trim(cfg.baseUrl)}/models'),
+        headers: {if (cfg.apiKey case final k?) 'authorization': 'Bearer $k'},
+      ),
+      prefix: '${cfg.label} could not be reached',
+    );
+    Object? v;
+    try {
+      v = jsonDecode(utf8.decode(r.bodyBytes));
+    } on FormatException {
+      v = null;
+    }
+    if (r.statusCode >= 400) {
+      throw OnlineException(openaiError(cfg.label, r.statusCode, v));
+    }
+    final src = at(v, 'data') is List ? at(v, 'data') : at(v, 'models');
+    final ids = <String>{
+      for (final m in list(src))
+        if (str(at(m, 'id')) ?? str(at(m, 'name')) case final id?)
+          id.startsWith('models/') ? id.substring(7) : id,
+    }.toList()..sort();
+    return ids;
+  }
+
+  Future<List<LocalModel>> _localTags(String url) async {
+    final http.Response r;
+    try {
+      r = await localWeb
+          .get(Uri.parse('${_trim(url)}/api/tags'))
+          .timeout(const Duration(seconds: 10));
+    } on Exception catch (e) {
+      throw OnlineException(localUnreachable(url, '$e'));
+    }
+    try {
+      return parseOllamaTags(jsonDecode(utf8.decode(r.bodyBytes)));
+    } on FormatException catch (e) {
+      throw OnlineException('unexpected response: $e');
+    }
+  }
+
+  @override
+  Future<List<String>> llmLocalModels(String url) async => [
+    for (final m in await _localTags(url)) m.name,
+  ];
+
+  @override
+  Future<LocalProbe> llmLocalProbe(String url) async {
+    try {
+      final tags = await _localTags(url);
+      return LocalProbe(installed: true, running: true, details: tags);
+    } on OnlineException {
+      return LocalProbe(installed: ollamaExe() != null);
+    }
+  }
+
+  @override
+  Future<void> llmLocalInstall(
+    bool Function(int done, int total) progress,
+  ) async {
+    if (!Platform.isWindows) {
+      throw OnlineException(
+        'one-click install is for Windows; on this system install Ollama from ollama.com',
+      );
+    }
+    final dir = Directory('${Directory.systemTemp.path}\\dj-assistant-ollama')
+      ..createSync(recursive: true);
+    final setup = '${dir.path}\\OllamaSetup.exe';
+    // Ollama's official Windows installer (MIT); it redirects to the current release.
+    const url = 'https://ollama.com/download/OllamaSetup.exe';
+    var total = 0;
+    try {
+      final h = await web.head(Uri.parse(url));
+      if (h.statusCode < 300) {
+        total = int.tryParse(h.headers['content-length'] ?? '') ?? 0;
+      }
+    } on Exception {
+      total = 0; // only for the progress bar
+    }
+    var stopped = false;
+    await download(url, setup, (now) {
+      stopped = !progress(now, total);
+      return !stopped;
+    });
+    if (stopped) throw OnlineException('stopped');
+    // Inno Setup: install for this user only, with no windows or questions.
+    final r = await Process.run(setup, [
+      '/VERYSILENT',
+      '/SUPPRESSMSGBOXES',
+      '/NORESTART',
+      '/SP-',
+    ]);
+    try {
+      File(setup).deleteSync();
+    } on FileSystemException {
+      // left in the temp folder
+    }
+    if (r.exitCode != 0) {
+      throw OnlineException(
+        'the Ollama installer stopped with code ${r.exitCode}',
+      );
+    }
+    if (ollamaExe() == null) {
+      throw OnlineException(
+        "Ollama was installed but can't be found yet; restart DJ Assistant and try again",
+      );
+    }
+  }
+
+  @override
+  Future<void> llmLocalStart() async {
+    final exe = ollamaExe();
+    if (exe == null) {
+      throw OnlineException(
+        "Ollama isn't installed on this computer. Download it free from ollama.com.",
+      );
+    }
+    // On Windows prefer the tray app (it keeps the server running).
+    final app = File(
+      '${File(exe).parent.path}${Platform.pathSeparator}ollama app.exe',
+    );
+    try {
+      await Process.start(
+        app.existsSync() ? app.path : exe,
+        app.existsSync() ? const [] : const ['serve'],
+        mode: ProcessStartMode.detached,
+      );
+    } on ProcessException catch (e) {
+      throw OnlineException("couldn't start Ollama: ${e.message}");
+    }
+  }
+
+  @override
+  Future<void> llmLocalPull(
+    String url,
+    String model,
+    bool Function(int done, int total, String status) progress,
+  ) async {
+    final req = http.Request('POST', Uri.parse('${_trim(url)}/api/pull'))
+      ..headers['content-type'] = 'application/json'
+      ..body = jsonEncode({'model': model, 'stream': true});
+    final http.StreamedResponse res;
+    try {
+      res = await localWeb.send(req).timeout(const Duration(seconds: 10));
+    } on Exception catch (e) {
+      throw OnlineException(localUnreachable(url, '$e'));
+    }
+    if (res.statusCode >= 400) {
+      final body = await res.stream.bytesToString();
+      Object? v;
+      try {
+        v = jsonDecode(body);
+      } on FormatException {
+        v = null;
+      }
+      throw OnlineException(
+        str(at(v, 'error')) ?? 'download failed (HTTP ${res.statusCode})',
+      );
+    }
+    final parts = PullProgress();
+    final lines = res.stream
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+    await for (final line in lines) {
+      Object? ev;
+      try {
+        ev = jsonDecode(line);
+      } on FormatException {
+        continue;
+      }
+      final (done, total, status, finished) = parts.update(ev);
+      if (!progress(done, total, status)) {
+        throw OnlineException('download stopped');
+      }
+      if (finished) return;
+    }
+    throw OnlineException(
+      'the download ended before it finished; try again to resume',
+    );
+  }
+}
+
+/// A plain-language message when nothing answers at the local model address.
+String localUnreachable(String url, String error) {
+  final e = error.toLowerCase();
+  if (e.contains('refused') ||
+      e.contains('errno = 111') ||
+      e.contains('errno = 10061')) {
+    return ollamaExe() != null
+        ? 'Ollama is installed but not running (nothing answers at $url). Start it in Settings → AI assistant, or from the Start menu.'
+        : "Ollama isn't installed on this computer yet. Set it up in Settings → AI assistant (free download from ollama.com).";
+  }
+  return "couldn't reach the local model server at $url: $error";
+}
+
+/// Where the Ollama program is installed, if it is.
+String? ollamaExe() {
+  final win = Platform.isWindows;
+  final name = win ? 'ollama.exe' : 'ollama';
+  final sep = Platform.pathSeparator;
+  final env = Platform.environment;
+  final c = <String>[
+    if (env['LOCALAPPDATA'] case final l?)
+      '$l${sep}Programs${sep}Ollama$sep$name',
+    if (env['ProgramFiles'] case final pf?) '$pf${sep}Ollama$sep$name',
+    for (final d in (env['PATH'] ?? '').split(win ? ';' : ':'))
+      if (d.isNotEmpty) '$d$sep$name',
+    '/usr/local/bin/ollama',
+    '/usr/bin/ollama',
+    '/opt/homebrew/bin/ollama',
+    '/Applications/Ollama.app/Contents/Resources/ollama',
+  ];
+  for (final p in c) {
+    if (File(p).existsSync()) return p;
+  }
+  return null;
 }

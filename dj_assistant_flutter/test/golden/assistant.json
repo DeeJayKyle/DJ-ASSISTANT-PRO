@@ -1,0 +1,1665 @@
+[
+  {
+    "message": "help",
+    "reply": {
+      "action": "help",
+      "filters": null,
+      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "",
+    "reply": {
+      "action": "help",
+      "filters": null,
+      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "hello",
+    "reply": {
+      "action": "help",
+      "filters": null,
+      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "Afrobeats from the 2010s no live",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [
+          {
+            "field": "version",
+            "kind": "condition",
+            "op": "contains",
+            "value": "live"
+          }
+        ],
+        "match": "all",
+        "rules": [
+          {
+            "field": "decade",
+            "kind": "condition",
+            "op": "eq",
+            "value": 2010
+          },
+          {
+            "field": "genre",
+            "kind": "condition",
+            "op": "equals",
+            "value": "Afrobeats"
+          }
+        ]
+      },
+      "reply": "Found 5 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Night Market (Clean).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3",
+        "Sunrise Groove (Kofi Remix).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 5,
+      "understood": [
+        "decade 2010s",
+        "excluding version label contains \"live\"",
+        "genre \"Afrobeats\""
+      ]
+    }
+  },
+  {
+    "message": "house 120 to 128 bpm",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "bpm",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              120.0,
+              128.0
+            ]
+          },
+          {
+            "field": "genre",
+            "kind": "condition",
+            "op": "equals",
+            "value": "House"
+          }
+        ]
+      },
+      "reply": "Found 1 track. I've applied these filters to the library view.",
+      "sample": [
+        "Deep Tenant - Warehouse 94.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 1,
+      "understood": [
+        "BPM 120–128",
+        "genre \"House\""
+      ]
+    }
+  },
+  {
+    "message": "low bitrate",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "quality",
+            "kind": "condition",
+            "op": "equals",
+            "value": "low_bitrate"
+          }
+        ]
+      },
+      "reply": "Found 4 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Deep Tenant - Warehouse 94.mp3",
+        "Mirrorball.ogg",
+        "Neon Steps.m4a",
+        "Roller Rink.opus"
+      ],
+      "target": null,
+      "text": null,
+      "total": 4,
+      "understood": [
+        "low-bitrate lossy files"
+      ]
+    }
+  },
+  {
+    "message": "show duplicates",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Duplicate review. Exact matches (identical file contents) are shown separately from possible matches and alternate versions. Nothing is deleted.",
+      "sample": [],
+      "target": "duplicates",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "clean",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "clean_explicit",
+            "kind": "condition",
+            "op": "equals",
+            "value": "clean"
+          }
+        ]
+      },
+      "reply": "Found 1 track. I've applied these filters to the library view.",
+      "sample": [
+        "Night Market (Clean).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 1,
+      "understood": [
+        "marked clean (from your catalogue or the title)"
+      ]
+    }
+  },
+  {
+    "message": "explicit hip hop",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "clean_explicit",
+            "kind": "condition",
+            "op": "equals",
+            "value": "explicit"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "hip hop",
+      "total": 0,
+      "understood": [
+        "marked explicit (from your catalogue or the title)",
+        "text \"hip hop\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "not clean",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [
+          {
+            "field": "clean_explicit",
+            "kind": "condition",
+            "op": "equals",
+            "value": "clean"
+          }
+        ],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "Found 21 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3",
+        "Basement Hours.mp3",
+        "Deep Tenant - Warehouse 94.mp3",
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 21,
+      "understood": [
+        "excluding tracks marked clean"
+      ]
+    }
+  },
+  {
+    "message": "plan a 2 hour clean wedding set",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "params": {
+        "clean_only": true,
+        "curve": "wedding",
+        "duration_min": 120,
+        "event_type": "wedding"
+      },
+      "reply": "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.",
+      "sample": [],
+      "target": "set-studio",
+      "text": null,
+      "total": null,
+      "understood": [
+        "length 120 min",
+        "energy journey: wedding",
+        "event: wedding",
+        "clean tracks only"
+      ]
+    }
+  },
+  {
+    "message": "90 minute warm up set",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "params": {
+        "clean_only": false,
+        "curve": "warmup",
+        "duration_min": 90,
+        "event_type": null
+      },
+      "reply": "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.",
+      "sample": [],
+      "target": "set-studio",
+      "text": null,
+      "total": null,
+      "understood": [
+        "length 90 min",
+        "energy journey: warmup"
+      ]
+    }
+  },
+  {
+    "message": "build a peak club set",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "params": {
+        "clean_only": false,
+        "curve": "peak",
+        "duration_min": 60,
+        "event_type": "club"
+      },
+      "reply": "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.",
+      "sample": [],
+      "target": "set-studio",
+      "text": null,
+      "total": null,
+      "understood": [
+        "length 60 min",
+        "energy journey: peak",
+        "event: club"
+      ]
+    }
+  },
+  {
+    "message": "start gig mode",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Gig Mode: set list, requests and notes, with background work paused.",
+      "sample": [],
+      "target": "gig",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "make a gig pack",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Gig Pack: choose tracks and a drive; copies are verified and nothing is overwritten.",
+      "sample": [],
+      "target": "gig-pack",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "scan",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Scan & Analysis. Choose a folder to add, then press Scan. Scanning only reads your files.",
+      "sample": [],
+      "target": "activity",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "rescan everything",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Scan & Analysis. Choose a folder to add, then press Scan. Scanning only reads your files.",
+      "sample": [],
+      "target": "activity",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "add folder",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Scan & Analysis. Choose a folder to add, then press Scan. Scanning only reads your files.",
+      "sample": [],
+      "target": "activity",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "library health",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Library health: missing metadata, unreadable files, low-bitrate warnings, offline drives and missing files.",
+      "sample": [],
+      "target": "health",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "corrupt files",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Library health: missing metadata, unreadable files, low-bitrate warnings, offline drives and missing files.",
+      "sample": [],
+      "target": "health",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "suggestions",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Suggestions: review each one before it reaches your catalogue.",
+      "sample": [],
+      "target": "suggestions",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "fix tags",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Suggestions: review each one before it reaches your catalogue.",
+      "sample": [],
+      "target": "suggestions",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "discover similar",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Discovery: recommendations always show their reason and source.",
+      "sample": [],
+      "target": "discovery",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "analyse my tracks",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Scan & Analysis. Analysis reads your files and stores estimates you can override.",
+      "sample": [],
+      "target": "activity",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "cheat sheet",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Virtual Crates, where you can add crate templates (genre, energy, utility, events, ratings).",
+      "sample": [],
+      "target": "crates",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "personal files",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Personal Files (opt-in, separate from music).",
+      "sample": [],
+      "target": "files",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "check for update",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Settings → Updates.",
+      "sample": [],
+      "target": "settings",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  },
+  {
+    "message": "key 8A",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "key",
+            "kind": "condition",
+            "op": "equals",
+            "value": "8A"
+          }
+        ]
+      },
+      "reply": "Found 2 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 2,
+      "understood": [
+        "key 8A"
+      ]
+    }
+  },
+  {
+    "message": "key Am",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "key",
+            "kind": "condition",
+            "op": "equals",
+            "value": "8A"
+          }
+        ]
+      },
+      "reply": "Found 2 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 2,
+      "understood": [
+        "key 8A"
+      ]
+    }
+  },
+  {
+    "message": "key F# minor",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "key",
+            "kind": "condition",
+            "op": "equals",
+            "value": "11A"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "key 11A"
+      ]
+    }
+  },
+  {
+    "message": "f#m",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "key",
+            "kind": "condition",
+            "op": "equals",
+            "value": "11A"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "key 11A"
+      ]
+    }
+  },
+  {
+    "message": "11b",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "key",
+            "kind": "condition",
+            "op": "equals",
+            "value": "11B"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "key 11B"
+      ]
+    }
+  },
+  {
+    "message": "bpm 100-110",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "bpm",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              100.0,
+              110.0
+            ]
+          }
+        ]
+      },
+      "reply": "Found 2 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 2,
+      "understood": [
+        "BPM 100–110"
+      ]
+    }
+  },
+  {
+    "message": "122 bpm",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "bpm",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              122.0,
+              122.0
+            ]
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "BPM 122–122"
+      ]
+    }
+  },
+  {
+    "message": "energy 6-8",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "energy",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              6.0,
+              8.0
+            ]
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "energy 6–8"
+      ]
+    }
+  },
+  {
+    "message": "high energy",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "energy",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              7,
+              10
+            ]
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "high energy (7–10, from your ratings)"
+      ]
+    }
+  },
+  {
+    "message": "low energy afro",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "energy",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              1,
+              4
+            ]
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "afro",
+      "total": 0,
+      "understood": [
+        "low energy (1–4, from your ratings)",
+        "text \"afro\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "lossless",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "quality",
+            "kind": "condition",
+            "op": "equals",
+            "value": "lossless"
+          }
+        ]
+      },
+      "reply": "Found 4 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Driftwood.aiff",
+        "Low Tide.flac",
+        "Shoreline.m4a",
+        "untagged recording.wav"
+      ],
+      "target": null,
+      "text": null,
+      "total": 4,
+      "understood": [
+        "lossless files"
+      ]
+    }
+  },
+  {
+    "message": "video clips",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "video"
+          },
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "video"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "video files",
+        "video files"
+      ]
+    }
+  },
+  {
+    "message": "4k",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "video"
+          },
+          {
+            "field": "video_height",
+            "kind": "condition",
+            "op": "gte",
+            "value": 2000
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "video 2000p or better"
+      ]
+    }
+  },
+  {
+    "message": "1080p videos",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "video"
+          },
+          {
+            "field": "video_height",
+            "kind": "condition",
+            "op": "gte",
+            "value": 1080
+          },
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "video"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "video 1080p or better",
+        "video files"
+      ]
+    }
+  },
+  {
+    "message": "audio only",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "audio"
+          }
+        ]
+      },
+      "reply": "Found 22 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3",
+        "Basement Hours.mp3",
+        "Deep Tenant - Warehouse 94.mp3",
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Night Market (Clean).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 22,
+      "understood": [
+        "audio files only"
+      ]
+    }
+  },
+  {
+    "message": "missing genre",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "genre",
+            "kind": "condition",
+            "op": "is_empty",
+            "value": null
+          }
+        ]
+      },
+      "reply": "Found 7 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Driftwood.aiff",
+        "Roller Rink.opus",
+        "empty.mp3",
+        "truncated.flac",
+        "old format.wma",
+        "corrupt.mp3",
+        "untagged recording.wav"
+      ],
+      "target": null,
+      "text": null,
+      "total": 7,
+      "understood": [
+        "genre is unknown"
+      ]
+    }
+  },
+  {
+    "message": "missing bpm",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "bpm",
+            "kind": "condition",
+            "op": "is_empty",
+            "value": null
+          }
+        ]
+      },
+      "reply": "Found 19 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3",
+        "Basement Hours.mp3",
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Night Market (Clean).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (Kofi Remix).mp3",
+        "Sunrise Groove (Live).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 19,
+      "understood": [
+        "bpm is unknown"
+      ]
+    }
+  },
+  {
+    "message": "no-genre year",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "year",
+            "kind": "condition",
+            "op": "is_empty",
+            "value": null
+          }
+        ]
+      },
+      "reply": "Found 10 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Driftwood.aiff",
+        "Shoreline.m4a",
+        "Roller Rink.opus",
+        "empty.mp3",
+        "truncated.flac",
+        "old format.wma"
+      ],
+      "target": null,
+      "text": null,
+      "total": 10,
+      "understood": [
+        "year is unknown"
+      ]
+    }
+  },
+  {
+    "message": "1990-1999",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "year",
+            "kind": "condition",
+            "op": "between",
+            "value": [
+              1990.0,
+              1999.0
+            ]
+          }
+        ]
+      },
+      "reply": "Found 2 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Basement Hours.mp3",
+        "Deep Tenant - Warehouse 94.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 2,
+      "understood": [
+        "year 1990–1999"
+      ]
+    }
+  },
+  {
+    "message": "2014",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "year",
+            "kind": "condition",
+            "op": "eq",
+            "value": 2014
+          }
+        ]
+      },
+      "reply": "Found 1 track. I've applied these filters to the library view.",
+      "sample": [
+        "Night Market (Clean).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 1,
+      "understood": [
+        "year 2014"
+      ]
+    }
+  },
+  {
+    "message": "90s",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "decade",
+            "kind": "condition",
+            "op": "eq",
+            "value": 1990
+          }
+        ]
+      },
+      "reply": "Found 2 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Basement Hours.mp3",
+        "Deep Tenant - Warehouse 94.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 2,
+      "understood": [
+        "decade 1990s"
+      ]
+    }
+  },
+  {
+    "message": "1980s",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "decade",
+            "kind": "condition",
+            "op": "eq",
+            "value": 1980
+          }
+        ]
+      },
+      "reply": "Found 1 track. I've applied these filters to the library view.",
+      "sample": [
+        "Mirrorball.ogg"
+      ],
+      "target": null,
+      "text": null,
+      "total": 1,
+      "understood": [
+        "decade 1980s"
+      ]
+    }
+  },
+  {
+    "message": "'00s",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "decade",
+            "kind": "condition",
+            "op": "eq",
+            "value": 2000
+          }
+        ]
+      },
+      "reply": "Found 1 track. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 1,
+      "understood": [
+        "decade 2000s"
+      ]
+    }
+  },
+  {
+    "message": "4 stars",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "rating",
+            "kind": "condition",
+            "op": "gte",
+            "value": 4
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "rated 4+ stars"
+      ]
+    }
+  },
+  {
+    "message": "3+ stars",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "3+ stars",
+      "total": 0,
+      "understood": [
+        "text \"3+ stars\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "5star",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "rating",
+            "kind": "condition",
+            "op": "gte",
+            "value": 5
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "rated 5+ stars"
+      ]
+    }
+  },
+  {
+    "message": "remixes",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "remixes",
+      "total": 0,
+      "understood": [
+        "text \"remixes\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "no remix",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [
+          {
+            "field": "version",
+            "kind": "condition",
+            "op": "contains",
+            "value": "remix"
+          }
+        ],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "Found 21 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3",
+        "Basement Hours.mp3",
+        "Deep Tenant - Warehouse 94.mp3",
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Night Market (Clean).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 21,
+      "understood": [
+        "excluding version label contains \"remix\""
+      ]
+    }
+  },
+  {
+    "message": "extended mixes",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "version",
+            "kind": "condition",
+            "op": "contains",
+            "value": "extended"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "mixes",
+      "total": 0,
+      "understood": [
+        "with version label contains \"extended\"",
+        "text \"mixes\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "acapella",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "version",
+            "kind": "condition",
+            "op": "contains",
+            "value": "acapella"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "with version label contains \"acapella\""
+      ]
+    }
+  },
+  {
+    "message": "without dub",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [
+          {
+            "field": "version",
+            "kind": "condition",
+            "op": "contains",
+            "value": "dub"
+          }
+        ],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "Found 22 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3",
+        "Basement Hours.mp3",
+        "Deep Tenant - Warehouse 94.mp3",
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Night Market (Clean).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 22,
+      "understood": [
+        "excluding version label contains \"dub\""
+      ]
+    }
+  },
+  {
+    "message": "afro house",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "genre",
+            "kind": "condition",
+            "op": "equals",
+            "value": "House"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "afro",
+      "total": 0,
+      "understood": [
+        "genre \"House\"",
+        "text \"afro\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "afrohouse",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "afrohouse",
+      "total": 0,
+      "understood": [
+        "text \"afrohouse\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "deep house remix",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "version",
+            "kind": "condition",
+            "op": "contains",
+            "value": "remix"
+          },
+          {
+            "field": "genre",
+            "kind": "condition",
+            "op": "equals",
+            "value": "House"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "deep",
+      "total": 0,
+      "understood": [
+        "with version label contains \"remix\"",
+        "genre \"House\"",
+        "text \"deep\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "warehouse",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "Found 1 track. I've applied these filters to the library view.",
+      "sample": [
+        "Deep Tenant - Warehouse 94.mp3"
+      ],
+      "target": null,
+      "text": "warehouse",
+      "total": 1,
+      "understood": [
+        "text \"warehouse\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "lagos lights",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "Found 5 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3",
+        "Sunrise Groove (Kofi Remix).mp3",
+        "Sunrise Groove (Live).mp3"
+      ],
+      "target": null,
+      "text": "lagos lights",
+      "total": 5,
+      "understood": [
+        "text \"lagos lights\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "excluding warehouse",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [
+          {
+            "kind": "group",
+            "match": "any",
+            "rules": [
+              {
+                "field": "genre",
+                "kind": "condition",
+                "op": "contains",
+                "value": "warehouse"
+              },
+              {
+                "field": "title",
+                "kind": "condition",
+                "op": "contains",
+                "value": "warehouse"
+              },
+              {
+                "field": "artist",
+                "kind": "condition",
+                "op": "contains",
+                "value": "warehouse"
+              }
+            ]
+          }
+        ],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "Found 21 tracks. I've applied these filters to the library view.",
+      "sample": [
+        "Beyoncé – Déjà Vu (Medley).mp3",
+        "Basement Hours.mp3",
+        "Intro (album A).mp3",
+        "Intro (album B).mp3",
+        "Night Market (Clean).mp3",
+        "Sunrise Groove 192.mp3",
+        "Sunrise Groove (copy).mp3",
+        "Lagos Lights - Sunrise Groove.mp3"
+      ],
+      "target": null,
+      "text": null,
+      "total": 21,
+      "understood": [
+        "excluding \"warehouse\" in genre, title or artist"
+      ]
+    }
+  },
+  {
+    "message": "quantum flux capacitor",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": []
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": "quantum flux capacitor",
+      "total": 0,
+      "understood": [
+        "text \"quantum flux capacitor\" anywhere in title, artist, album, genre, label, file name or tags"
+      ]
+    }
+  },
+  {
+    "message": "music videos",
+    "reply": {
+      "action": "search",
+      "filters": {
+        "exclude": [],
+        "match": "all",
+        "rules": [
+          {
+            "field": "media",
+            "kind": "condition",
+            "op": "equals",
+            "value": "video"
+          }
+        ]
+      },
+      "reply": "No tracks match. Unknown values (for example energy you haven't rated yet) never count as a match.",
+      "sample": [],
+      "target": null,
+      "text": null,
+      "total": 0,
+      "understood": [
+        "video files"
+      ]
+    }
+  },
+  {
+    "message": "dupes",
+    "reply": {
+      "action": "navigate",
+      "filters": null,
+      "reply": "Opening Duplicate review. Exact matches (identical file contents) are shown separately from possible matches and alternate versions. Nothing is deleted.",
+      "sample": [],
+      "target": "duplicates",
+      "text": null,
+      "total": null,
+      "understood": []
+    }
+  }
+]

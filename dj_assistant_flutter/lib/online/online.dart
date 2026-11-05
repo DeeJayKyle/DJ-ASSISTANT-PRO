@@ -267,7 +267,7 @@ class ServiceInfo {
 
 /// Every online service, what it gives and exactly what it sends (shown in
 /// Settings next to its switch). All are off until the DJ turns them on.
-const services = <ServiceInfo>[
+const onlineServices = <ServiceInfo>[
   ServiceInfo(
     'musicbrainz',
     'MusicBrainz',
