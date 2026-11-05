@@ -1,0 +1,446 @@
+{
+  "created": 2,
+  "fixes": {
+    "missing_album": {
+      "rows": [
+        {
+          "file": "Afrobeats/Intro (album A).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Intro (album B).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Night Market (Clean).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Sunrise Groove (Kofi Remix).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Sunrise Groove (Live).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Café Ünïcode/Beyoncé – Déjà Vu (Medley).mp3",
+          "folder": "Café Ünïcode",
+          "hints": []
+        },
+        {
+          "file": "Copies/Sunrise Groove 192.mp3",
+          "folder": "Copies",
+          "hints": []
+        },
+        {
+          "file": "House/Mirrorball.ogg",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "House/Neon Steps.m4a",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "House/Old School/Basement Hours.mp3",
+          "folder": "House/Old School",
+          "hints": []
+        },
+        {
+          "file": "House/Old School/Deep Tenant - Warehouse 94.mp3",
+          "folder": "House/Old School",
+          "hints": []
+        },
+        {
+          "file": "House/Roller Rink.opus",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Driftwood.aiff",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Low Tide.flac",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Shoreline.m4a",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/untagged recording.wav",
+          "folder": "Lossless",
+          "hints": []
+        }
+      ],
+      "total": 16
+    },
+    "missing_bpm": {
+      "rows": [
+        {
+          "file": "Afrobeats/Intro (album A).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Intro (album B).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Night Market (Clean).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Sunrise Groove (Kofi Remix).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Sunrise Groove (Live).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Café Ünïcode/Beyoncé – Déjà Vu (Medley).mp3",
+          "folder": "Café Ünïcode",
+          "hints": []
+        },
+        {
+          "file": "Copies/Sunrise Groove 192.mp3",
+          "folder": "Copies",
+          "hints": []
+        },
+        {
+          "file": "House/Mirrorball.ogg",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "House/Neon Steps.m4a",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "House/Old School/Basement Hours.mp3",
+          "folder": "House/Old School",
+          "hints": []
+        },
+        {
+          "file": "House/Roller Rink.opus",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Driftwood.aiff",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Low Tide.flac",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Shoreline.m4a",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/untagged recording.wav",
+          "folder": "Lossless",
+          "hints": []
+        }
+      ],
+      "total": 15
+    },
+    "missing_core": {
+      "rows": [
+        {
+          "file": "Lossless/untagged recording.wav",
+          "folder": "Lossless",
+          "hints": [
+            {
+              "evidence": "Taken from the file name.",
+              "field": "title",
+              "source": "File name",
+              "stored": true,
+              "value": "untagged recording"
+            }
+          ]
+        }
+      ],
+      "total": 1
+    },
+    "missing_genre": {
+      "rows": [
+        {
+          "file": "House/Roller Rink.opus",
+          "folder": "House",
+          "hints": [
+            {
+              "evidence": "The file is in a folder called \"House\".",
+              "field": "genre",
+              "source": "Folder name",
+              "stored": true,
+              "value": "House"
+            },
+            {
+              "evidence": "2 other track(s) by this artist",
+              "field": "genre",
+              "source": "same artist",
+              "stored": false,
+              "value": "Disco"
+            }
+          ]
+        },
+        {
+          "file": "Lossless/Driftwood.aiff",
+          "folder": "Lossless",
+          "hints": [
+            {
+              "evidence": "2 other track(s) by this artist",
+              "field": "genre",
+              "source": "same artist",
+              "stored": false,
+              "value": "Ambient"
+            }
+          ]
+        },
+        {
+          "file": "Lossless/untagged recording.wav",
+          "folder": "Lossless",
+          "hints": []
+        }
+      ],
+      "total": 3
+    },
+    "missing_key": {
+      "rows": [
+        {
+          "file": "Afrobeats/Intro (album A).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Intro (album B).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Night Market (Clean).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Sunrise Groove (Kofi Remix).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Sunrise Groove (Live).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Café Ünïcode/Beyoncé – Déjà Vu (Medley).mp3",
+          "folder": "Café Ünïcode",
+          "hints": []
+        },
+        {
+          "file": "Copies/Sunrise Groove 192.mp3",
+          "folder": "Copies",
+          "hints": []
+        },
+        {
+          "file": "House/Mirrorball.ogg",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "House/Neon Steps.m4a",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "House/Old School/Basement Hours.mp3",
+          "folder": "House/Old School",
+          "hints": []
+        },
+        {
+          "file": "House/Old School/Deep Tenant - Warehouse 94.mp3",
+          "folder": "House/Old School",
+          "hints": []
+        },
+        {
+          "file": "House/Roller Rink.opus",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Driftwood.aiff",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Low Tide.flac",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Shoreline.m4a",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/untagged recording.wav",
+          "folder": "Lossless",
+          "hints": []
+        }
+      ],
+      "total": 16
+    },
+    "missing_year": {
+      "rows": [
+        {
+          "file": "Afrobeats/Intro (album A).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "Afrobeats/Intro (album B).mp3",
+          "folder": "Afrobeats",
+          "hints": []
+        },
+        {
+          "file": "House/Roller Rink.opus",
+          "folder": "House",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Driftwood.aiff",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/Shoreline.m4a",
+          "folder": "Lossless",
+          "hints": []
+        },
+        {
+          "file": "Lossless/untagged recording.wav",
+          "folder": "Lossless",
+          "hints": []
+        }
+      ],
+      "total": 6
+    }
+  },
+  "items": [
+    {
+      "count": 1,
+      "id": "missing_core",
+      "label": "Missing title or artist"
+    },
+    {
+      "count": 3,
+      "id": "missing_genre",
+      "label": "Missing genre"
+    },
+    {
+      "count": 6,
+      "id": "missing_year",
+      "label": "Missing year"
+    },
+    {
+      "count": 16,
+      "id": "missing_album",
+      "label": "Missing album"
+    },
+    {
+      "count": 15,
+      "id": "missing_bpm",
+      "label": "Missing BPM"
+    },
+    {
+      "count": 16,
+      "id": "missing_key",
+      "label": "Missing key"
+    },
+    {
+      "count": 4,
+      "id": "low_bitrate",
+      "label": "Low bitrate (lossy, under 128 kbps)"
+    },
+    {
+      "count": 0,
+      "id": "unknown_bitrate",
+      "label": "Unknown quality"
+    },
+    {
+      "count": 3,
+      "id": "read_errors",
+      "label": "Unreadable or corrupt"
+    },
+    {
+      "count": 1,
+      "id": "unsupported",
+      "label": "Unsupported formats"
+    },
+    {
+      "count": 0,
+      "id": "offline",
+      "label": "On offline drives"
+    },
+    {
+      "count": 0,
+      "id": "missing",
+      "label": "Missing files"
+    }
+  ],
+  "stats": {
+    "crates": 0,
+    "errors": 3,
+    "lossless": 4,
+    "low_bitrate": 4,
+    "missing": 0,
+    "offline": 0,
+    "roots": 1,
+    "total_bytes": 948307,
+    "total_duration_ms": 33451,
+    "tracks": 22,
+    "unsupported": 1
+  },
+  "suggestions": [
+    {
+      "confidence": 0.4,
+      "current": null,
+      "evidence": "Taken from the file name.",
+      "field": "title",
+      "file": "Lossless/untagged recording.wav",
+      "source": "File name",
+      "value": "untagged recording"
+    },
+    {
+      "confidence": 0.4,
+      "current": null,
+      "evidence": "The file is in a folder called \"House\".",
+      "field": "genre",
+      "file": "House/Roller Rink.opus",
+      "source": "Folder name",
+      "value": "House"
+    }
+  ]
+}

@@ -323,3 +323,60 @@ fn write_duplicates_golden() {
     )
     .unwrap();
 }
+
+/// 1.x health, fix-list hints and local suggestions on the fixture library.
+#[test]
+#[ignore]
+fn write_health_golden() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/library");
+    let conn = dj_core::db::open_in_memory().unwrap();
+    dj_core::library::add_root(&conn, root.to_str().unwrap()).unwrap();
+    let ctl = dj_core::scanner::ScanControl::default();
+    let progress = std::sync::Mutex::new(dj_core::scanner::ScanProgress::default());
+    dj_core::scanner::run_scan_with_conn(&conn, None, &ctl, &progress).unwrap();
+    let rel = |id: i64| -> String {
+        conn.query_row("SELECT rel_path FROM tracks WHERE id=?1", [id], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap()
+        .replace('\\', "/")
+    };
+    let created = dj_core::suggest::generate_local(&conn).unwrap();
+    let sugg: Vec<Value> = dj_core::suggest::list(&conn, None, None, 5000)
+        .unwrap()
+        .iter()
+        .map(|s| json!({"file": rel(s.track_id), "field": s.field, "current": s.current_value, "value": s.suggested_value,
+            "source": s.source, "evidence": s.evidence, "confidence": s.confidence}))
+        .collect();
+    let h = dj_core::health::health(&conn).unwrap();
+    let items: Vec<Value> = h
+        .items
+        .iter()
+        .map(|i| json!({"id": i.id, "label": i.label, "count": i.count}))
+        .collect();
+    let mut fixes = serde_json::Map::new();
+    for i in &h.items {
+        if i.fix_fields.is_empty() {
+            continue;
+        }
+        let fl = dj_core::health::fix_list(&conn, &i.id, 500, 0).unwrap();
+        let rows: Vec<Value> = fl
+            .rows
+            .iter()
+            .map(|r| json!({"file": rel(r.track.id), "folder": r.folder,
+                "hints": r.hints.iter().map(|h| json!({"field": h.field, "value": h.value, "source": h.source, "evidence": h.evidence, "stored": h.suggestion_id.is_some()})).collect::<Vec<_>>()}))
+            .collect();
+        fixes.insert(i.id.clone(), json!({"total": fl.total, "rows": rows}));
+    }
+    let stats = dj_core::library::stats(&conn).unwrap();
+    std::fs::write(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../dj_assistant_flutter/test/golden/health.json"),
+        serde_json::to_string_pretty(
+            &json!({"created": created, "suggestions": sugg, "items": items, "fixes": fixes,
+            "stats": serde_json::to_value(&stats).unwrap()}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}
