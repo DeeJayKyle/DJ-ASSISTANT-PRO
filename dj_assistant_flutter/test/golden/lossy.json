@@ -1,0 +1,26 @@
+{
+  "library/House/Old School/Basement Hours.mp3": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "frames": 88200,
+    "rms": 0.08394503827295649
+  },
+  "library/Afrobeats/Lagos Lights - Sunrise Groove.mp3": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "frames": 88200,
+    "rms": 0.08837193262844573
+  },
+  "library/House/Neon Steps.m4a": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "frames": 89088,
+    "rms": 0.08823619373870246
+  },
+  "library/Lossless/Shoreline.m4a": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "frames": 44100,
+    "rms": 0.08836950252357927
+  }
+}

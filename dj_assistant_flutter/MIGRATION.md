@@ -47,6 +47,13 @@ key spelling to Camelot) are registered from Dart, as 1.x does from Rust.
    (`IMFSourceReader` → 32-bit float PCM). That covers MP3, AAC, FLAC, ALAC and WAV on
    Windows 10/11, with a pure-Dart WAV/AIFF/FLAC reader as fallback. Ogg/Opus would need
    an extra decoder.
+
+   *Status:* done (`lib/audio/`). WAV, AIFF/AIFC and FLAC decode in Dart on every
+   platform, bit-exact against ffmpeg on 21 test clips (`test/decode_test.dart`).
+   Everything else goes through Media Foundation (`media_foundation.dart`, raw COM
+   vtable calls with indices and GUIDs checked against the SDK headers), tested in the
+   Windows CI job (`test/media_foundation_test.dart`). Ogg Vorbis and Opus still need a
+   decoder: those files are catalogued and tagged, but not yet analysed.
 2. **Tag reading and safe writing.** 1.x uses `lofty` for ID3v2/ID3v1, FLAC Vorbis
    comments and MP4 `ilst`. Pure-Dart writers for all three must be written and tested
    byte for byte: Serato `GEOB` frames preserved, padding respected, temp file, verify,

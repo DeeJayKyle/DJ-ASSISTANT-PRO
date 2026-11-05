@@ -1,0 +1,23 @@
+{
+  "audio/cholesky24.flac": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1d687fc44cfefeaa89405678f37537da4637ca5074d3e3a956356ab290f2d586"},
+  "audio/f32.wav": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "cab55316709b6c3aae2702dabb98f90033ed009ac6e7555ff03bb05ac7ba6557"},
+  "audio/fixed_stereo16.flac": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1c39499c385401370f29f2406b5c624c69aa76087525b3081c7ac020ebcd31cf"},
+  "audio/leftside24.flac": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1d687fc44cfefeaa89405678f37537da4637ca5074d3e3a956356ab290f2d586"},
+  "audio/lpc_stereo16.flac": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1c39499c385401370f29f2406b5c624c69aa76087525b3081c7ac020ebcd31cf"},
+  "audio/midside16.flac": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1c39499c385401370f29f2406b5c624c69aa76087525b3081c7ac020ebcd31cf"},
+  "audio/mono24.flac": {"sample_rate": 44100, "channels": 1, "frames": 17640, "sha256": "c8f78471c79449d49164ccd39f94a5b555166fc23406e4f9281a8e0d19a6bfd8"},
+  "audio/noise_verbatim.flac": {"sample_rate": 44100, "channels": 1, "frames": 13230, "sha256": "707dfd7ef20dd4d25f1e1d8d7a042c21443960a9bfe867b2e3ebf187651aa416"},
+  "audio/rightside24.flac": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1d687fc44cfefeaa89405678f37537da4637ca5074d3e3a956356ab290f2d586"},
+  "audio/s16.aiff": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1c39499c385401370f29f2406b5c624c69aa76087525b3081c7ac020ebcd31cf"},
+  "audio/s16.wav": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1c39499c385401370f29f2406b5c624c69aa76087525b3081c7ac020ebcd31cf"},
+  "audio/s24.aiff": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1d687fc44cfefeaa89405678f37537da4637ca5074d3e3a956356ab290f2d586"},
+  "audio/s24.wav": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "1d687fc44cfefeaa89405678f37537da4637ca5074d3e3a956356ab290f2d586"},
+  "audio/s32.wav": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "52c0adf0e000b5fbc37b698613a6dfccc46a8607e0868b6b68100407861281f8"},
+  "audio/s8.aiff": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "60d38dfc1c92ebaa6d28d00e50ec5319ff6187155e9381d5ecabdaa18cad334f"},
+  "audio/silence48k.flac": {"sample_rate": 48000, "channels": 2, "frames": 14400, "sha256": "d8b443032200e143b1c49820b6d78c32d519553a3f63a38f48e8bc31da084f0a"},
+  "audio/surround51.wav": {"sample_rate": 44100, "channels": 6, "frames": 17640, "sha256": "d634a8c8d6a80dc9c2fdd4abb292994cc4dbf07445c4cc70ef052cb076cf1c27"},
+  "audio/u8.wav": {"sample_rate": 44100, "channels": 2, "frames": 17640, "sha256": "60d38dfc1c92ebaa6d28d00e50ec5319ff6187155e9381d5ecabdaa18cad334f"},
+  "library/Lossless/Low Tide.flac": {"sample_rate": 44100, "channels": 1, "frames": 88200, "sha256": "789b71fc349ad2bf93f72e2b70a1b70d78a830711136e116a6e8f229210cd50c"},
+  "library/Lossless/Driftwood.aiff": {"sample_rate": 44100, "channels": 1, "frames": 44100, "sha256": "08072f184ef5475973ceecd66dca0ae2158c1cd8614984046b401b60491cc18b"},
+  "library/Lossless/untagged recording.wav": {"sample_rate": 44100, "channels": 1, "frames": 44100, "sha256": "354fd0e91e83e7ccf5c288119169ab5dc92bf98ab7b533f1304021108b4cd0a4"}
+}
