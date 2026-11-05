@@ -111,3 +111,46 @@ fn write_scan_golden() {
     )
     .unwrap();
 }
+
+/// What 1.x analysis reports for the analysis clips and the lossless library fixtures.
+#[test]
+#[ignore]
+fn write_analysis_golden() {
+    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let flutter = base.join("../../dj_assistant_flutter");
+    let mut files: Vec<(String, std::path::PathBuf)> =
+        std::fs::read_dir(flutter.join("test/fixtures/analysis"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .map(|p| {
+                (
+                    format!("analysis/{}", p.file_name().unwrap().to_string_lossy()),
+                    p,
+                )
+            })
+            .collect();
+    for f in [
+        "Lossless/Low Tide.flac",
+        "Lossless/Driftwood.aiff",
+        "Lossless/untagged recording.wav",
+    ] {
+        files.push((
+            format!("library/{f}"),
+            base.join("tests/fixtures/library").join(f),
+        ));
+    }
+    files.sort();
+    let mut out = serde_json::Map::new();
+    for (key, path) in files {
+        let a = dj_core::analysis::analyse_file(&path).unwrap();
+        let mut v = serde_json::to_value(&a).unwrap();
+        v["fingerprint"] = json!(a.fingerprint);
+        v["fingerprint_encoded"] = json!(a.fingerprint_encoded);
+        out.insert(key, v);
+    }
+    std::fs::write(
+        flutter.join("test/golden/analysis.json"),
+        serde_json::to_string_pretty(&Value::Object(out)).unwrap(),
+    )
+    .unwrap();
+}

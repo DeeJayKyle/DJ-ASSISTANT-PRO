@@ -64,6 +64,15 @@ key spelling to Camelot) are registered from Dart, as 1.x does from Rust.
    intro/outro, cue ideas, waveform and Chromaprint fingerprints are ported from
    `analysis.rs`. Results are checked against 1.x on the same fixture files.
 
+   *Status:* done (`lib/analysis/`). On 6 synthetic music clips and the lossless
+   library fixtures 2.0 matches 1.x: same BPM, alternative, key, energy, sections,
+   cues, warnings and waveform; loudness within 0.005 LU (EBU R128 port of the
+   `ebur128` crate); Chromaprint fingerprints bit-identical, including the rubato sinc
+   resampler (`test/analysis_test.dart`). One deliberate difference: 1.x misreads
+   AIFF files that have a chunk after the sound data (Symphonia skips the SSND header
+   twice, so 4 bytes of the next chunk become samples and can fake a peak); 2.0 reads
+   them correctly, as ffmpeg does.
+
 ## Command inventory → Dart services
 
 All 164 commands of 1.x, grouped by the Dart service that replaces them.

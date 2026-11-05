@@ -72,3 +72,23 @@ for rel in ["House/Old School/Basement Hours.mp3", "Afrobeats/Lagos Lights - Sun
 print(json.dumps(out, indent=2))
 PY
 echo "wrote test/golden/lossy.json"
+
+# Music-like clips for analysis parity (tempo, key, sections, loudness): a kick on
+# every beat, a hat on the off-beat and a chord pad, with silence, a quiet intro
+# and a drop. 1.x analyses the same files (crates/dj-core/tests/golden_meta.rs).
+an=test/fixtures/analysis
+rm -rf "$an"; mkdir -p "$an"
+kick() { echo "0.9*exp(-mod(t,60/$1)*28)*sin(2*PI*52*mod(t,60/$1)*(1+2*exp(-mod(t,60/$1)*40)))"; }
+hat() { echo "0.15*exp(-mod(t+30/$1,60/$1)*90)*(random(3)-0.5)"; }
+amin="0.06*(sin(2*PI*220*t)+sin(2*PI*261.63*t)+sin(2*PI*329.63*t)+sin(2*PI*440*t))"
+cmaj="0.06*(sin(2*PI*261.63*t)+sin(2*PI*329.63*t)+sin(2*PI*392*t)+sin(2*PI*523.25*t))"
+fsmin="0.06*(sin(2*PI*185*t)+sin(2*PI*220*t)+sin(2*PI*277.18*t)+sin(2*PI*369.99*t))"
+ff -f lavfi -i "aevalsrc='if(lt(t,3),0,if(lt(t,13),0.18,1)*($(kick 124)+$(hat 124)+$amin))':s=22050:d=40" \
+  -c:a flac -sample_fmt s16 "$an/afro124_amin.flac"
+ff -f lavfi -i "aevalsrc='($(kick 128)+$(hat 128)+$cmaj)|($(kick 128)+$cmaj)':s=44100:d=30" \
+  -c:a flac -sample_fmt s16 "$an/house128_cmaj_stereo.flac"
+ff -f lavfi -i "aevalsrc='0.7*($(kick 90)+$(hat 90)+$fsmin)':s=22050:d=30" -c:a flac -sample_fmt s16 "$an/slow90_fsmin.flac"
+ff -f lavfi -i "aevalsrc='$(kick 174)+$(hat 174)+$amin':s=22050:d=30" -c:a flac -sample_fmt s16 "$an/dnb174.flac"
+ff -f lavfi -i "aevalsrc='min(1,max(-1,1.6*($(kick 126)+$amin)))':s=22050:d=20" -c:a flac -sample_fmt s16 "$an/clipped126.flac"
+ff -f lavfi -i "anullsrc=r=22050:cl=mono" -t 6 -c:a pcm_s16le "$an/silent.wav"
+echo "wrote $an"
