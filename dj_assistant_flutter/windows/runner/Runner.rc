@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "app.djassistant" "\0"
-            VALUE "FileDescription", "dj_assistant" "\0"
+            VALUE "CompanyName", "DeeJayKyle" "\0"
+            VALUE "FileDescription", "DJ Assistant" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "dj_assistant" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 app.djassistant. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (c) 2026 DeeJayKyle. MIT licence." "\0"
             VALUE "OriginalFilename", "dj_assistant.exe" "\0"
-            VALUE "ProductName", "dj_assistant" "\0"
+            VALUE "ProductName", "DJ Assistant" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

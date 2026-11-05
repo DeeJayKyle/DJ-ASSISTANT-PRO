@@ -1,0 +1,145 @@
+name: Release 2.x (Flutter)
+
+# Manually triggered. Tests and builds DJ Assistant 2.x on Windows, builds the
+# installer, checks it can update 1.8.1 in place, signs it with the same
+# update key as 1.x and publishes it with a signed latest.json, so 1.x and 2.x
+# installs both find it through their auto-updater. Nothing is published
+# unless every step passes.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v2.0.0)"
+        required: true
+        default: "v2.0.0"
+      prerelease:
+        description: "Mark as pre-release (latest.json is then not the latest download)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: dj_assistant_flutter
+    shell: pwsh
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the update-signing key (fails fast, before the long build)
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PASS: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:KEY) { throw "TAURI_SIGNING_PRIVATE_KEY is not set: without it installs cannot update to this release." }
+          $k = $env:KEY -replace '\s', ''
+          $k += '=' * ((4 - $k.Length % 4) % 4)
+          $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($k))
+          if (-not $text.StartsWith("untrusted comment:")) { throw "TAURI_SIGNING_PRIVATE_KEY is not a minisign secret key." }
+          if (-not $env:PASS) { throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set." }
+          Write-Host "Signing key looks valid."
+      - name: Check the version matches the tag
+        run: |
+          $v = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          $app = (Select-String -Path lib/online/http_online.dart -Pattern "appVersion = '([0-9.]+)'").Matches[0].Groups[1].Value
+          if ("v$v" -ne "${{ inputs.tag }}") { throw "pubspec.yaml version v$v does not match tag ${{ inputs.tag }}" }
+          if ($app -ne $v) { throw "appVersion $app in http_online.dart does not match pubspec.yaml $v" }
+          "VERSION=$v" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: "3.47.9", channel: stable, cache: true }
+      - run: flutter config --no-analytics
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze --fatal-infos
+      - run: flutter test
+      - run: flutter build windows --release
+      - name: Build the installer
+        run: ./installer/build.ps1 -Version $env:VERSION -Out "../release/DJ-Assistant_$($env:VERSION)_x64-setup.exe"
+      - name: Test the installer (update from 1.8.1, run, uninstall, fresh install)
+        run: ./installer/test-upgrade.ps1 -Setup "../release/DJ-Assistant_$($env:VERSION)_x64-setup.exe" -Version $env:VERSION
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Sign for auto-update and write latest.json
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          PUBLIC_REPO: DeeJayKyle/dj-assistant-releases
+        run: |
+          $k = $env:TAURI_SIGNING_PRIVATE_KEY -replace '\s', ''
+          $k += '=' * ((4 - $k.Length % 4) % 4)
+          Write-Host "::add-mask::$k"
+          $env:TAURI_SIGNING_PRIVATE_KEY = $k
+          $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD.Trim()
+          $exe = "DJ-Assistant_$($env:VERSION)_x64-setup.exe"
+          Push-Location ../release
+          # the same minisign signer 1.x's release used (same key, same format)
+          npx --yes @tauri-apps/cli@2.12.4 signer sign $exe
+          if ($LASTEXITCODE -ne 0) { throw "signing failed" }
+          $repo = if ($env:RELEASES_TOKEN) { $env:PUBLIC_REPO } else { '${{ github.repository }}' }
+          $manifest = @{
+            version = $env:VERSION
+            notes = (Get-Content ../docs/RELEASE_NOTES_2.md -Raw)
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{ "windows-x86_64" = @{
+              signature = (Get-Content "$exe.sig" -Raw).Trim()
+              url = "https://github.com/$repo/releases/download/${{ inputs.tag }}/$exe"
+            } }
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Out-File -Encoding utf8NoBOM latest.json
+          "$((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower())  $exe" | Out-File -Encoding ascii SHA256SUMS.txt
+          Get-Content latest.json
+          Pop-Location
+      - name: Verify the signature with the key built into the app
+        run: dart run tool/verify_update.dart ../release/latest.json "../release/DJ-Assistant_$($env:VERSION)_x64-setup.exe"
+      - name: Verify checksums before publishing
+        working-directory: release
+        run: |
+          foreach ($line in Get-Content SHA256SUMS.txt) {
+            $h, $name = $line -split '  ', 2
+            if ((Get-FileHash $name -Algorithm SHA256).Hash.ToLower() -ne $h) { throw "checksum mismatch for $name" }
+          }
+          Get-ChildItem
+      - name: Create GitHub release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          PRE: ${{ inputs.prerelease }}
+        run: |
+          $files = Get-ChildItem release | ForEach-Object { $_.FullName }
+          $flags = @()
+          if ($env:PRE -eq "true") { $flags += "--prerelease" } else { $flags += "--latest" }
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
+          } else {
+            gh release create $env:TAG @files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DJ Assistant $env:TAG" --notes-file docs/RELEASE_NOTES_2.md @flags
+          }
+      - name: Publish to the public update repo
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          PRE: ${{ inputs.prerelease }}
+          PUBLIC_REPO: DeeJayKyle/dj-assistant-releases
+        run: |
+          if (-not $env:GH_TOKEN) { Write-Host "::notice::RELEASES_TOKEN not set - skipping the public update repo."; exit 0 }
+          $files = Get-ChildItem release | ForEach-Object { $_.FullName }
+          gh release view $env:TAG --repo $env:PUBLIC_REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:TAG @files --repo $env:PUBLIC_REPO --clobber
+          } else {
+            $flags = @()
+            if ($env:PRE -eq "true") { $flags += "--prerelease" } else { $flags += "--latest" }
+            gh release create $env:TAG @files --repo $env:PUBLIC_REPO --title "DJ Assistant $env:TAG" --notes-file docs/RELEASE_NOTES_2.md @flags
+          }

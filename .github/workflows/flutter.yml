@@ -37,7 +37,16 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - run: flutter build windows --release
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $v = ((Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value)
+          "VERSION=$v" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          ./installer/build.ps1 -Version $v -Out "installer-out/DJ-Assistant_${v}_x64-setup.exe"
+      - name: Test the installer (update from 1.8.1, run, uninstall, fresh install)
+        shell: pwsh
+        run: ./installer/test-upgrade.ps1 -Setup "installer-out/DJ-Assistant_$($env:VERSION)_x64-setup.exe" -Version $env:VERSION
       - uses: actions/upload-artifact@v4
         with:
-          name: dj-assistant-2-windows-preview
-          path: dj_assistant_flutter/build/windows/x64/runner/Release/
+          name: dj-assistant-2-windows-installer
+          path: dj_assistant_flutter/installer-out/

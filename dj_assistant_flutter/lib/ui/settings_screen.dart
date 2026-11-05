@@ -368,11 +368,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             update!,
                             dest,
                           );
-                          await Process.start(
-                            path,
-                            const [],
-                            mode: ProcessStartMode.detached,
-                          );
+                          // passive install, then start the new version
+                          // (the switches 1.x's updater used)
+                          await Process.start(path, const [
+                            '/P',
+                            '/UPDATE',
+                            '/R',
+                          ], mode: ProcessStartMode.detached);
                           exit(0);
                         }),
                         child: Text('Install ${update!.version}'),
