@@ -267,3 +267,59 @@ fn write_blake3_golden() {
     )
     .unwrap();
 }
+
+/// 1.x duplicate review on the fixture library: hashing, then every group, with
+/// tracks named by relative path (ids differ between machines).
+#[test]
+#[ignore]
+fn write_duplicates_golden() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/library");
+    let conn = dj_core::db::open_in_memory().unwrap();
+    dj_core::library::add_root(&conn, root.to_str().unwrap()).unwrap();
+    let ctl = dj_core::scanner::ScanControl::default();
+    let progress = std::sync::Mutex::new(dj_core::scanner::ScanProgress::default());
+    dj_core::scanner::run_scan_with_conn(&conn, None, &ctl, &progress).unwrap();
+    let hp = std::sync::Mutex::new(dj_core::duplicates::HashProgress::default());
+    let h = dj_core::duplicates::hash_candidates(&conn, &ctl, &hp).unwrap();
+    let groups = dj_core::duplicates::find_groups(&conn, 500).unwrap();
+    let rel = |id: i64| -> String {
+        conn.query_row("SELECT rel_path FROM tracks WHERE id=?1", [id], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap()
+        .replace('\\', "/")
+    };
+    let out: Vec<Value> = groups
+        .iter()
+        .map(|g| {
+            let mut files: Vec<String> = g.tracks.iter().map(|t| rel(t.id)).collect();
+            files.sort();
+            json!({"kind": g.kind, "reason": g.reason, "files": files})
+        })
+        .collect();
+    let hashes: serde_json::Map<String, Value> = {
+        let mut stmt = conn
+            .prepare("SELECT rel_path, content_hash FROM tracks WHERE content_hash IS NOT NULL ORDER BY rel_path")
+            .unwrap();
+        stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?.replace('\\', "/"),
+                json!(r.get::<_, String>(1)?),
+            ))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect()
+    };
+    std::fs::write(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../dj_assistant_flutter/test/golden/duplicates.json"),
+        serde_json::to_string_pretty(&json!({
+            "hashing": {"candidates": h.candidates, "hashed": h.hashed, "errors": h.errors},
+            "hashes": hashes,
+            "groups": out,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}

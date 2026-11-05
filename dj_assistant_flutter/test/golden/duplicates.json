@@ -1,0 +1,43 @@
+{
+  "groups": [
+    {
+      "files": [
+        "Afrobeats/Lagos Lights - Sunrise Groove.mp3",
+        "Copies/Sunrise Groove (copy).mp3"
+      ],
+      "kind": "exact",
+      "reason": "Identical file contents: full-file BLAKE3 hash bbfa017aa29b… matches for all 2 files."
+    },
+    {
+      "files": [
+        "Afrobeats/Lagos Lights - Sunrise Groove.mp3",
+        "Copies/Sunrise Groove (copy).mp3",
+        "Copies/Sunrise Groove 192.mp3"
+      ],
+      "kind": "possible",
+      "reason": "Same artist (\"lagos lights\") and title (\"sunrise groove\") after normalising case/accents/featuring credits, no version label, and durations within 2 s. Contents were not proven identical."
+    },
+    {
+      "files": [
+        "Afrobeats/Lagos Lights - Sunrise Groove.mp3",
+        "Afrobeats/Sunrise Groove (Kofi Remix).mp3",
+        "Afrobeats/Sunrise Groove (Live).mp3",
+        "Copies/Sunrise Groove (copy).mp3",
+        "Copies/Sunrise Groove 192.mp3"
+      ],
+      "kind": "alternate",
+      "reason": "Same artist and title but different version labels (Live, Remix, unlabelled). These are probably intentional alternate versions — review before treating any as a duplicate."
+    }
+  ],
+  "hashes": {
+    "Afrobeats/Lagos Lights - Sunrise Groove.mp3": "bbfa017aa29b5a719481163b2f2c00c87834e815f00c60357db4746571961fcb",
+    "Afrobeats/Night Market (Clean).mp3": "402fd0f46e4b9bc2af4143047e2b923dfec720b26107daafaa0162850233395c",
+    "Afrobeats/Sunrise Groove (Live).mp3": "78f3b250900d83f7c8b7273919345fd1f9f5416da88ed112c3555dc7b27c63d4",
+    "Copies/Sunrise Groove (copy).mp3": "bbfa017aa29b5a719481163b2f2c00c87834e815f00c60357db4746571961fcb"
+  },
+  "hashing": {
+    "candidates": 4,
+    "errors": 0,
+    "hashed": 4
+  }
+}
