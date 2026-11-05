@@ -150,7 +150,8 @@ Development happens on Linux. Dart code is checked here with `flutter analyze`,
 | 2. Project | Done. `flutter.yml` runs format, `flutter analyze --fatal-infos` and `flutter test` on Linux, then `flutter test` and `flutter build windows --release` on `windows-latest`, and uploads the build. |
 | 3. Core services | Done. Every 1.x command group in the inventory above has its Dart service (`lib/core`, `lib/online`, `lib/assistant`, `lib/analysis`, `lib/audio`, `lib/app/session.dart`). |
 | 4. UI and state | Done. Shell (title bar with accounts, sidebar with crates and folders, status bar, job toasts, Ctrl+J assistant), every 1.x screen, Quick Prep, and the Studio (Stems, Remix, DJ Decks, Synth Lab, Drum Lab). Riverpod providers in `lib/ui/state.dart`. |
-| 5. Verify | Done here, except hands-on testing on Windows (below). |
+| 5. Verify | Done, except hands-on testing on a DJ's PC (below). |
+| Release | **v2.0.0 published** (`release-flutter.yml`). The installer is signed with 1.x's update key and published with `latest.json`, so 1.8 installs are offered 2.0 by their auto-updater. |
 
 ### Evidence
 
@@ -182,6 +183,20 @@ Development happens on Linux. Dart code is checked here with `flutter analyze`,
 - **Fixes over 1.x:**
   - AIFF files with a chunk after the sound data are read correctly.
   - The MP3 comment shown is the real one, not iTunes' `iTunNORM` loudness data.
+
+### Installer and update path
+
+`installer/dj_assistant.nsi` is a per-user NSIS installer with 1.x's product name, folder (`%LOCALAPPDATA%\DJ Assistant`) and registry keys. It removes 1.x with 1.x's own uninstaller in update mode, which keeps app data and shortcuts, and it understands the `/P /UPDATE /R` switches the 1.x updater passes.
+
+On every push and every release, CI on Windows (`installer/test-upgrade.ps1`):
+1. installs 1.8.1;
+2. updates it exactly as the 1.x updater does;
+3. checks that 2.0 is registered, the 1.x program is gone, the data is kept and the Start menu shortcut opens 2.0;
+4. starts 2.0 and confirms it keeps running;
+5. uninstalls, and checks the data is still there;
+6. installs fresh, then reinstalls over it.
+
+The release checks the signature with the key built into the app before publishing. The installer is not code-signed (neither was 1.x), so SmartScreen may warn about an unknown publisher.
 
 ### Still to do on a Windows PC
 
