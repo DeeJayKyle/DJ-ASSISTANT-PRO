@@ -535,3 +535,19 @@ class GigPackService {
     };
   }
 }
+
+/// Copies a previewed pack as a background job (the plan is plain data, so it
+/// can be sent to the job's isolate).
+JobBody gigPackJob(
+  String dbPath,
+  PackPlan plan, {
+  String appVersion = '2.0.0',
+}) => (ctx) async {
+  final c = Catalogue.open(dbPath);
+  try {
+    ctx.result = await GigPackService(c)
+        .execute(plan, ctx: ctx, appVersion: appVersion);
+  } finally {
+    c.close();
+  }
+};

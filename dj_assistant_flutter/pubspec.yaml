@@ -50,6 +50,8 @@ dependencies:
   xml: ^7.1.0
   unorm_dart: ^0.3.3
   cryptography: ^2.9.0
+  intl: ^0.20.3
+  onnxruntime: ^1.4.1
 
 dev_dependencies:
   flutter_test:
