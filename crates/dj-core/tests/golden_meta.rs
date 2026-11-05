@@ -154,3 +154,81 @@ fn write_analysis_golden() {
     )
     .unwrap();
 }
+
+/// A full 1.x analysis job over a scanned folder: stored rows, the suggestions they
+/// create and the library-relative energy (needs 8+ tracks).
+#[test]
+#[ignore]
+fn write_analysis_job_golden() {
+    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let flutter = base.join("../../dj_assistant_flutter");
+    let tmp = tempfile::tempdir().unwrap();
+    let music = tmp.path().join("Music");
+    std::fs::create_dir_all(&music).unwrap();
+    for e in std::fs::read_dir(flutter.join("test/fixtures/analysis")).unwrap() {
+        let p = e.unwrap().path();
+        std::fs::copy(&p, music.join(p.file_name().unwrap())).unwrap();
+    }
+    for f in ["Low Tide.flac", "Driftwood.aiff", "untagged recording.wav"] {
+        std::fs::copy(
+            base.join("tests/fixtures/library/Lossless").join(f),
+            music.join(f),
+        )
+        .unwrap();
+    }
+    let db_path = tmp.path().join("catalogue.sqlite3");
+    let conn = dj_core::db::open(&db_path).unwrap();
+    dj_core::library::add_root(&conn, music.to_str().unwrap()).unwrap();
+    let ctl = dj_core::scanner::ScanControl::default();
+    let progress = std::sync::Mutex::new(dj_core::scanner::ScanProgress::default());
+    dj_core::scanner::run_scan_with_conn(&conn, None, &ctl, &progress).unwrap();
+    // Tags that agree (half time, same key) and tags that disagree.
+    conn.execute_batch(
+        "UPDATE tracks SET bpm_tag=62, key_tag='Am' WHERE file_name='afro124_amin.flac';
+         UPDATE tracks SET bpm_tag=140, key_tag='5A' WHERE file_name='house128_cmaj_stereo.flac';
+         UPDATE tracks SET bpm_tag=180.5, key_tag='F#m' WHERE file_name='slow90_fsmin.flac';",
+    )
+    .unwrap();
+    let p: dj_core::jobs::Progress = Default::default();
+    dj_core::analysis_store::run_job(&db_path, None, false, &ctl, &p).unwrap();
+    let st = dj_core::jobs::lock(&p).clone();
+    let rows = |sql: &str| -> Vec<Value> {
+        let mut stmt = conn.prepare(sql).unwrap();
+        let n = stmt.column_count();
+        let names: Vec<String> = (0..n)
+            .map(|i| stmt.column_name(i).unwrap().to_string())
+            .collect();
+        stmt.query_map([], |r| {
+            let mut m = serde_json::Map::new();
+            for (i, name) in names.iter().enumerate() {
+                let v = match r.get_ref(i)? {
+                    rusqlite::types::ValueRef::Null => Value::Null,
+                    rusqlite::types::ValueRef::Integer(x) => json!(x),
+                    rusqlite::types::ValueRef::Real(x) => json!(x),
+                    rusqlite::types::ValueRef::Text(t) => json!(String::from_utf8_lossy(t)),
+                    rusqlite::types::ValueRef::Blob(b) => json!(b.len()),
+                };
+                m.insert(name.clone(), v);
+            }
+            Ok(Value::Object(m))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect()
+    };
+    let out = json!({
+        "job": {"total": st.total, "done": st.done, "errors": st.errors},
+        "analysis": rows("SELECT t.file_name, a.method, a.version, a.status, a.error, a.bpm, a.bpm_alt, a.musical_key, a.camelot,
+            a.energy, a.energy_raw, a.loudness_lufs, a.peak_dbfs, a.clipped_runs, a.silence_start_ms, a.silence_end_ms,
+            a.intro_end_ms, a.outro_start_ms, a.tempo_stable, a.cues_json, a.warnings_json, a.duration_ms, a.fingerprint_encoded,
+            length(a.waveform) AS waveform_len, length(a.fingerprint) AS fingerprint_len
+            FROM analysis a JOIN tracks t ON t.id=a.track_id ORDER BY t.file_name"),
+        "suggestions": rows("SELECT t.file_name, s.field, s.current_value, s.suggested_value, s.source, s.evidence, s.confidence, s.status
+            FROM suggestions s JOIN tracks t ON t.id=s.track_id ORDER BY t.file_name, s.field"),
+    });
+    std::fs::write(
+        flutter.join("test/golden/analysis_job.json"),
+        serde_json::to_string_pretty(&out).unwrap(),
+    )
+    .unwrap();
+}
