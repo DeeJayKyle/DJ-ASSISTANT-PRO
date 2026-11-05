@@ -1,0 +1,40 @@
+name: Flutter (DJ Assistant 2.0)
+
+# Analyses, tests and builds the Flutter rewrite in dj_assistant_flutter/.
+on:
+  push:
+    paths: ["dj_assistant_flutter/**", ".github/workflows/flutter.yml"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: dj_assistant_flutter
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: "3.47.9", channel: stable, cache: true }
+      - run: flutter config --no-analytics
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze --fatal-infos
+      - run: flutter test
+
+  windows:
+    runs-on: windows-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: "3.47.9", channel: stable, cache: true }
+      - run: flutter config --no-analytics
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build windows --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dj-assistant-2-windows-preview
+          path: dj_assistant_flutter/build/windows/x64/runner/Release/
