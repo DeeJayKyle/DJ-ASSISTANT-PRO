@@ -232,3 +232,38 @@ fn write_analysis_job_golden() {
     )
     .unwrap();
 }
+
+/// BLAKE3 hashes as 1.x computes them: the reference test-vector inputs and whole files.
+#[test]
+#[ignore]
+fn write_blake3_golden() {
+    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut lens = serde_json::Map::new();
+    for n in [
+        0usize, 1, 63, 64, 65, 127, 128, 129, 1023, 1024, 1025, 2048, 2049, 3072, 3073, 4096, 4097,
+        5120, 5121, 6144, 6145, 7168, 7169, 8192, 8193, 16384, 31744, 102400, 1_048_577,
+    ] {
+        let input: Vec<u8> = (0..n).map(|i| (i % 251) as u8).collect();
+        lens.insert(
+            n.to_string(),
+            json!(blake3::hash(&input).to_hex().to_string()),
+        );
+    }
+    let mut files = serde_json::Map::new();
+    for f in [
+        "Lossless/Low Tide.flac",
+        "Afrobeats/Lagos Lights - Sunrise Groove.mp3",
+        "House/Neon Steps.m4a",
+    ] {
+        let p = base.join("tests/fixtures/library").join(f);
+        files.insert(
+            format!("library/{f}"),
+            json!(dj_core::scanner::hash_file(&p, None).unwrap().unwrap()),
+        );
+    }
+    std::fs::write(
+        base.join("../../dj_assistant_flutter/test/golden/blake3.json"),
+        serde_json::to_string_pretty(&json!({"lengths": lens, "files": files})).unwrap(),
+    )
+    .unwrap();
+}

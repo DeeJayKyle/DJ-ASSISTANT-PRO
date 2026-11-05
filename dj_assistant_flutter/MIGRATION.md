@@ -59,6 +59,20 @@ key spelling to Camelot) are registered from Dart, as 1.x does from Rust.
    byte for byte: Serato `GEOB` frames preserved, padding respected, temp file, verify,
    atomic rename, backup and rollback. This is the most safety-critical part of the port
    and is test-first.
+
+   *Status:* done (`tag_writer.dart`, `safe_write.dart`, `blake3.dart`). The writers
+   change only the edited fields and copy every other ID3 frame, Vorbis comment, FLAC
+   block and MP4 item byte for byte; ID3 keeps its 2.3/2.4 version and reuses its
+   padding, FLAC resizes its padding block, MP4 uses a neighbouring `free` atom or
+   moves the chunk offsets (`stco`/`co64`). Unusual layouts (ID3v2.2, extended
+   headers, footers, 2.4 whole-tag unsync, 64-bit moov) are refused, not rewritten.
+   The service keeps 1.x's six steps (off by default, exact preview, unchanged-since-
+   preview check, verified backup, verified temporary copy + rename, logged and
+   reversible), and BLAKE3 matches 1.x, so 2.0 can roll back changes logged by 1.8.
+   Files written by 2.0 read back correctly in 1.x (lofty) and ffprobe.
+   1.x quirk not reproduced: its scanner shows the first MP3 COMM frame as the
+   comment even when that is iTunes' `iTunNORM` loudness data; 2.0 shows the real
+   (undescribed) comment.
 3. **Analysis parity.** BPM (onset envelope, autocorrelation, half/double time), key
    (chroma, Krumhansl profiles, Camelot), EBU R128 loudness (LUFS), clipping, silence,
    intro/outro, cue ideas, waveform and Chromaprint fingerprints are ported from

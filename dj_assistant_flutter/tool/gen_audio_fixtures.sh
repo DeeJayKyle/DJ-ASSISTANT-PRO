@@ -92,3 +92,10 @@ ff -f lavfi -i "aevalsrc='$(kick 174)+$(hat 174)+$amin':s=22050:d=30" -c:a flac 
 ff -f lavfi -i "aevalsrc='min(1,max(-1,1.6*($(kick 126)+$amin)))':s=22050:d=20" -c:a flac -sample_fmt s16 "$an/clipped126.flac"
 ff -f lavfi -i "anullsrc=r=22050:cl=mono" -t 6 -c:a pcm_s16le "$an/silent.wav"
 echo "wrote $an"
+
+# Tag-writing fixtures: an M4A with the movie header before the audio (so a
+# larger tag must move the audio and its chunk offsets).
+tg=test/fixtures/tags
+rm -rf "$tg"; mkdir -p "$tg"
+ff -i "$lib/House/Neon Steps.m4a" -c copy -movflags +faststart "$tg/faststart.m4a"
+echo "wrote $tg"
