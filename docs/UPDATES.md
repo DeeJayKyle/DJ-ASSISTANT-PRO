@@ -2,6 +2,12 @@
 
 DJ Assistant uses the Tauri updater. On start-up (and from **Settings → Updates**) it asks GitHub for `latest.json`, and if a newer version exists it downloads the installer, **verifies its signature** with the public key built into the app, installs it in place (passive mode) and restarts. Your catalogue, crates and settings are kept. Only the app version and platform are sent; checks can be switched off in Settings.
 
+## Version numbers (from 1.8.0 onwards)
+
+1.8.0 is the final feature release. **All further fixes and upgrades are 1.8.x patch releases** — 1.8.1, 1.8.2, 1.8.3 and so on — never a reused 1.8.0 and never a new minor or major version unless the owner asks for one. The updater only installs a *higher* version, so each fix must bump the patch number to reach installed copies automatically.
+
+For each fix: bump the version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and `Cargo.toml` (then `cargo update -w`), add a "DJ Assistant 1.8.x" section at the top of `docs/RELEASE_NOTES.md`, push, wait for CI, and run the **Release** workflow with tag `v1.8.x`.
+
 ## Where the app looks
 
 v1.0.0 checks, in order:
