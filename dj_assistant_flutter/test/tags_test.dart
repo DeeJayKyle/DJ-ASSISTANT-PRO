@@ -8,6 +8,11 @@ import 'package:path/path.dart' as p;
 /// Parity with 1.x: `test/golden/metadata.json` was produced by the Rust reader
 /// (`crates/dj-core/tests/golden_meta.rs`) on the shared fixture library.
 void main() {
+  parity('library', 'metadata.json');
+  parity('video', 'video.json');
+}
+
+void parity(String set, String goldenFile) {
   final fixtures = p.normalize(
     p.join(
       Directory.current.path,
@@ -16,11 +21,11 @@ void main() {
       'dj-core',
       'tests',
       'fixtures',
-      'library',
+      set,
     ),
   );
   final golden = (jsonDecode(
-    File('test/golden/metadata.json').readAsStringSync(),
+    File('test/golden/$goldenFile').readAsStringSync(),
   ) as Map).cast<String, Map<String, dynamic>>();
 
   const kinds = {
@@ -32,17 +37,17 @@ void main() {
   };
 
   for (final entry in golden.entries) {
-    test('matches 1.x: ${entry.key}', () {
+    test('matches 1.x: $set/${entry.key}', () {
       final want = entry.value;
       final path = p.join(fixtures, entry.key);
       final ext = p.extension(path).replaceFirst('.', '');
       expect(classifyExtension(ext), kinds[want['kind']]);
-      if (want['kind'] != 'Supported') return;
+      if (want['kind'] != 'Supported' && want['kind'] != 'Video') return;
       if (want['ok'] != true) {
-        expect(() => readAudioMeta(path), throwsA(isA<TagReadException>()));
+        expect(() => readMediaMeta(path), throwsA(isA<TagReadException>()));
         return;
       }
-      final m = readAudioMeta(path);
+      final m = readMediaMeta(path);
       final got = <String, Object?>{
         'format': m.format,
         'codec': m.codec,
@@ -67,8 +72,13 @@ void main() {
         'disc_no': m.discNo,
         'bpm': m.bpm,
         'media_kind': m.mediaKind,
+        'video_codec': m.videoCodec,
+        'width': m.width,
+        'height': m.height,
+        'frame_rate': m.frameRate,
       };
       for (final k in got.keys) {
+        if (!want.containsKey(k)) fail('golden lacks $k');
         final w = want[k];
         final g = got[k];
         if (w is num && g is num) {

@@ -1,6 +1,9 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'video.dart';
 
 /// Read-only tag and audio-property reader in pure Dart (replaces 1.x `lofty`):
 /// MP3 (ID3v2.2/2.3/2.4, ID3v1, Xing/Info/VBRI), FLAC, Ogg Vorbis, Opus, MP4/M4A
@@ -81,6 +84,9 @@ class AudioMeta {
   int? year, originalYear, trackNo, discNo;
   double? bpm;
   String? mediaKind;
+  String? videoCodec;
+  int? width, height;
+  double? frameRate;
 }
 
 class TagReadException implements Exception {
@@ -151,18 +157,18 @@ class _Tags {
 
 // ---------------------------------------------------------------------------- bytes
 
-int _u16be(Uint8List b, int o) => (b[o] << 8) | b[o + 1];
-int _u24be(Uint8List b, int o) => (b[o] << 16) | (b[o + 1] << 8) | b[o + 2];
-int _u32be(Uint8List b, int o) =>
+int _u16be(List<int> b, int o) => (b[o] << 8) | b[o + 1];
+int _u24be(List<int> b, int o) => (b[o] << 16) | (b[o + 1] << 8) | b[o + 2];
+int _u32be(List<int> b, int o) =>
     ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) & 0xffffffff;
-int _u64be(Uint8List b, int o) => (_u32be(b, o) << 32) | _u32be(b, o + 4);
-int _u16le(Uint8List b, int o) => b[o] | (b[o + 1] << 8);
-int _u32le(Uint8List b, int o) =>
+int _u64be(List<int> b, int o) => (_u32be(b, o) << 32) | _u32be(b, o + 4);
+int _u16le(List<int> b, int o) => b[o] | (b[o + 1] << 8);
+int _u32le(List<int> b, int o) =>
     (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) & 0xffffffff;
-int _u64le(Uint8List b, int o) => _u32le(b, o) | (_u32le(b, o + 4) << 32);
-String _ascii(Uint8List b, int o, int n) =>
+int _u64le(List<int> b, int o) => _u32le(b, o) | (_u32le(b, o + 4) << 32);
+String _ascii(List<int> b, int o, int n) =>
     String.fromCharCodes(b.sublist(o, o + n));
-int _syncsafe(Uint8List b, int o) =>
+int _syncsafe(List<int> b, int o) =>
     (b[o] << 21) | (b[o + 1] << 14) | (b[o + 2] << 7) | b[o + 3];
 
 String _latin1(List<int> b) => latin1.decode(b, allowInvalid: true);
@@ -188,16 +194,142 @@ String _utf16(List<int> b, {bool? bigEndian}) {
 
 // ---------------------------------------------------------------------------- entry
 
+/// Random access to a file without loading it: 64 KB chunks are read on demand, so
+/// a tag read touches only the headers, the tail and whatever the format points at.
+class _FileBytes extends ListBase<int> {
+  _FileBytes(this._raf) : _length = _raf.lengthSync();
+  final RandomAccessFile _raf;
+  final int _length;
+  static const _chunk = 65536;
+  static const _maxCached = 64;
+  final _cache = <int, Uint8List>{};
+
+  Uint8List _get(int c) {
+    final hit = _cache[c];
+    if (hit != null) return hit;
+    if (_cache.length >= _maxCached) _cache.remove(_cache.keys.first);
+    _raf.setPositionSync(c * _chunk);
+    return _cache[c] = _raf.readSync(_chunk);
+  }
+
+  @override
+  int get length => _length;
+  @override
+  set length(int _) => throw UnsupportedError('read-only');
+
+  @override
+  int operator [](int i) {
+    if (i < 0 || i >= _length) throw RangeError.index(i, this);
+    return _get(i ~/ _chunk)[i % _chunk];
+  }
+
+  @override
+  void operator []=(int i, int v) => throw UnsupportedError('read-only');
+
+  @override
+  Uint8List sublist(int start, [int? end]) {
+    final e = RangeError.checkValidRange(start, end, _length);
+    final out = Uint8List(e - start);
+    var o = 0;
+    var i = start;
+    while (i < e) {
+      final c = _get(i ~/ _chunk);
+      final off = i % _chunk;
+      final n = (c.length - off).clamp(0, e - i);
+      out.setRange(o, o + n, c, off);
+      o += n;
+      i += n;
+    }
+    return out;
+  }
+}
+
 /// Reads tags and audio properties. Throws [TagReadException] with a readable message
 /// when the file is unreadable or not a valid audio file.
 AudioMeta readAudioMeta(String path) {
-  final f = File(path);
-  final Uint8List b;
+  final RandomAccessFile raf;
   try {
-    b = f.readAsBytesSync();
+    raf = File(path).openSync();
   } on FileSystemException catch (e) {
     throw TagReadException('cannot open: ${e.message}');
   }
+  try {
+    return _readFrom(_FileBytes(raf));
+  } on FileSystemException catch (e) {
+    throw TagReadException('cannot read: ${e.message}');
+  } finally {
+    raf.closeSync();
+  }
+}
+
+/// Reads any supported media file: audio through [readAudioMeta], video containers
+/// through [probeVideo]. An .mp4 without a video track is read as audio (1.x
+/// `read_media_meta`).
+AudioMeta readMediaMeta(String path) {
+  final dot = path.lastIndexOf('.');
+  final sep = path.lastIndexOf(RegExp(r'[\\/]'));
+  final ext = dot > sep ? path.substring(dot + 1).toLowerCase() : '';
+  final isContainer = ext == 'mp4' || videoExtensions.contains(ext);
+  if (!isContainer) return readAudioMeta(path);
+  final VideoInfo v;
+  try {
+    v = probeVideo(path, ext);
+  } on VideoProbeException catch (e) {
+    if (ext == 'mp4') {
+      try {
+        return readAudioMeta(path);
+      } on TagReadException {
+        throw TagReadException(e.message);
+      }
+    }
+    throw TagReadException(e.message);
+  }
+  var m = AudioMeta();
+  if (ext == 'mp4' || ext == 'm4v' || ext == 'mov') {
+    try {
+      m = readAudioMeta(path);
+    } on TagReadException {
+      m = AudioMeta();
+    }
+  }
+  if (!v.hasVideo) {
+    if (ext == 'mp4' || ext == 'm4v') return readAudioMeta(path);
+    throw TagReadException('no video or audio track this version can read');
+  }
+  m
+    ..mediaKind = 'video'
+    ..format = v.container
+    ..videoCodec = v.videoCodec
+    ..width = v.width
+    ..height = v.height
+    ..frameRate = v.frameRate
+    ..durationMs ??= v.durationMs;
+  if (m.codec == null || m.codec == '') m.codec = v.audioCodec;
+  m
+    ..sampleRate ??= v.sampleRate
+    ..channels ??= v.channels;
+  m.lossless = switch (m.codec ?? v.audioCodec) {
+    'PCM' || 'FLAC' || 'ALAC' || 'PCM (float)' => true,
+    null => null,
+    _ => false,
+  };
+  m
+    ..title ??= v.title
+    ..artist ??= v.artist
+    ..album ??= v.album
+    ..genre ??= v.genre
+    ..comment ??= v.comment;
+  if (m.year == null && v.date != null) {
+    m.year = _parseYear(v.date);
+    m.dateText ??= v.date;
+  }
+  return m;
+}
+
+/// Reads tags and properties from bytes already in memory.
+AudioMeta readAudioMetaBytes(Uint8List bytes) => _readFrom(bytes);
+
+AudioMeta _readFrom(List<int> b) {
   if (b.length >= 4 && _ascii(b, 0, 4) == 'fLaC') return _flac(b);
   if (b.length >= 4 && _ascii(b, 0, 4) == 'OggS') return _ogg(b);
   if (b.length >= 12 &&
@@ -365,7 +497,7 @@ List<int> _deunsync(List<int> b) {
 }
 
 /// Parses an ID3v2 tag at [o]; returns its total length (0 when there is none).
-int _id3v2(Uint8List b, int o, _Tags t) {
+int _id3v2(List<int> b, int o, _Tags t) {
   if (b.length < o + 10 || _ascii(b, o, 3) != 'ID3') return 0;
   final ver = b[o + 3];
   final flags = b[o + 5];
@@ -456,7 +588,7 @@ int _id3v2(Uint8List b, int o, _Tags t) {
   return total;
 }
 
-void _id3v1(Uint8List b, _Tags t) {
+void _id3v1(List<int> b, _Tags t) {
   if (b.length < 128) return;
   final o = b.length - 128;
   if (_ascii(b, o, 3) != 'TAG') return;
@@ -571,7 +703,7 @@ class _Frame {
       samples;
 }
 
-_Frame? _frameAt(Uint8List b, int i) {
+_Frame? _frameAt(List<int> b, int i) {
   if (i + 4 > b.length || b[i] != 0xFF || (b[i + 1] & 0xE0) != 0xE0) {
     return null;
   }
@@ -615,7 +747,7 @@ _Frame? _frameAt(Uint8List b, int i) {
 }
 
 /// The first MPEG frame at or after [from] that is followed by another valid frame.
-_Frame? _findMpegFrame(Uint8List b, int from) {
+_Frame? _findMpegFrame(List<int> b, int from) {
   final end = (from + 512 * 1024).clamp(0, b.length);
   for (var i = from; i < end - 4; i++) {
     final f = _frameAt(b, i);
@@ -626,7 +758,7 @@ _Frame? _findMpegFrame(Uint8List b, int from) {
   return null;
 }
 
-AudioMeta _mp3(Uint8List b) {
+AudioMeta _mp3(List<int> b) {
   final t = _Tags();
   var start = 0;
   // ID3v2 tags (there may be more than one, back to back)
@@ -680,7 +812,7 @@ AudioMeta _mp3(Uint8List b) {
 
 // ---------------------------------------------------------------------------- FLAC
 
-void _vorbisComments(Uint8List b, int o, _Tags t, {int? end}) {
+void _vorbisComments(List<int> b, int o, _Tags t, {int? end}) {
   final e = end ?? b.length;
   if (o + 4 > e) return;
   final vendor = _u32le(b, o);
@@ -721,7 +853,7 @@ void _vorbisComments(Uint8List b, int o, _Tags t, {int? end}) {
   }
 }
 
-AudioMeta _flac(Uint8List b, {int start = 0}) {
+AudioMeta _flac(List<int> b, {int start = 0}) {
   final t = _Tags();
   if (start > 0) _id3v2(b, 0, t);
   var p = start + 4;
@@ -770,7 +902,7 @@ AudioMeta _flac(Uint8List b, {int start = 0}) {
 
 // ---------------------------------------------------------------------------- Ogg
 
-AudioMeta _ogg(Uint8List b) {
+AudioMeta _ogg(List<int> b) {
   final packets = <List<int>>[];
   var cur = <int>[];
   var p = 0;
@@ -794,7 +926,12 @@ AudioMeta _ogg(Uint8List b) {
     if (granule != 0xFFFFFFFFFFFFFFFF && granule > 0) lastGranule = granule;
     if (firstPageEnd == 0) firstPageEnd = q;
     p = q;
+    // The headers are read; the duration comes from the last page instead of
+    // walking every page of the file.
+    if (packets.length >= 3) break;
   }
+  final tail = _lastOggGranule(b);
+  if (tail != null && tail > lastGranule) lastGranule = tail;
   if (packets.isEmpty) {
     throw TagReadException(
       'could not parse audio data: not a valid Ogg stream',
@@ -852,6 +989,23 @@ AudioMeta _ogg(Uint8List b) {
   return m;
 }
 
+/// Granule position of the last complete Ogg page (pages are at most ~64 KB).
+int? _lastOggGranule(List<int> b) {
+  final from = (b.length - 65536 - 27).clamp(0, b.length);
+  for (var i = b.length - 27; i >= from; i--) {
+    if (b[i] != 0x4F ||
+        b[i + 1] != 0x67 ||
+        b[i + 2] != 0x67 ||
+        b[i + 3] != 0x53) {
+      continue;
+    }
+    if (b[i + 4] != 0) continue; // stream structure version
+    final g = _u64le(b, i + 6);
+    if (g != -1 && g > 0) return g;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------- MP4
 
 class _Atom {
@@ -860,7 +1014,7 @@ class _Atom {
   final int start, end; // content range
 }
 
-List<_Atom> _atoms(Uint8List b, int start, int end) {
+List<_Atom> _atoms(List<int> b, int start, int end) {
   final out = <_Atom>[];
   var p = start;
   while (p + 8 <= end) {
@@ -880,14 +1034,14 @@ List<_Atom> _atoms(Uint8List b, int start, int end) {
   return out;
 }
 
-_Atom? _child(Uint8List b, _Atom a, String type, {int skip = 0}) {
+_Atom? _child(List<int> b, _Atom a, String type, {int skip = 0}) {
   for (final c in _atoms(b, a.start + skip, a.end)) {
     if (c.type == type) return c;
   }
   return null;
 }
 
-AudioMeta _mp4(Uint8List b) {
+AudioMeta _mp4(List<int> b) {
   final top = _atoms(b, 0, b.length);
   final moov = top.where((a) => a.type == 'moov').firstOrNull;
   if (moov == null) {
@@ -918,6 +1072,14 @@ AudioMeta _mp4(Uint8List b) {
     if (mdia == null) continue;
     final hdlr = _child(b, mdia, 'hdlr');
     if (hdlr == null || _ascii(b, hdlr.start + 8, 4) != 'soun') continue;
+    // The audio track's own duration (includes encoder priming), as 1.x reports.
+    final mdhd = _child(b, mdia, 'mdhd');
+    if (mdhd != null && mdhd.end - mdhd.start >= 24) {
+      final v1 = b[mdhd.start] == 1;
+      final ts = _u32be(b, mdhd.start + (v1 ? 20 : 12));
+      final d = v1 ? _u64be(b, mdhd.start + 24) : _u32be(b, mdhd.start + 16);
+      if (ts > 0 && d > 0) ms = d * 1000 / ts;
+    }
     final stsd = [mdia, 'minf', 'stbl', 'stsd']
         .skip(1)
         .fold<_Atom?>(
@@ -977,7 +1139,7 @@ AudioMeta _mp4(Uint8List b) {
     for (final item in _atoms(b, ilst.start, ilst.end)) {
       String? name;
       String? value;
-      Uint8List? raw;
+      List<int>? raw;
       for (final a in _atoms(b, item.start, item.end)) {
         if (a.type == 'name' && a.end - a.start > 4) {
           name = _utf8(b.sublist(a.start + 4, a.end));
@@ -1032,10 +1194,11 @@ AudioMeta _mp4(Uint8List b) {
   if (ms != null && ms > 0) {
     m.durationMs = ms.floor();
     final mdat = top.where((a) => a.type == 'mdat').firstOrNull;
-    if (avgBitrate != null && avgBitrate > 0) {
+    // Media data over duration (1.x/lofty); the esds average is only a fallback.
+    if (mdat != null && mdat.end > mdat.start) {
+      m.bitrateKbps = ((mdat.end - mdat.start) * 8 / ms).floor();
+    } else if (avgBitrate != null && avgBitrate > 0) {
       m.bitrateKbps = (avgBitrate / 1000).round();
-    } else if (mdat != null) {
-      m.bitrateKbps = ((mdat.end - mdat.start) * 8 / ms).round();
     }
   }
   t.applyTo(m);
@@ -1044,7 +1207,7 @@ AudioMeta _mp4(Uint8List b) {
 
 // ---------------------------------------------------------------------------- WAV / AIFF
 
-void _riffInfo(Uint8List b, int start, int end, _Tags t) {
+void _riffInfo(List<int> b, int start, int end, _Tags t) {
   for (var p = start; p + 8 <= end;) {
     final id = _ascii(b, p, 4);
     final len = _u32le(b, p + 4);
@@ -1071,7 +1234,7 @@ void _riffInfo(Uint8List b, int start, int end, _Tags t) {
   }
 }
 
-AudioMeta _wav(Uint8List b) {
+AudioMeta _wav(List<int> b) {
   final t = _Tags();
   int? fmt, ch, sr, bits, dataLen, byteRate;
   for (var p = 12; p + 8 <= b.length;) {
@@ -1120,7 +1283,7 @@ AudioMeta _wav(Uint8List b) {
   return m;
 }
 
-double _ieee80(Uint8List b, int o) {
+double _ieee80(List<int> b, int o) {
   final exp = ((b[o] & 0x7F) << 8) | b[o + 1];
   // The 64-bit mantissa uses its top bit, so read it as two unsigned halves.
   final hi = _u32be(b, o + 2), lo = _u32be(b, o + 6);
@@ -1144,7 +1307,7 @@ double _pow2(int e) {
   return r;
 }
 
-AudioMeta _aiff(Uint8List b) {
+AudioMeta _aiff(List<int> b) {
   final t = _Tags();
   final aifc = _ascii(b, 8, 4) == 'AIFC';
   int? ch, frames, bits;

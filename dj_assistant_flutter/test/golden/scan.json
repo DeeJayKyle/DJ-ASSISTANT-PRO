@@ -1,0 +1,230 @@
+{
+  "summary": {
+    "added": 22,
+    "errors": 3,
+    "files_seen": 22,
+    "status": "completed"
+  },
+  "tracks": {
+    "Afrobeats/Intro (album A).mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "intro \u001f harbour kings \u001f afrobeats \u001f intro (album a).mp3",
+      "version_hint": null,
+      "work_key": "harbour kings|intro"
+    },
+    "Afrobeats/Intro (album B).mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "intro \u001f harbour kings \u001f afrobeats \u001f intro (album b).mp3",
+      "version_hint": null,
+      "work_key": "harbour kings|intro"
+    },
+    "Afrobeats/Lagos Lights - Sunrise Groove.mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "sunrise groove (feat. ada) \u001f lagos lights \u001f coastline \u001f afrobeats \u001f lagos lights - sunrise groove.mp3",
+      "version_hint": null,
+      "work_key": "lagos lights|sunrise groove"
+    },
+    "Afrobeats/Night Market (Clean).mp3": {
+      "clean_hint": "clean",
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "night market (clean) \u001f harbour kings \u001f afrobeats \u001f night market (clean).mp3 \u001f clean",
+      "version_hint": "Clean",
+      "work_key": "harbour kings|night market"
+    },
+    "Afrobeats/Sunrise Groove (Kofi Remix).mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "sunrise groove (kofi remix) \u001f lagos lights \u001f afrobeats \u001f sunrise groove (kofi remix).mp3 \u001f remix",
+      "version_hint": "Remix",
+      "work_key": "lagos lights|sunrise groove"
+    },
+    "Afrobeats/Sunrise Groove (Live).mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "sunrise groove (live) \u001f lagos lights \u001f afrobeats \u001f sunrise groove (live).mp3 \u001f live",
+      "version_hint": "Live",
+      "work_key": "lagos lights|sunrise groove"
+    },
+    "Broken/corrupt.mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": "could not parse audio data: failed to parse Mpeg file",
+      "read_status": "error",
+      "search_text": "corrupt.mp3",
+      "version_hint": null,
+      "work_key": null
+    },
+    "Broken/empty.mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": "could not parse audio data: failed to parse Mpeg file",
+      "read_status": "error",
+      "search_text": "empty.mp3",
+      "version_hint": null,
+      "work_key": null
+    },
+    "Broken/old format.wma": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": "WMA files are not supported in this version",
+      "read_status": "unsupported",
+      "search_text": "old format.wma",
+      "version_hint": null,
+      "work_key": null
+    },
+    "Broken/truncated.flac": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": "could not parse audio data: failed to parse Flac file",
+      "read_status": "error",
+      "search_text": "truncated.flac",
+      "version_hint": null,
+      "work_key": null
+    },
+    "Café Ünïcode/Beyoncé – Déjà Vu (Medley).mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "deja vu medley \u001f beyonce tribute band \u001f r&b \u001f beyonce – deja vu (medley).mp3",
+      "version_hint": null,
+      "work_key": "beyonce tribute band|deja vu medley"
+    },
+    "Copies/Sunrise Groove (copy).mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "sunrise groove (feat. ada) \u001f lagos lights \u001f coastline \u001f afrobeats \u001f sunrise groove (copy).mp3",
+      "version_hint": null,
+      "work_key": "lagos lights|sunrise groove"
+    },
+    "Copies/Sunrise Groove 192.mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "sunrise groove \u001f lagos lights \u001f afrobeats \u001f sunrise groove 192.mp3",
+      "version_hint": null,
+      "work_key": "lagos lights|sunrise groove"
+    },
+    "House/Mirrorball.ogg": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "mirrorball \u001f velvet arcade \u001f disco \u001f mirrorball.ogg",
+      "version_hint": null,
+      "work_key": "velvet arcade|mirrorball"
+    },
+    "House/Neon Steps.m4a": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "neon steps \u001f velvet arcade \u001f disco \u001f neon steps.m4a",
+      "version_hint": null,
+      "work_key": "velvet arcade|neon steps"
+    },
+    "House/Old School/Basement Hours.mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "basement hours \u001f deep tenant \u001f house \u001f basement hours.mp3",
+      "version_hint": null,
+      "work_key": "deep tenant|basement hours"
+    },
+    "House/Old School/Deep Tenant - Warehouse 94.mp3": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "warehouse 94 \u001f deep tenant \u001f house \u001f deep tenant - warehouse 94.mp3",
+      "version_hint": null,
+      "work_key": "deep tenant|warehouse 94"
+    },
+    "House/Roller Rink.opus": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "roller rink \u001f velvet arcade \u001f roller rink.opus",
+      "version_hint": null,
+      "work_key": "velvet arcade|roller rink"
+    },
+    "Lossless/Driftwood.aiff": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "driftwood \u001f quiet harbour \u001f driftwood.aiff",
+      "version_hint": null,
+      "work_key": "quiet harbour|driftwood"
+    },
+    "Lossless/Low Tide.flac": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "low tide \u001f quiet harbour \u001f ambient \u001f low tide.flac",
+      "version_hint": null,
+      "work_key": "quiet harbour|low tide"
+    },
+    "Lossless/Shoreline.m4a": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "shoreline \u001f quiet harbour \u001f ambient \u001f shoreline.m4a",
+      "version_hint": null,
+      "work_key": "quiet harbour|shoreline"
+    },
+    "Lossless/untagged recording.wav": {
+      "clean_hint": null,
+      "media_kind": "audio",
+      "presence": "present",
+      "read_error": null,
+      "read_status": "ok",
+      "search_text": "untagged recording.wav",
+      "version_hint": null,
+      "work_key": null
+    }
+  }
+}

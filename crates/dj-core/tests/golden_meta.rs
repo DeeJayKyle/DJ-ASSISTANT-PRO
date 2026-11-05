@@ -6,7 +6,14 @@ use std::path::Path;
 #[test]
 #[ignore]
 fn write_metadata_golden() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/library");
+    write_golden("library", "metadata.json");
+    write_golden("video", "video.json");
+}
+
+fn write_golden(fixtures: &str, golden: &str) {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(fixtures);
     let mut out = serde_json::Map::new();
     let mut files: Vec<_> = walkdir::WalkDir::new(&root)
         .into_iter()
@@ -36,17 +43,71 @@ fn write_metadata_golden() {
                 "date_text": m.date_text, "original_year": m.original_year, "track_no": m.track_no,
                 "disc_no": m.disc_no, "composer": m.composer, "label": m.label, "comment": m.comment,
                 "isrc": m.isrc, "bpm": m.bpm, "key": m.key, "media_kind": m.media_kind,
+                "video_codec": m.video_codec, "width": m.width, "height": m.height,
+                "frame_rate": m.frame_rate,
             }),
             Err(err) => json!({"kind": kind, "ok": false, "error": err}),
         };
         out.insert(rel, v);
     }
     let dest = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../dj_assistant_flutter/test/golden/metadata.json");
+        .join("../../dj_assistant_flutter/test/golden")
+        .join(golden);
     std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
     std::fs::write(
         &dest,
         serde_json::to_string_pretty(&Value::Object(out)).unwrap(),
+    )
+    .unwrap();
+}
+
+/// What a 1.x scan stores for each fixture (derived columns included), so the Dart
+/// scanner can be checked row for row.
+#[test]
+#[ignore]
+fn write_scan_golden() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/library");
+    let conn = dj_core::db::open_in_memory().unwrap();
+    dj_core::library::add_root(&conn, root.to_str().unwrap()).unwrap();
+    let ctl = dj_core::scanner::ScanControl::default();
+    let progress = std::sync::Mutex::new(dj_core::scanner::ScanProgress::default());
+    let s = dj_core::scanner::run_scan_with_conn(&conn, None, &ctl, &progress).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT rel_path, read_status, read_error, version_hint, clean_hint, work_key, search_text,
+                    media_kind, presence FROM tracks ORDER BY rel_path",
+        )
+        .unwrap();
+    let mut rows = serde_json::Map::new();
+    let it = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?.replace('\\', "/"),
+                json!({
+                    "read_status": r.get::<_, String>(1)?,
+                    "read_error": r.get::<_, Option<String>>(2)?,
+                    "version_hint": r.get::<_, Option<String>>(3)?,
+                    "clean_hint": r.get::<_, Option<String>>(4)?,
+                    "work_key": r.get::<_, Option<String>>(5)?,
+                    "search_text": r.get::<_, Option<String>>(6)?,
+                    "media_kind": r.get::<_, String>(7)?,
+                    "presence": r.get::<_, String>(8)?,
+                }),
+            ))
+        })
+        .unwrap();
+    for row in it {
+        let (k, v) = row.unwrap();
+        rows.insert(k, v);
+    }
+    let out = json!({
+        "summary": {"status": s.status, "files_seen": s.files_seen, "added": s.added, "errors": s.errors},
+        "tracks": rows,
+    });
+    std::fs::write(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../dj_assistant_flutter/test/golden/scan.json"),
+        serde_json::to_string_pretty(&out).unwrap(),
     )
     .unwrap();
 }

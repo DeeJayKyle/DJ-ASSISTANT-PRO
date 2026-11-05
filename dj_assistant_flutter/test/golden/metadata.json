@@ -14,7 +14,9 @@
     "disc_no": null,
     "duration_ms": 5042,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -26,6 +28,8 @@
     "sample_rate": 44100,
     "title": "Intro",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": null
   },
   "Afrobeats/Intro (album B).mp3": {
@@ -43,7 +47,9 @@
     "disc_no": null,
     "duration_ms": 1045,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -55,6 +61,8 @@
     "sample_rate": 44100,
     "title": "Intro",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": null
   },
   "Afrobeats/Lagos Lights - Sunrise Groove.mp3": {
@@ -72,7 +80,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": "8A",
     "kind": "Supported",
@@ -84,6 +94,8 @@
     "sample_rate": 44100,
     "title": "Sunrise Groove (feat. Ada)",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2016
   },
   "Afrobeats/Night Market (Clean).mp3": {
@@ -101,7 +113,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -113,6 +127,8 @@
     "sample_rate": 44100,
     "title": "Night Market (Clean)",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2014
   },
   "Afrobeats/Sunrise Groove (Kofi Remix).mp3": {
@@ -130,7 +146,9 @@
     "disc_no": null,
     "duration_ms": 3030,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -142,6 +160,8 @@
     "sample_rate": 44100,
     "title": "Sunrise Groove (Kofi Remix)",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2018
   },
   "Afrobeats/Sunrise Groove (Live).mp3": {
@@ -159,7 +179,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -171,6 +193,8 @@
     "sample_rate": 44100,
     "title": "Sunrise Groove (Live)",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2019
   },
   "Broken/corrupt.mp3": {
@@ -213,7 +237,9 @@
     "disc_no": null,
     "duration_ms": 1045,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "R&B",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -225,6 +251,8 @@
     "sample_rate": 44100,
     "title": "Déjà Vu Medley",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2006
   },
   "Copies/Sunrise Groove (copy).mp3": {
@@ -242,7 +270,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": "8A",
     "kind": "Supported",
@@ -254,6 +284,8 @@
     "sample_rate": 44100,
     "title": "Sunrise Groove (feat. Ada)",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2016
   },
   "Copies/Sunrise Groove 192.mp3": {
@@ -271,7 +303,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "Afrobeats",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -283,6 +317,8 @@
     "sample_rate": 44100,
     "title": "Sunrise Groove",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2016
   },
   "House/Mirrorball.ogg": {
@@ -300,7 +336,9 @@
     "disc_no": null,
     "duration_ms": 1000,
     "format": "Ogg Vorbis",
+    "frame_rate": null,
     "genre": "Disco",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -312,6 +350,8 @@
     "sample_rate": 44100,
     "title": "Mirrorball",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 1981
   },
   "House/Neon Steps.m4a": {
@@ -329,7 +369,9 @@
     "disc_no": null,
     "duration_ms": 2023,
     "format": "M4A (AAC)",
+    "frame_rate": null,
     "genre": "Disco",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -341,6 +383,8 @@
     "sample_rate": 44100,
     "title": "Neon Steps",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 1979
   },
   "House/Old School/Basement Hours.mp3": {
@@ -358,7 +402,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "House",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -370,6 +416,8 @@
     "sample_rate": 44100,
     "title": "Basement Hours",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 1997
   },
   "House/Old School/Deep Tenant - Warehouse 94.mp3": {
@@ -387,7 +435,9 @@
     "disc_no": null,
     "duration_ms": 2038,
     "format": "MP3",
+    "frame_rate": null,
     "genre": "House",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -399,6 +449,8 @@
     "sample_rate": 44100,
     "title": "Warehouse 94",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 1994
   },
   "House/Roller Rink.opus": {
@@ -416,7 +468,9 @@
     "disc_no": null,
     "duration_ms": 1000,
     "format": "Opus",
+    "frame_rate": null,
     "genre": null,
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -428,6 +482,8 @@
     "sample_rate": 48000,
     "title": "Roller Rink",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": null
   },
   "Lossless/Driftwood.aiff": {
@@ -445,7 +501,9 @@
     "disc_no": null,
     "duration_ms": 1000,
     "format": "AIFF",
+    "frame_rate": null,
     "genre": null,
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -457,6 +515,8 @@
     "sample_rate": 44100,
     "title": "Driftwood",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": null
   },
   "Lossless/Low Tide.flac": {
@@ -474,7 +534,9 @@
     "disc_no": null,
     "duration_ms": 2000,
     "format": "FLAC",
+    "frame_rate": null,
     "genre": "Ambient",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -486,6 +548,8 @@
     "sample_rate": 44100,
     "title": "Low Tide",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": 2021
   },
   "Lossless/Shoreline.m4a": {
@@ -503,7 +567,9 @@
     "disc_no": null,
     "duration_ms": 1000,
     "format": "M4A (ALAC)",
+    "frame_rate": null,
     "genre": "Ambient",
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -515,6 +581,8 @@
     "sample_rate": 44100,
     "title": "Shoreline",
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": null
   },
   "Lossless/untagged recording.wav": {
@@ -532,7 +600,9 @@
     "disc_no": null,
     "duration_ms": 1000,
     "format": "WAV",
+    "frame_rate": null,
     "genre": null,
+    "height": null,
     "isrc": null,
     "key": null,
     "kind": "Supported",
@@ -544,6 +614,8 @@
     "sample_rate": 44100,
     "title": null,
     "track_no": null,
+    "video_codec": null,
+    "width": null,
     "year": null
   }
 }
