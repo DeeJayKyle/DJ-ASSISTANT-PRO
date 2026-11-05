@@ -19,3 +19,7 @@ bool _isCombiningMark(int r) =>
     (r >= 0x1DC0 && r <= 0x1DFF) ||
     (r >= 0x20D0 && r <= 0x20FF) ||
     (r >= 0xFE20 && r <= 0xFE2F);
+
+/// Escapes `\`, `%` and `_` for `LIKE … ESCAPE '\'` (same as 1.x `like_escape`).
+String likeEscape(String s) =>
+    s.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}');
