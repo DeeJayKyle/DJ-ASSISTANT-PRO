@@ -49,6 +49,7 @@ dependencies:
   archive: ^4.6.0
   xml: ^7.1.0
   unorm_dart: ^0.3.3
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:

@@ -87,6 +87,12 @@ class JobContext implements JobProgress {
     _send();
   }
 
+  /// Sets the done count directly (downloads report bytes done of total).
+  void progressTo(int done) {
+    _done = done;
+    _send();
+  }
+
   @override
   set message(String m) {
     _message = m;

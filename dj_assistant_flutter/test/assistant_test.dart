@@ -136,7 +136,9 @@ void main() {
           allOf(contains('Camelot wheel'), contains('never written')),
         );
         expect(
-          File('../docs/ASSISTANT_GUIDE.md').readAsStringSync(),
+          File('../docs/ASSISTANT_GUIDE.md')
+              .readAsStringSync()
+              .replaceAll('\r\n', '\n'),
           assistantGuide,
           reason: 'run tool/gen_guide.py after editing the guide',
         );
