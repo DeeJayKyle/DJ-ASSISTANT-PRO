@@ -54,4 +54,44 @@ void main() {
     await tester.pump();
     expect(find.byType(Scaffold), findsWidgets);
   });
+
+  testWidgets('every Studio page opens', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final accounts = AccountsService.open(dir.path);
+    final container = ProviderContainer(
+      overrides: [
+        accountsProvider.overrideWithValue(accounts),
+        sessionFactoryProvider.overrideWithValue(
+          (db) => AppSession(
+            dbPath: db,
+            online: NoOnline(),
+            secrets: MemorySecrets(),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const DjAssistantApp(checkUpdates: false),
+      ),
+    );
+    await tester.pump();
+    for (final (id, title, text) in [
+      ('stems', 'Stems', 'Choose a song to split it into stems.'),
+      ('remix', 'Remix', 'Export remix (WAV)'),
+      ('dj', 'DJ Decks', 'Empty deck'),
+      ('synth', 'Synth Lab', 'Describe an instrument'),
+      ('drums', 'Drum Lab', 'Describe a drum kit'),
+    ]) {
+      container.read(viewProvider.notifier).go('studio:$id');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text(text), findsWidgets, reason: title);
+    }
+    expect(tester.takeException(), isNull);
+  });
 }
