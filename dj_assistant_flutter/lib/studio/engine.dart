@@ -124,7 +124,8 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
         send.send(f);
       }
     });
-    send.send(['ok', r]);
+    // hands the result over without copying it (stems are large)
+    Isolate.exit(send, ['ok', r]);
   } catch (e, st) {
     send.send([
       'err',

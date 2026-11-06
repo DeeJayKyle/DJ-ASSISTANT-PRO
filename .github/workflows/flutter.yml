@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Linux desktop build tools (some plugins build native code during tests)
         working-directory: .
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libx11-dev libxi-dev ninja-build clang cmake pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libx11-dev libxi-dev ninja-build clang cmake pkg-config xvfb
       - uses: subosito/flutter-action@v2
         with: { flutter-version: "3.47.9", channel: stable, cache: true }
       - run: flutter config --no-analytics
@@ -29,6 +29,9 @@ jobs:
       - run: flutter test
         env:
           SCREENSHOTS: ${{ runner.temp }}/screenshots
+      - name: Drive the real app (every page; split and play a song on Stems)
+        working-directory: dj_assistant_flutter
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" flutter test integration_test -d linux --dart-define=SHOTS=${{ runner.temp }}/screenshots/app-linux
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -47,6 +50,17 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - run: flutter build windows --release
+      - name: Drive the real app on Windows (every page; split an MP3 and play it on Stems)
+        shell: pwsh
+        run: |
+          flutter test integration_test -d windows --dart-define=SHOTS="$env:RUNNER_TEMP\app-windows"
+          if ($LASTEXITCODE -ne 0) { throw 'integration test failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dj-assistant-2-windows-app-screenshots
+          path: ${{ runner.temp }}/app-windows/
+          if-no-files-found: ignore
       - name: The build ships ONNX Runtime 1.22 with DirectML (1.15 can't read the stems model)
         shell: pwsh
         run: |

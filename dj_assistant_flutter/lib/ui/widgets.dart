@@ -6,7 +6,7 @@ import 'theme.dart';
 
 /// A screen: title, optional subtitle and actions, then the body. Actions
 /// wrap under the title on narrow windows; the page fades in when opened.
-class PageFrame extends StatelessWidget {
+class PageFrame extends StatefulWidget {
   const PageFrame({
     super.key,
     required this.title,
@@ -22,9 +22,24 @@ class PageFrame extends StatelessWidget {
   final bool scroll;
 
   @override
+  State<PageFrame> createState() => _PageFrameState();
+}
+
+class _PageFrameState extends State<PageFrame> {
+  // Each page owns its scroll position (several Studio pages stay mounted).
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = DjTokens.of(context);
     final text = Theme.of(context).textTheme;
+    final PageFrame(:title, :subtitle, :actions, :child, :scroll) = widget;
     return LayoutBuilder(
       builder: (context, box) {
         final pad = Space.page(box.maxWidth);
@@ -38,7 +53,7 @@ class PageFrame extends StatelessWidget {
             ),
             if (subtitle != null) ...[
               const SizedBox(height: Space.x1),
-              Text(subtitle!, style: text.bodyMedium?.copyWith(color: t.faint)),
+              Text(subtitle, style: text.bodyMedium?.copyWith(color: t.faint)),
             ],
           ],
         );
@@ -83,7 +98,13 @@ class PageFrame extends StatelessWidget {
               head,
               Expanded(
                 child: scroll
-                    ? Scrollbar(child: SingleChildScrollView(child: body))
+                    ? Scrollbar(
+                        controller: _scroll,
+                        child: SingleChildScrollView(
+                          controller: _scroll,
+                          child: body,
+                        ),
+                      )
                     : body,
               ),
             ],
