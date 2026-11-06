@@ -13,6 +13,7 @@ import '../../studio/remix.dart' show keyShift;
 import '../../studio/stems.dart';
 import '../state.dart';
 import '../theme.dart';
+import '../widgets.dart' show EmptyState;
 import 'common.dart';
 
 class _DeckState {
@@ -255,40 +256,53 @@ class _DjPageState extends ConsumerState<DjPage> {
         unawaited(load(decks[0].song != null ? 1 : 0, h.song));
       }
     });
-    final narrow = MediaQuery.sizeOf(context).width < 1300;
     final views = [for (var i = 0; i < 2; i++) _deckView(i)];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (narrow) ...[views[0], const SizedBox(height: 10), views[1]],
-        if (!narrow)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: views[0]),
-              const SizedBox(width: 10),
-              Expanded(child: views[1]),
-            ],
-          ),
-        const SizedBox(height: 10),
-        StudioPanel(
-          child: Row(
-            children: [
-              const Text('A'),
-              Expanded(
-                child: Semantics(
-                  label: 'Crossfader',
-                  child: Slider(
-                    value: mixer.crossfade,
-                    onChanged: (v) => setState(() => mixer.crossfade = v),
-                  ),
-                ),
+    return LayoutBuilder(
+      builder: (context, box) {
+        final narrow = box.maxWidth < 760;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (narrow) ...[views[0], const SizedBox(height: 10), views[1]],
+            if (!narrow)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: views[0]),
+                  const SizedBox(width: 10),
+                  Expanded(child: views[1]),
+                ],
               ),
-              const Text('B'),
-            ],
-          ),
-        ),
-      ],
+            const SizedBox(height: 10),
+            StudioPanel(
+              child: Row(
+                children: [
+                  const Text('A'),
+                  Expanded(
+                    child: Semantics(
+                      label: 'Crossfader',
+                      child: Slider(
+                        value: mixer.crossfade,
+                        onChanged: (v) => setState(() => mixer.crossfade = v),
+                      ),
+                    ),
+                  ),
+                  const Text('B'),
+                ],
+              ),
+            ),
+            if (decks.every((d) => d.song == null))
+              const EmptyState(
+                icon: Icons.headphones_outlined,
+                title: 'Load a song on each deck',
+                message:
+                    'Press Load a song on deck A and B. DJ Decks match the tempo '
+                    'and beats for you, and each deck has EQ, a filter, hot cues, '
+                    'loops, and Stems with a volume for each part.',
+              ),
+          ],
+        );
+      },
     );
   }
 

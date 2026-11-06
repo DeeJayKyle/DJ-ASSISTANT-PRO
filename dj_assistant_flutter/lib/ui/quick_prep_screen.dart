@@ -353,9 +353,9 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
           ),
         ),
         gap,
-        Wrap(
+        AutoGrid(
+          minWidth: 380,
           spacing: 16,
-          runSpacing: 16,
           children: [
             if (roots.isNotEmpty)
               SizedBox(
@@ -396,9 +396,9 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
           ],
         ),
         gap,
-        Wrap(
+        AutoGrid(
+          minWidth: 240,
           spacing: 12,
-          runSpacing: 12,
           children: [
             for (final (icon, title, text) in features)
               SizedBox(
@@ -491,9 +491,9 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
         'A folder per genre or family.',
       ),
     ];
-    return Wrap(
+    return AutoGrid(
+      minWidth: 260,
       spacing: 14,
-      runSpacing: 14,
       children: [
         for (final (id, icon, title, text) in cards)
           SizedBox(

@@ -167,6 +167,39 @@ class _FadeInState extends State<FadeIn> with SingleTickerProviderStateMixin {
   }
 }
 
+/// Cards in equal columns that fill the width: as many columns of at least
+/// [minWidth] as fit, so rows never end in a ragged gap. Children may keep
+/// their own fixed width; the grid's column width wins.
+class AutoGrid extends StatelessWidget {
+  const AutoGrid({
+    super.key,
+    required this.minWidth,
+    required this.children,
+    this.spacing = Space.x3,
+    this.maxColumns = 6,
+  });
+  final double minWidth, spacing;
+  final int maxColumns;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final w = box.maxWidth;
+      final fit = ((w + spacing) / (minWidth + spacing)).floor();
+      final cols = fit
+          .clamp(1, maxColumns)
+          .clamp(1, children.isEmpty ? 1 : children.length);
+      final itemW = ((w - spacing * (cols - 1)) / cols).floorToDouble();
+      return Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: [for (final c in children) SizedBox(width: itemW, child: c)],
+      );
+    },
+  );
+}
+
 /// A card with an optional title row.
 class Panel extends StatelessWidget {
   const Panel({
