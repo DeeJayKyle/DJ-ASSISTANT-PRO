@@ -458,6 +458,11 @@ class _GigScreenState extends ConsumerState<GigScreen> {
               title: 'Past gigs',
               child: Column(
                 children: [
+                  if (past.isEmpty)
+                    const HintText(
+                      'Gigs you run appear here, with a recap of what you played and the requests.',
+                      icon: Icons.history,
+                    ),
                   for (final x in past)
                     ListTile(
                       dense: true,

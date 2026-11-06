@@ -88,9 +88,8 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          AutoGrid(
+            minWidth: 300,
             children: [
               for (final tp in crateTemplates())
                 SizedBox(
