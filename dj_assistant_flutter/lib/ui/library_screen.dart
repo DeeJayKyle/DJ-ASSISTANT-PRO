@@ -615,7 +615,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             onPressed: () => setState(() => _quick[facet] = null),
             child: const Text('Any'),
           ),
-        for (final (v, n) in s.library.facet(facet).take(60))
+        for (final (v, n) in s.library.facet(facet))
           MenuItemButton(
             onPressed: () => setState(
               () => _quick[facet] = QuickOption(

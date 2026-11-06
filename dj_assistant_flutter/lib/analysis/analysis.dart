@@ -100,11 +100,12 @@ abstract class DecodeTap {
 }
 
 /// Decodes [path] (read-only) to mono, measuring loudness, peak and clipping.
-Decoded decode(String path, {double seconds = maxSeconds, DecodeTap? tap}) {
+/// [seconds] null reads the whole file.
+Decoded decode(String path, {double? seconds = maxSeconds, DecodeTap? tap}) {
   final r = openPcm(path);
   try {
     final sr = r.sampleRate, ch = r.channels;
-    final maxFrames = (seconds * sr).floor();
+    final maxFrames = seconds == null ? 1 << 62 : (seconds * sr).floor();
     final meter = LoudnessMeter(ch, sr);
     tap?.start(sr, ch);
     final parts = <Float32List>[];
@@ -703,6 +704,7 @@ class FingerprintTap implements DecodeTap {
   }
 }
 
-/// Decodes and analyses [path], fingerprint included.
-Analysis analyseFile(String path) =>
-    analyseDecoded(decode(path, tap: FingerprintTap()));
+/// Decodes and analyses [path], fingerprint included: the first [seconds]
+/// (15 minutes, as 1.x), or with null the whole file.
+Analysis analyseFile(String path, {double? seconds = maxSeconds}) =>
+    analyseDecoded(decode(path, seconds: seconds, tap: FingerprintTap()));

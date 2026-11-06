@@ -241,7 +241,12 @@ class _SongPickerState extends ConsumerState<SongPicker> {
     final s = ref.read(sessionProvider);
     try {
       rows = s.library
-          .search(TrackQuery(text: q.trim().isEmpty ? null : q, limit: 150))
+          .search(
+            TrackQuery(
+              text: q.trim().isEmpty ? null : q,
+              limit: userLimit(ref, 'picker_results') ?? TrackQuery.all,
+            ),
+          )
           .rows;
     } on Object {
       rows = const [];

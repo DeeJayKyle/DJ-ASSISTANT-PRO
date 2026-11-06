@@ -605,7 +605,13 @@ class HttpOnline extends Online {
       final (status, v) = await _postJson(
         web,
         anthropicUrl,
-        claudeBody(cfg.model, system, tools, messages),
+        claudeBody(
+          cfg.model,
+          system,
+          tools,
+          messages,
+          maxTokens: cfg.maxTokens,
+        ),
         headers: {
           'x-api-key': key,
           'anthropic-version': anthropicVersion,

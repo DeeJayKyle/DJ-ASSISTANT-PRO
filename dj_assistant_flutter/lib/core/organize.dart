@@ -627,10 +627,9 @@ class OrganizeService {
     return n;
   }
 
-  List<Map<String, Object?>> history({int limit = 200}) => [
+  List<Map<String, Object?>> history({int? limit}) => [
     for (final r in cat.db.select(
-      'SELECT id, batch, op, track_id, from_path, to_path, status, error, at FROM file_ops ORDER BY id DESC LIMIT ?',
-      [limit],
+      'SELECT id, batch, op, track_id, from_path, to_path, status, error, at FROM file_ops ORDER BY id DESC${limit == null ? '' : ' LIMIT $limit'}',
     ))
       {
         'id': r['id'],

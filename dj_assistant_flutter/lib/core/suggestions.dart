@@ -1,4 +1,5 @@
 import 'catalogue.dart';
+import 'limits.dart';
 import 'library.dart';
 import 'library_edit.dart';
 import 'text.dart';
@@ -183,15 +184,14 @@ class SuggestionsService {
   SuggestionsService(this.cat);
   final Catalogue cat;
 
-  List<Suggestion> list({String? status, int? trackId, int limit = 500}) => cat
-      .db
+  List<Suggestion> list({String? status, int? trackId, int? limit}) => cat.db
       .select(
         "SELECT s.id, s.track_id, COALESCE(COALESCE(u.artist, t.artist) || ' — ', '') || COALESCE(u.title, t.title, t.file_name) AS track, "
         's.field, s.current_value, s.suggested_value, s.source, s.evidence, s.confidence, s.status, s.created_at '
         'FROM suggestions s JOIN tracks t ON t.id=s.track_id LEFT JOIN track_user u ON u.track_id=t.id '
         'WHERE (? IS NULL OR s.status=?) AND (? IS NULL OR s.track_id=?) '
-        "ORDER BY s.status='pending' DESC, s.confidence DESC, s.id LIMIT ?",
-        [status, status, trackId, trackId, limit.clamp(1, 50000)],
+        "ORDER BY s.status='pending' DESC, s.confidence DESC, s.id${sqlLimit(limit)}",
+        [status, status, trackId, trackId],
       )
       .map(Suggestion.new)
       .toList();

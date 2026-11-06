@@ -321,11 +321,12 @@ extension LibraryEdits on LibraryService {
     };
   }
 
-  List<int> trackIds(TrackQuery q, {int max = 100000}) {
+  /// Ids of the tracks matching [q]: all of them, or the first [max].
+  List<int> trackIds(TrackQuery q, {int? max}) {
     final (w, params) = where(q);
     return [
       for (final r in cat.db.select(
-        'SELECT t.id $from WHERE $w LIMIT ${max.clamp(1, 100000)}',
+        'SELECT t.id $from WHERE $w${max == null ? '' : ' LIMIT ${max < 1 ? 1 : max}'}',
         params,
       ))
         r['id'] as int,

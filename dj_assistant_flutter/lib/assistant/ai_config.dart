@@ -1,4 +1,5 @@
 import '../core/catalogue.dart';
+import '../core/limits.dart';
 import '../online/online.dart';
 
 /// An online AI service that speaks the OpenAI chat-completions API with tools.
@@ -187,6 +188,7 @@ LlmConfig llmConfig(Catalogue cat, Secrets secrets) {
         : (svc.id == 'custom'
               ? (cat.getSetting('ai_custom_url') ?? '')
               : svc.baseUrl),
+    maxTokens: limitOf(cat, 'assistant_tokens') ?? LlmConfig.maxAnswerTokens,
     label: switch (provider) {
       'claude' => 'Anthropic',
       'local' => 'Ollama',

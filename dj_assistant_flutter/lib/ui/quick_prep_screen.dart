@@ -140,7 +140,7 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
       rootId: st.rootId,
       extraWhere: st.crateId == null ? null : s.crates.membership(st.crateId!),
       sort: 'artist',
-      limit: 20000,
+      limit: TrackQuery.all,
     );
     for (final r in s.library.search(q).rows) {
       if (st.ids.contains(r.id)) st.rows[r.id] = r;
@@ -169,7 +169,7 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
         rootId: rootId,
         extraWhere: crateId == null ? null : s.crates.membership(crateId),
         sort: 'artist',
-        limit: 20000,
+        limit: TrackQuery.all,
       );
       final rows = s.library
           .search(q)

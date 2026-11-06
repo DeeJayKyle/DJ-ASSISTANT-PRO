@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../app/session.dart';
 import '../core/crates.dart';
+import '../core/limits.dart';
 import '../core/json.dart';
 import '../core/keys.dart';
 import '../core/library.dart';
@@ -26,7 +27,6 @@ import 'guide.g.dart';
 /// and tool results never include file paths.
 enum Tier { read, ui, act }
 
-const maxSteps = 10;
 const maxResultChars = 24000;
 
 class AgentException implements Exception {
@@ -765,7 +765,7 @@ class Agent {
           'first': [for (final x in g.take(lim(15, 50))) x.toJson()],
         };
       case 'suggestions_summary':
-        final s = app.suggestions.list(status: 'pending', limit: 50000);
+        final s = app.suggestions.list(status: 'pending');
         return {
           'pending': s.length,
           'first': [for (final x in s.take(lim(30, 100))) x.toJson()],
@@ -1129,7 +1129,9 @@ class Agent {
     }
     final specs = toolSpecs();
     final texts = <String>[];
-    for (var step = 0; step < maxSteps; step++) {
+    // Settings → Limits: no limit means until the model has finished.
+    final maxSteps = limitOf(app.cat, 'assistant_steps');
+    for (var step = 0; maxSteps == null || step < maxSteps; step++) {
       final Json reply;
       try {
         reply = await app.online.llmChat(
@@ -1211,7 +1213,7 @@ class Agent {
         break;
       }
       conv.messages.add({'role': 'user', 'content': results});
-      if (step + 1 == maxSteps) {
+      if (maxSteps != null && step + 1 == maxSteps) {
         texts.add(
           "(I stopped after several steps — tell me how you'd like to continue.)",
         );

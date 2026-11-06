@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/docs.dart';
+import '../core/limits.dart' show upTo;
 import '../core/library.dart';
 import '../core/library_edit.dart';
 import '../core/export.dart' show revealInFolder;
@@ -35,10 +36,10 @@ class _OrganiseScreenState extends ConsumerState<OrganiseScreen> {
     final allow = settings['allow_file_changes'] == true;
     final prep = s.jobs.status('auto_prep');
     final prepLive = prep.state == 'running' || prep.state == 'paused';
-    final ids = s.library.trackIds(const TrackQuery(), max: 5000);
+    final ids = s.library.trackIds(const TrackQuery());
     final bad = allow ? s.organize.badFiles() : const <int>[];
     final removed = s.organize.removedSummary();
-    final history = s.organize.history(limit: 50);
+    final history = s.organize.history(limit: listRows(ref));
     void preview(String title, OrganizePlan Function() f) => guard(
       () => setState(() {
         plan = f();
@@ -228,7 +229,7 @@ class _OrganiseScreenState extends ConsumerState<OrganiseScreen> {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        for (final id in bad.take(50))
+                        for (final id in upTo(bad, listRows(ref)))
                           if (s.library.row(id) case final r?)
                             ListTile(
                               dense: true,
@@ -285,7 +286,7 @@ class _OrganiseScreenState extends ConsumerState<OrganiseScreen> {
                     )
                   : Column(
                       children: [
-                        for (final o in plan!.ops.take(300))
+                        for (final o in upTo(plan!.ops, listRows(ref)))
                           ListTile(
                             dense: true,
                             title: Text(
@@ -469,7 +470,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
           const SizedBox(height: 10),
           if (results.isEmpty)
             Text('No files found.', style: TextStyle(color: t.faint)),
-          for (final r in results.take(100))
+          for (final r in upTo(results, listRows(ref)))
             ListTile(
               dense: true,
               title: Text('${r['name']}'),
@@ -493,8 +494,10 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   title: 'Duplicates (identical contents)',
                   child: Column(
                     children: [
-                      for (final d
-                          in (rep['duplicates'] as List).cast<Map>().take(20))
+                      for (final d in upTo(
+                        (rep['duplicates'] as List).cast<Map>(),
+                        listRows(ref),
+                      ))
                         Text(
                           (d['paths'] as List).join('\n'),
                           style: const TextStyle(fontSize: DjType.small),

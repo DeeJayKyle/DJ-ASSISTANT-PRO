@@ -1,4 +1,5 @@
 import '../core/catalogue.dart';
+import '../core/limits.dart';
 import '../core/jobs.dart';
 import '../core/suggestions.dart';
 import '../core/text.dart';
@@ -650,12 +651,12 @@ Future<void> acoustidLookup(
   }
 }
 
-List<int> _ids(Catalogue cat, String extra, int limit) => [
+List<int> _ids(Catalogue cat, String extra, int? limit) => [
   for (final r in cat.db.select(
     'SELECT t.id FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id '
     "WHERE t.presence='present' AND t.read_status='ok' AND t.media_kind='audio' "
     'AND COALESCE(u.artist, t.artist) IS NOT NULL AND COALESCE(u.title, t.title) IS NOT NULL '
-    'AND $extra ORDER BY t.first_seen_at DESC LIMIT $limit',
+    'AND $extra ORDER BY t.first_seen_at DESC${sqlLimit(limit)}',
   ))
     r['id'] as int,
 ];
@@ -675,7 +676,7 @@ Future<int> autoPrepOnline(
     final ids = _ids(
       cat,
       '(COALESCE(u.year, t.year) IS NULL OR COALESCE(u.genre, t.genre) IS NULL)',
-      200,
+      limitOf(cat, 'autoprep_musicbrainz'),
     );
     if (ids.isNotEmpty) {
       p.message =
@@ -688,7 +689,7 @@ Future<int> autoPrepOnline(
     final ids = _ids(
       cat,
       't.id NOT IN (SELECT track_id FROM catalog_checked)',
-      300,
+      limitOf(cat, 'autoprep_catalogs'),
     );
     if (ids.isNotEmpty) {
       p.message =

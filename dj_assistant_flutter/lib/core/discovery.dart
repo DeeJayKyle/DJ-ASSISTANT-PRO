@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../online/lookups.dart';
 import '../online/online.dart';
 import 'catalogue.dart';
+import 'limits.dart';
 import 'crates.dart';
 import 'library.dart';
 import 'library_edit.dart';
@@ -131,7 +132,7 @@ class DiscoveryService {
       .toSet();
 
   /// Library tracks (not in the crate) that fit the crate's profile.
-  List<Recommendation> crateFit(int crateId, {int limit = 50}) {
+  List<Recommendation> crateFit(int crateId, {int? limit}) {
     final tps = loadProfiles(cat);
     final ids = _members(crateId);
     if (ids.isEmpty) {
@@ -224,7 +225,7 @@ class DiscoveryService {
       }
     }
     _stableSort(recs, (a, b) => b.score.compareTo(a.score));
-    return recs.take(limit).toList();
+    return upTo(recs, limit).toList();
   }
 
   /// Artists you collect who are thin in the crate, and how its decades
@@ -281,12 +282,12 @@ class DiscoveryService {
   }
 
   /// Most-played tracks with fresher alternatives (same genre, tempo, energy).
-  List<Map<String, Object?>> overplayed({int limit = 20}) {
+  List<Map<String, Object?>> overplayed({int? limit}) {
     final tps = loadProfiles(cat);
     final played = tps.where((t) => t.plays >= 2).toList();
     _stableSort(played, (a, b) => b.plays.compareTo(a.plays));
     return [
-      for (final t in played.take(limit))
+      for (final t in upTo(played, limit))
         () {
           final alts = <(double, Tp)>[];
           for (final o in tps) {
@@ -631,7 +632,7 @@ class DiscoveryService {
   List<Map<String, Object?>> items({String? status}) => [
     for (final r in cat.db.select(
       'SELECT id, source, kind, artist, title, detail, reason, url, released, fetched_at, owned_track_id, ownership, status FROM discovery '
-      "WHERE (? IS NULL AND status<>'dismissed') OR status=? ORDER BY fetched_at DESC, id LIMIT 500",
+      "WHERE (? IS NULL AND status<>'dismissed') OR status=? ORDER BY fetched_at DESC, id${sqlLimit(limitOf(cat, 'discovery_items'))}",
       [status, status],
     ))
       Map.of(r),

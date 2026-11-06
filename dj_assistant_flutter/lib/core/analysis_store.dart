@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../analysis/analysis.dart' as an;
 import 'catalogue.dart';
+import 'limits.dart';
 import 'jobs.dart';
 import 'keys.dart';
 import 'suggestions.dart';
@@ -243,11 +244,21 @@ JobBody analysisJob(String dbPath, {List<int>? only, bool force = false}) =>
       try {
         final store = AnalysisStore(cat);
         final todo = store.pending(only: only, force: force);
+        // Settings → Limits: minutes read per track, or the whole file
+        final minutes = limitOf(cat, 'analysis_minutes');
         ctx.total = todo.length;
         for (final (id, path, size, mtime) in todo) {
           if (await ctx.checkpoint()) break;
           try {
-            store.storeResult(id, size, mtime, an.analyseFile(path));
+            store.storeResult(
+              id,
+              size,
+              mtime,
+              an.analyseFile(
+                path,
+                seconds: minutes == null ? null : minutes * 60.0,
+              ),
+            );
             ctx.tick();
           } catch (e) {
             // A damaged file is recorded and skipped; it never stops the job.

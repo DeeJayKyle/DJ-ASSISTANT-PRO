@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../app/session.dart';
 import '../core/accounts.dart';
 import '../core/crates.dart';
+import '../core/limits.dart';
 import '../core/library_edit.dart';
 import '../core/roots.dart';
 import '../online/online.dart';
@@ -248,3 +249,11 @@ extension OnlineOff on AppSession {
 
 /// The online layer used by sessions made in tests (none).
 Online noOnline() => NoOnline();
+
+/// Rows shown in long lists (Settings → Limits); null shows them all.
+int? listRows(WidgetRef ref) =>
+    limitOf(ref.read(sessionProvider).cat, 'list_rows');
+
+/// A limit from Settings → Limits for [key]; null means no limit.
+int? userLimit(WidgetRef ref, String key) =>
+    limitOf(ref.read(sessionProvider).cat, key);

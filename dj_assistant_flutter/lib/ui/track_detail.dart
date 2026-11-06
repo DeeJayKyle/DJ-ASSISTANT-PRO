@@ -273,7 +273,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
             ]),
           if (sugg.isNotEmpty)
             section('Suggestions (${sugg.length})', [
-              for (final x in sugg.take(6))
+              for (final x in sugg)
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,

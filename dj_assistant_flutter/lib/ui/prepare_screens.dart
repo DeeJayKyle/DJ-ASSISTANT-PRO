@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/session.dart';
+import '../core/limits.dart' show upTo;
 import '../core/gigpack.dart';
 import '../core/json.dart';
 import '../core/library.dart';
@@ -496,7 +497,14 @@ class _GigScreenState extends ConsumerState<GigScreen> {
             .cast<Map>();
     final results = search.text.trim().isEmpty
         ? const <TrackRow>[]
-        : s.library.search(TrackQuery(text: search.text.trim(), limit: 8)).rows;
+        : s.library
+              .search(
+                TrackQuery(
+                  text: search.text.trim(),
+                  limit: userLimit(ref, 'picker_results') ?? TrackQuery.all,
+                ),
+              )
+              .rows;
     void play(int id) =>
         guard(() => s.gig.addEvent('played', trackId: id), bump: ref);
     return PageFrame(
@@ -547,15 +555,27 @@ class _GigScreenState extends ConsumerState<GigScreen> {
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
-                  for (final r in results)
-                    ListTile(
-                      dense: true,
-                      title: Text(
-                        '${r.artist ?? unknown} — ${r.title ?? r.fileName}',
-                      ),
-                      trailing: TextButton(
-                        onPressed: () => play(r.id),
-                        child: const Text('Played'),
+                  if (results.isNotEmpty)
+                    // built as it scrolls, so a large result list stays fast
+                    SizedBox(
+                      height: (results.length * 44.0).clamp(44, 360),
+                      child: ListView.builder(
+                        itemCount: results.length,
+                        itemExtent: 44,
+                        itemBuilder: (_, i) {
+                          final r = results[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text(
+                              '${r.artist ?? unknown} — ${r.title ?? r.fileName}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: TextButton(
+                              onPressed: () => play(r.id),
+                              child: const Text('Played'),
+                            ),
+                          );
+                        },
                       ),
                     ),
                 ],
@@ -894,7 +914,7 @@ class _GigPackScreenState extends ConsumerState<GigPackScreen> {
                     ),
                   for (final w in plan!.warnings)
                     HintText(w, icon: Icons.info_outline),
-                  for (final f in plan!.files.take(200))
+                  for (final f in upTo(plan!.files, listRows(ref)))
                     ListTile(
                       dense: true,
                       title: Text(f.relPath),
@@ -939,7 +959,8 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
     if (crateId != null) {
       try {
         fit = [
-          for (final r in s.discovery.crateFit(crateId!, limit: 30)) r.toJson(),
+          for (final r in s.discovery.crateFit(crateId!, limit: listRows(ref)))
+            r.toJson(),
         ];
         gaps = s.discovery.gaps(crateId!);
       } on Object catch (e) {
@@ -1125,7 +1146,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                       'Results appear here.',
                       style: TextStyle(color: t.faint),
                     ),
-                  for (final it in items.take(100))
+                  for (final it in upTo(items, listRows(ref)))
                     ListTile(
                       dense: true,
                       title: Text(

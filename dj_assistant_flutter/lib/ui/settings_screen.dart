@@ -7,6 +7,7 @@ import '../assistant/ai_config.dart';
 import '../assistant/quick_ai.dart';
 import '../core/catalogue.dart';
 import '../core/diag_log.dart';
+import '../core/limits.dart';
 import '../core/export.dart' show openFolder;
 import '../core/packs.dart';
 import '../core/updater.dart';
@@ -215,6 +216,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           gap,
+          const LimitsPanel(),
+          gap,
           Panel(
             title: 'Online services',
             subtitle: 'All off until you turn one on. Each says exactly what it sends. Keys are kept in Windows Credential Manager and never shown again.',
@@ -311,7 +314,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Change log',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
-                for (final c in s.safeWrite.log(limit: 50))
+                for (final c in s.safeWrite.log(limit: listRows(ref)))
                   ListTile(
                     dense: true,
                     title: Text(
@@ -577,7 +580,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     builder: (c) => SimpleDialog(
                       title: const Text('Models'),
                       children: [
-                        for (final x in m.take(200))
+                        for (final x in m)
                           SimpleDialogOption(
                             onPressed: () => Navigator.pop(c, x),
                             child: Text(x),
@@ -750,6 +753,141 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       },
                       child: const Text('Get'),
                     ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Settings → Limits and batch sizes: every number that bounds a feature.
+/// Nothing is limited unless the DJ sets a number here.
+class LimitsPanel extends ConsumerStatefulWidget {
+  const LimitsPanel({super.key});
+  @override
+  ConsumerState<LimitsPanel> createState() => _LimitsPanelState();
+}
+
+class _LimitsPanelState extends ConsumerState<LimitsPanel> {
+  Future<void> _edit(LimitDef d, int? now) async {
+    final ctl = TextEditingController(text: now?.toString() ?? '');
+    var none = now == null;
+    final r = await showDialog<(bool, int?)>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text(d.label),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(d.help),
+                const SizedBox(height: Space.x3),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: none,
+                  title: const Text('No limit'),
+                  onChanged: (v) => set(() => none = v ?? true),
+                ),
+                TextField(
+                  controller: ctl,
+                  enabled: !none,
+                  autofocus: !none,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Limit',
+                    suffixText: d.unit,
+                    helperText: 'At least ${d.min}',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, (
+                none,
+                none ? null : int.tryParse(ctl.text.trim()),
+              )),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (r == null || !mounted) return;
+    final (noLimit, n) = r;
+    if (!noLimit && (n == null || n < d.min)) {
+      toast('Enter a whole number of at least ${d.min}.', error: true);
+      return;
+    }
+    setLimit(ref.read(sessionProvider).cat, d.key, noLimit ? null : n);
+    ref.read(versionProvider.notifier).bump();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(versionProvider);
+    final t = DjTokens.of(context);
+    final cat = ref.read(sessionProvider).cat;
+    final text = Theme.of(context).textTheme;
+    return Panel(
+      title: 'Limits and batch sizes',
+      subtitle: 'Nothing is limited unless you set a number here. Online services still keep their own pace (MusicBrainz: one track a second).',
+      trailing: TextButton(
+        onPressed: () {
+          for (final d in limitDefs) {
+            setLimit(cat, d.key, null);
+          }
+          ref.read(versionProvider.notifier).bump();
+          setState(() {});
+        },
+        child: const Text('Remove all limits'),
+      ),
+      child: Column(
+        children: [
+          for (final d in limitDefs)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.x1),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(d.label),
+                        Text(
+                          d.help,
+                          style: text.bodySmall?.copyWith(color: t.faint),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: Space.x3),
+                  Text(
+                    switch (limitOf(cat, d.key)) {
+                      null => 'No limit',
+                      final n => '$n ${d.unit}',
+                    },
+                    style: TextStyle(
+                      fontFeatures: DjType.tabular,
+                      color: limitOf(cat, d.key) == null ? t.ok : t.text,
+                    ),
+                  ),
+                  const SizedBox(width: Space.x2),
+                  TextButton(
+                    onPressed: () => _edit(d, limitOf(cat, d.key)),
+                    child: const Text('Change'),
+                  ),
+                ],
+              ),
             ),
         ],
       ),

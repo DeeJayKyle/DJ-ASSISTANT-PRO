@@ -64,6 +64,9 @@ class TrackRow {
 }
 
 class TrackQuery {
+  /// A [limit] that returns every matching track.
+  static const all = 1 << 40;
+
   const TrackQuery({
     this.text,
     this.rootId,
@@ -177,7 +180,7 @@ class LibraryService {
     final total =
         cat.db.select('SELECT COUNT(*) AS n $from WHERE $w', params).first['n']
             as int;
-    final limit = q.limit.clamp(1, 2000);
+    final limit = q.limit < 1 ? 1 : q.limit;
     final offset = q.offset < 0 ? 0 : q.offset;
     final String order;
     if (q.sort == null) {

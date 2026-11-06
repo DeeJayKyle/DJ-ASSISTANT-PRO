@@ -20,7 +20,6 @@ const anthropicVersion = '2026-10-21';
 
 /// Server-side refusal fallback ("default" form).
 const fallbackBeta = 'server-side-fallback-2026-07-01';
-const maxTokens = 8000;
 
 /// Models that accept `fallbacks: "default"` on the Claude API.
 bool supportsFallback(String model) => const {
@@ -35,8 +34,9 @@ Json claudeBody(
   String model,
   String system,
   List<Json> tools,
-  List<Json> messages,
-) => {
+  List<Json> messages, {
+  int maxTokens = 32000,
+}) => {
   'model': model,
   'max_tokens': maxTokens,
   'system': [

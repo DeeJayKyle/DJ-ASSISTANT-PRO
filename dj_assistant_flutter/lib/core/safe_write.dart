@@ -368,10 +368,9 @@ class SafeWriteService {
     );
   }
 
-  List<Map<String, Object?>> log({int limit = 200}) => [
+  List<Map<String, Object?>> log({int? limit}) => [
     for (final r in cat.db.select(
-      'SELECT id, track_id, path, action, changes_json, backup_path, status, error, at FROM change_log ORDER BY id DESC LIMIT ?',
-      [limit.clamp(1, 1000)],
+      'SELECT id, track_id, path, action, changes_json, backup_path, status, error, at FROM change_log ORDER BY id DESC${limit == null ? '' : ' LIMIT ${limit < 1 ? 1 : limit}'}',
     ))
       {
         'id': r['id'],

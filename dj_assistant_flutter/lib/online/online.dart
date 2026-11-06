@@ -235,7 +235,14 @@ class LlmConfig {
     this.localUrl = 'http://127.0.0.1:11434',
     this.baseUrl = '',
     this.label = '',
+    this.maxTokens = LlmConfig.maxAnswerTokens,
   });
+
+  /// The longest answer to ask for (Settings → Limits).
+  final int maxTokens;
+
+  /// Used when the DJ sets no limit: the most a Claude answer can be.
+  static const maxAnswerTokens = 32000;
 
   /// "claude", "local", or an OpenAI-compatible preset id.
   final String provider, model, localUrl, baseUrl, label;

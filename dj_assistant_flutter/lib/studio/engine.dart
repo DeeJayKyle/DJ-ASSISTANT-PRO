@@ -147,7 +147,7 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
 /// which decoder read it.
 (int, List<Float32List>, String) decodeStereo(
   String path, {
-  double maxSeconds = 15 * 60,
+  double? maxSeconds,
 }) {
   if (!File(path).existsSync()) {
     throw StudioException(
@@ -162,7 +162,7 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
   }
   try {
     final sr = r.sampleRate, ch = r.channels;
-    final maxFrames = (maxSeconds * sr).round();
+    final maxFrames = maxSeconds == null ? 1 << 62 : (maxSeconds * sr).round();
     var cap = sr * 60 * 4;
     var l = Float32List(cap), rt = Float32List(cap);
     var n = 0;
@@ -170,7 +170,7 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
       final frames = block.length ~/ ch;
       if (n + frames > maxFrames) {
         throw StudioException(
-          'Songs longer than 15 minutes aren’t supported here.',
+          'This song is longer than the ${(maxSeconds! / 60).round()} minutes set in Settings → Limits → Studio: longest song.',
         );
       }
       if (n + frames > cap) {
@@ -208,6 +208,9 @@ class StudioEngine {
   static const keep = 8;
   final songs = <String, Loaded>{};
 
+  /// Settings → Limits → Studio: longest song (null: no limit).
+  int? maxMinutes;
+
   /// The installed Pro Stems AI model file, or null.
   String? aiModel;
 
@@ -227,7 +230,8 @@ class StudioEngine {
     final path = song.path, sw = Stopwatch()..start();
     final (int, List<Float32List>, String) d;
     try {
-      d = await Isolate.run(() => decodeStereo(path));
+      final max = maxMinutes == null ? null : maxMinutes! * 60.0;
+      d = await Isolate.run(() => decodeStereo(path, maxSeconds: max));
     } on Object catch (e, st) {
       DiagLog.error('studio', 'decoding $path failed: $e', st);
       rethrow;

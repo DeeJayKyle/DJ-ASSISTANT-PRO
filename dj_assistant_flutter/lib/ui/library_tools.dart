@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/health.dart';
+import '../core/limits.dart' show upTo;
 import '../core/json.dart';
 import '../core/library.dart';
 import '../core/library_edit.dart';
@@ -278,7 +279,7 @@ class ActivityScreen extends ConsumerWidget {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final e in events.take(30))
+                      for (final e in upTo(events, listRows(ref)))
                         ListTile(
                           dense: true,
                           title: Text(
@@ -481,7 +482,7 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
               title: 'Last scan problems',
               child: Column(
                 children: [
-                  for (final e in errors.take(30))
+                  for (final e in upTo(errors, listRows(ref)))
                     ListTile(
                       dense: true,
                       title: Text(
@@ -911,7 +912,10 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     ref.watch(versionProvider);
     final t = DjTokens.of(context);
     final counts = s.suggestions.counts();
-    final list = s.suggestions.list(status: status, limit: 500);
+    final list = s.suggestions.list(
+      status: status,
+      limit: userLimit(ref, 'suggestions_shown'),
+    );
     final on = s.settings.services();
     bool svc(String id) => on.any((x) => x['id'] == id && x['enabled'] == true);
     return PageFrame(
@@ -935,7 +939,10 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
                 )
               : () => guard(
                   () => s.lookupMusicbrainz(
-                    s.library.trackIds(const TrackQuery(), max: 200),
+                    s.library.trackIds(
+                      const TrackQuery(),
+                      max: userLimit(ref, 'lookup_musicbrainz'),
+                    ),
                   ),
                   done: 'Looking up on MusicBrainz (one track a second).',
                 ),
@@ -944,7 +951,10 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
         FilledButton.tonal(
           onPressed: () => guard(
             () => s.lookupCatalogs(
-              s.library.trackIds(const TrackQuery(), max: 300),
+              s.library.trackIds(
+                const TrackQuery(),
+                max: userLimit(ref, 'lookup_catalogs'),
+              ),
             ),
             done: 'Checking the online catalogues you turned on.',
           ),
