@@ -12,6 +12,7 @@ import 'assistant_panel.dart';
 import 'crates_screen.dart';
 import 'format.dart';
 import 'screens.dart';
+import 'shortcuts_sheet.dart';
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -120,6 +121,10 @@ class _ShellState extends ConsumerState<Shell> {
     final studio = view.id.startsWith('studio:');
     return CallbackShortcuts(
       bindings: {
+        const SingleActivator(LogicalKeyboardKey.f1): () =>
+            showShortcuts(context),
+        const SingleActivator(LogicalKeyboardKey.slash, control: true): () =>
+            showShortcuts(context),
         const SingleActivator(LogicalKeyboardKey.keyJ, control: true): () => ref
             .read(chatModeProvider.notifier)
             .set(chat == 'hidden' ? 'open' : 'hidden'),

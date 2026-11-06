@@ -13,6 +13,7 @@ import '../core/updater.dart';
 import '../online/http_online.dart';
 import 'assistant_panel.dart';
 import 'format.dart';
+import 'shortcuts_sheet.dart';
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -432,6 +433,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 SelectableText(
                   'Data folder: $base\nCatalogue: ${s.dbPath}\nNo telemetry. Nothing is sent online unless you turn a service on.',
                   style: TextStyle(color: t.muted),
+                ),
+                const SizedBox(height: Space.x2),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.keyboard_outlined, size: 16),
+                    label: const Text('Keyboard shortcuts (F1)'),
+                    onPressed: () => showShortcuts(context),
+                  ),
                 ),
                 if (DiagLog.folder case final logs?) ...[
                   const SizedBox(height: 8),
