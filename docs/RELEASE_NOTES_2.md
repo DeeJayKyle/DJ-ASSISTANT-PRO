@@ -22,7 +22,4 @@ DJ Assistant 2.0.2
 - As before, it never changes anything without your OK: every change shows as a card you press Run on.
 - The assistant no longer stops after 10 steps, and its answers can be longer. Both can be limited in Settings.
 
-**Also new since 2.0.1**
-- Keyboard shortcuts sheet: press F1 (or Ctrl+/).
-
 **Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning. Without limits, very long files (DJ mixes of an hour or more) use more memory in the Studio and take longer to analyse. You can set a limit for either in Settings.
