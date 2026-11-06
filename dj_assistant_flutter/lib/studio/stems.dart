@@ -270,12 +270,19 @@ Part separatePart(
 }
 
 /// Adds parts together and applies the overlap-add normalisation.
-Stems mergeParts(List<Part> parts, int len, [int channels = 2]) {
-  final out = <String, List<Float32List>>{
-    for (final s in stemNames) s: [Float32List(len), Float32List(len)],
-  };
-  final norm = Float64List(len);
-  for (final p in parts) {
+/// Adds parts into the four full-length stems as they finish, so a part can
+/// be dropped as soon as it is merged (long songs are split in many parts).
+class StemMerger {
+  StemMerger(this.len)
+    : out = {
+        for (final s in stemNames) s: [Float32List(len), Float32List(len)],
+      },
+      norm = Float32List(len);
+  final int len;
+  final Stems out;
+  final Float32List norm;
+
+  void add(Part p) {
     for (var i = 0; i < p.norm.length; i++) {
       norm[p.start + i] += p.norm[i];
     }
@@ -288,19 +295,30 @@ Stems mergeParts(List<Part> parts, int len, [int channels = 2]) {
       }
     }
   }
-  for (final st in stemNames) {
-    for (final ch in out[st]!) {
-      for (var i = 0; i < len; i++) {
-        ch[i] = norm[i] > 1e-6 ? ch[i] / norm[i] : 0;
+
+  Stems finish([int channels = 2]) {
+    for (final st in stemNames) {
+      for (final ch in out[st]!) {
+        for (var i = 0; i < len; i++) {
+          ch[i] = norm[i] > 1e-6 ? ch[i] / norm[i] : 0;
+        }
       }
     }
-  }
-  if (channels == 1) {
-    for (final st in stemNames) {
-      out[st] = [out[st]![0]];
+    if (channels == 1) {
+      for (final st in stemNames) {
+        out[st] = [out[st]![0]];
+      }
     }
+    return out;
   }
-  return out;
+}
+
+Stems mergeParts(List<Part> parts, int len, [int channels = 2]) {
+  final m = StemMerger(len);
+  for (final p in parts) {
+    m.add(p);
+  }
+  return m.finish(channels);
 }
 
 Stems separate(

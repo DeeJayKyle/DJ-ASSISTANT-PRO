@@ -233,7 +233,7 @@ Hands-on testing that CI cannot do:
 **Design system** (`lib/ui/theme.dart`): colour, surface, spacing, radius, type (Inter, bundled), icon-size and motion tokens; component themes for every Material widget; shared widgets in `lib/ui/widgets.dart`. The Motion, Panels and Accent settings apply app-wide.
 
 **Known limits**
-- Peak memory while splitting grows with song length (about 1.3 GB for 5 minutes), because each part's stems are merged into a full-length copy.
+- Peak memory while splitting grows with song length, because the stems are about four times the song (5 minutes: 1.1 GB peak, 14 s; 30 minutes: 4.6 GB, 48 s). Long songs split in 30-second parts merged as they finish, and a split that would not fit in free memory is refused with a clear message (`lib/core/sysmem.dart`).
 - The graphics-card path, real sound cards and MIDI controllers still need hands-on testing on a Windows PC.
 
 ## 2.0.2: no limits, AI on every page

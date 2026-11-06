@@ -9,6 +9,7 @@ import 'package:ffi/ffi.dart' show calloc;
 
 import '../audio/pcm.dart';
 import '../core/diag_log.dart';
+import '../core/sysmem.dart';
 import 'ai_stems.dart';
 import 'dsp.dart';
 import 'midi.dart';
@@ -206,6 +207,9 @@ class StudioEngine {
   /// Settings → Studio: cores for the Fast split; null or 0 is automatic.
   int? cores;
 
+  /// Length of each part of a Fast split.
+  static const partSeconds = 30;
+
   /// Settings → Studio: run Pro Stems AI on the graphics card when there is one.
   bool useGpu = true;
 
@@ -271,11 +275,27 @@ class StudioEngine {
     if (c != null) c.value = 1;
   }
 
+  /// The four stems are about four times the song in memory, plus the parts
+  /// in flight. Say so clearly instead of running the PC out of memory.
+  void _checkMemory(Loaded l) {
+    final len = l.mix[0].length, sr = l.sampleRate;
+    final need = 4 * 2 * 4 * len + 3 * workers * partSeconds * sr * 2 * 4 * 4;
+    final free = availableMemoryBytes();
+    if (free != null && need > free) {
+      throw StudioException(
+        'Splitting this ${(l.durationSec / 60).toStringAsFixed(0)}-minute '
+        'song needs about ${gb(need)} GB of free memory and ${gb(free)} GB '
+        'is free. Close other apps and try again, or split a shorter song.',
+      );
+    }
+  }
+
   Future<Stems> _separateAi(
     Loaded l,
     String model,
     void Function(double)? onProgress,
   ) async {
+    _checkMemory(l);
     final cancel = calloc<ffi.Int32>();
     _aiCancel = cancel;
     final (Stems, String) r;
@@ -348,36 +368,49 @@ class StudioEngine {
       return l.stems!;
     }
     final len = l.mix[0].length, sr = l.sampleRate;
-    final plans = planParts(len, workers), sw = Stopwatch()..start();
+    _checkMemory(l);
+    // Parts of about 30 s, at most [workers] at a time, each merged and
+    // dropped as it finishes: memory stays near the size of the stems
+    // themselves, however long the song is.
+    final n = math.max(workers, (len / sr / partSeconds).ceil());
+    final plans = planParts(len, n), sw = Stopwatch()..start();
     final prog = List.filled(plans.length, 0.0);
-    final List<Part> parts;
+    final merger = StemMerger(len);
+    var next = 0;
+    Future<void> worker() async {
+      while (next < plans.length) {
+        final i = next++;
+        final p = plans[i];
+        final ch = [
+          Float32List.fromList(
+            Float32List.sublistView(l.mix[0], p.inStart, p.inEnd),
+          ),
+          Float32List.fromList(
+            Float32List.sublistView(l.mix[1], p.inStart, p.inEnd),
+          ),
+        ];
+        merger.add(
+          await runIsolate<Part>(
+            _partJob(ch, p.inStart, len, sr, p.f0, p.f1),
+            onProgress: (f) {
+              prog[i] = f;
+              onProgress?.call(prog.reduce((a, b) => a + b) / prog.length);
+            },
+          ),
+        );
+        prog[i] = 1;
+      }
+    }
+
     try {
-      parts = await Future.wait([
-        for (var i = 0; i < plans.length; i++)
-          () {
-            final p = plans[i];
-            final ch = [
-              Float32List.fromList(
-                Float32List.sublistView(l.mix[0], p.inStart, p.inEnd),
-              ),
-              Float32List.fromList(
-                Float32List.sublistView(l.mix[1], p.inStart, p.inEnd),
-              ),
-            ];
-            return runIsolate<Part>(
-              _partJob(ch, p.inStart, len, sr, p.f0, p.f1),
-              onProgress: (f) {
-                prog[i] = f;
-                onProgress?.call(prog.reduce((a, b) => a + b) / prog.length);
-              },
-            );
-          }(),
+      await Future.wait([
+        for (var w = 0; w < math.min(workers, plans.length); w++) worker(),
       ]);
     } on Object catch (e, st) {
       DiagLog.error('studio', 'Fast split failed: $e', st);
       rethrow;
     }
-    l.stems = mergeParts(parts, len);
+    l.stems = merger.finish();
     DiagLog.info(
       'studio',
       'Fast split of ${l.durationSec.toStringAsFixed(1)} s on '
