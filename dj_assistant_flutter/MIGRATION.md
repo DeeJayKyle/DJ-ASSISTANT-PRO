@@ -151,7 +151,7 @@ Development happens on Linux. Dart code is checked here with `flutter analyze`,
 | 3. Core services | Done. Every 1.x command group in the inventory above has its Dart service (`lib/core`, `lib/online`, `lib/assistant`, `lib/analysis`, `lib/audio`, `lib/app/session.dart`). |
 | 4. UI and state | Done. Shell (title bar with accounts, sidebar with crates and folders, status bar, job toasts, Ctrl+J assistant), every 1.x screen, Quick Prep, and the Studio (Stems, Remix, DJ Decks, Synth Lab, Drum Lab). Riverpod providers in `lib/ui/state.dart`. |
 | 5. Verify | Done, except hands-on testing on a DJ's PC (below). |
-| Release | **v2.0.0 published** (`release-flutter.yml`). The installer is signed with 1.x's update key and published with `latest.json`, so 1.8 installs are offered 2.0 by their auto-updater. |
+| Release | **v2.0.2 published** (`release-flutter.yml`), after v2.0.0 and v2.0.1. Each installer is signed with 1.x's update key and published with `latest.json`, so 1.8 and earlier 2.0 installs are offered it by their auto-updater. |
 
 ### Evidence
 
@@ -235,4 +235,10 @@ Hands-on testing that CI cannot do:
 **Known limits**
 - Peak memory while splitting grows with song length (about 1.3 GB for 5 minutes), because each part's stems are merged into a full-length copy.
 - The graphics-card path, real sound cards and MIDI controllers still need hands-on testing on a Windows PC.
+
+## 2.0.2: no limits, AI on every page
+
+- **No limits by default** (`lib/core/limits.dart`): every number that bounded a feature is now a setting, with no limit unless the DJ sets one in *Settings → Limits and batch sizes*. That covers Auto-prep lookups (were 200 and 300 per run), Studio song length, analysis length, pickers, lists, exports and the AI assistant's steps and answer length. Service pacing stays (MusicBrainz: one request a second).
+- **Studio settings:** Pro Stems AI on the graphics card, Fast split cores, audio buffer.
+- **AI on every page:** an *Ask the assistant* button in every page header and "For this page" suggestions. New tools cover suggestions, Auto-prep, online lookups, duplicates, Discovery, limits and the Studio (`test/agent_tools_test.dart`).
 
