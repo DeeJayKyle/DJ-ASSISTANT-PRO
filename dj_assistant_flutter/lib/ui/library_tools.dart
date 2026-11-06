@@ -253,7 +253,7 @@ class ActivityScreen extends ConsumerWidget {
                   ),
                 const SizedBox(height: 6),
                 HintText(
-                  'Ogg Vorbis and Opus files are catalogued and tagged, but not analysed yet in 2.0 (method ${summary['method']} v${summary['version']}).',
+                  'Ogg Vorbis and Opus files are decoded by Windows when Microsoft\'s free Web Media Extensions are installed (Microsoft Store); without them they are catalogued and tagged but not analysed (method ${summary['method']} v${summary['version']}).',
                 ),
               ],
             ),

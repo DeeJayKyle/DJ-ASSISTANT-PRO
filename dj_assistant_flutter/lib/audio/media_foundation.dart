@@ -27,14 +27,10 @@ class MediaFoundationReader implements PcmReader {
     final url = path.toNativeUtf16();
     final out = calloc<Pointer<Void>>();
     try {
-      try {
-        _check(
-          _Mf.instance.createSourceReaderFromUrl(url, nullptr, out),
-          'cannot open this file',
-        );
-      } catch (_) {
+      final hr = _Mf.instance.createSourceReaderFromUrl(url, nullptr, out);
+      if (hr < 0) {
         _uninit();
-        rethrow;
+        throw DecodeException(unsupportedMessage(path, hr));
       }
       _reader = out.value;
     } finally {
@@ -265,6 +261,20 @@ class MediaFoundationReader implements PcmReader {
     _release(_reader);
     _uninit();
   }
+}
+
+/// Why Windows couldn't open [path]: for Ogg, Opus and WebM audio, the free
+/// Microsoft codec that adds them (MF_E_UNSUPPORTED_BYTESTREAM_TYPE).
+String unsupportedMessage(String path, int hr) {
+  final code = (hr & 0xFFFFFFFF).toRadixString(16);
+  final ext = path.split('.').last.toLowerCase();
+  if ((hr & 0xFFFFFFFF) == 0xC00D36C4 &&
+      const {'ogg', 'oga', 'opus', 'webm'}.contains(ext)) {
+    return 'Windows needs Microsoft\'s free "Web Media Extensions" (Microsoft '
+        'Store) to decode .$ext files. Install it, then press Re-check '
+        'library or analyse again (0x$code)';
+  }
+  return 'cannot open this file (0x$code)';
 }
 
 void _check(int hr, String what) {
