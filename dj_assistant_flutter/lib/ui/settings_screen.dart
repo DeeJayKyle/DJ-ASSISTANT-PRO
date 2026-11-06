@@ -76,25 +76,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       title: Text(title),
       subtitle: sub == null
           ? null
-          : Text(sub, style: TextStyle(color: t.faint, fontSize: 12)),
+          : Text(
+              sub,
+              style: TextStyle(color: t.faint, fontSize: DjType.small),
+            ),
       value: st[key] == true,
       onChanged: (v) => _set(key, v),
     );
     Widget choice(String key, String title, List<(String, String)> opts) =>
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              Expanded(child: Text(title)),
-              SegmentedButton<String>(
-                segments: [
-                  for (final (v, l) in opts)
-                    ButtonSegment(value: v, label: Text(l)),
-                ],
-                selected: {'${st[key]}'},
-                onSelectionChanged: (v) => _set(key, v.first),
-              ),
-            ],
+          padding: const EdgeInsets.symmetric(vertical: Space.x1 + 2),
+          child: SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: Space.x3,
+              runSpacing: Space.x2,
+              children: [
+                Text(title),
+                SegmentedButton<String>(
+                  segments: [
+                    for (final (v, l) in opts)
+                      ButtonSegment(value: v, label: Text(l)),
+                  ],
+                  selected: {'${st[key]}'},
+                  onSelectionChanged: (v) => _set(key, v.first),
+                ),
+              ],
+            ),
           ),
         );
     return PageFrame(
@@ -136,6 +146,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 choice('motion', 'Motion', [
                   ('full', 'Full'),
                   ('reduced', 'Reduced'),
+                ]),
+                choice('accent', 'Accent', [
+                  ('mint', 'Mint'),
+                  ('cyan', 'Cyan'),
+                  ('violet', 'Violet'),
+                  ('amber', 'Amber'),
+                  ('rose', 'Rose'),
                 ]),
                 sw('premium_ui', 'Premium UI (Midnight Pro look)'),
               ],
@@ -208,7 +225,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     title: Text('${x['name']}'),
                     subtitle: Text(
                       '${x['provides']}',
-                      style: TextStyle(color: t.faint, fontSize: 12),
+                      style: TextStyle(color: t.faint, fontSize: DjType.small),
                     ),
                     leading: Switch(
                       value: x['enabled'] == true,
@@ -222,7 +239,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'Sends: ${x['sends']}',
-                          style: TextStyle(color: t.muted, fontSize: 12.5),
+                          style: TextStyle(
+                            color: t.muted,
+                            fontSize: DjType.small,
+                          ),
                         ),
                       ),
                       if (x['needs_key'] == true && x['id'] != 'anthropic')
@@ -459,6 +479,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DropdownButtonFormField<String>(
+            isExpanded: true,
+            style: Theme.of(context).textTheme.bodyMedium,
             initialValue: provider,
             decoration: const InputDecoration(labelText: 'Model service'),
             items: [
@@ -487,6 +509,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text('${a['reason']}', style: TextStyle(color: t.warn)),
           if (provider == 'claude') ...[
             DropdownButtonFormField<String>(
+              isExpanded: true,
+              style: Theme.of(context).textTheme.bodyMedium,
               initialValue: '${a['model']}',
               decoration: const InputDecoration(labelText: 'Claude model'),
               items: [
@@ -684,7 +708,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: Text('${p['name']} (${fmtBytes(p['size'] as int?)})'),
               subtitle: Text(
                 '${p['description']}\n${p['credits']}',
-                style: TextStyle(color: t.faint, fontSize: 12),
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
               isThreeLine: true,
               trailing: p['installed'] == true

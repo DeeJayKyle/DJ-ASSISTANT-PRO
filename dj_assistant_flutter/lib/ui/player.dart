@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter_soloud/flutter_soloud.dart';
+
+import '../core/diag_log.dart';
 
 import 'format.dart';
 import 'theme.dart';
@@ -13,12 +16,16 @@ class AudioEngine {
   static final instance = AudioEngine._();
   Future<bool>? _ready;
 
-  /// Starts the audio device once; false when there is no audio (tests, CI).
+  /// Starts the audio device; false when there is no audio (tests, CI). A
+  /// failure is logged and tried again next time (the device may have been
+  /// busy or unplugged).
   Future<bool> ready() => _ready ??= () async {
     try {
       if (!SoLoud.instance.isInitialized) await SoLoud.instance.init();
       return true;
-    } on Object {
+    } on Object catch (e, st) {
+      DiagLog.error('audio', 'the sound card could not be started: $e', st);
+      _ready = null;
       return false;
     }
   }();
@@ -126,7 +133,10 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
         ),
         Text(
           err ?? '${fmtDuration((pos * len).round())} / ${fmtDuration(len)}',
-          style: TextStyle(color: err != null ? t.warn : t.faint, fontSize: 12),
+          style: TextStyle(
+            color: err != null ? t.warn : t.faint,
+            fontSize: DjType.small,
+          ),
         ),
       ],
     );

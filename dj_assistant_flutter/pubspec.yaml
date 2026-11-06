@@ -76,6 +76,20 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Inter (SIL Open Font License, assets/fonts/Inter-OFL.txt), bundled so no
+  # font is ever fetched online. Tabular figures are used for BPM, key, time.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

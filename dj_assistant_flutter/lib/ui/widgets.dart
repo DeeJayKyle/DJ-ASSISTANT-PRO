@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
-/// A screen: title, optional subtitle and actions, then the body.
+/// A screen: title, optional subtitle and actions, then the body. Actions
+/// wrap under the title on narrow windows; the page fades in when opened.
 class PageFrame extends StatelessWidget {
   const PageFrame({
     super.key,
@@ -23,41 +24,124 @@ class PageFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DjTokens.of(context);
-    final head = Padding(
-      padding: const EdgeInsets.fromLTRB(28, 22, 28, 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(subtitle!, style: TextStyle(color: t.faint)),
-                ],
-              ],
+    final text = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final pad = Space.page(box.maxWidth);
+        final narrow = box.maxWidth < 760;
+        final titles = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(title, style: text.headlineSmall),
             ),
+            if (subtitle != null) ...[
+              const SizedBox(height: Space.x1),
+              Text(subtitle!, style: text.bodyMedium?.copyWith(color: t.faint)),
+            ],
+          ],
+        );
+        final acts = Wrap(
+          spacing: Space.x2,
+          runSpacing: Space.x2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: actions,
+        );
+        final head = Padding(
+          padding: EdgeInsets.fromLTRB(pad, Space.x5, pad, Space.x3),
+          child: narrow || actions.isEmpty
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titles,
+                    if (actions.isNotEmpty) ...[
+                      const SizedBox(height: Space.x3),
+                      acts,
+                    ],
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: titles),
+                    const SizedBox(width: Space.x4),
+                    Flexible(
+                      child: Align(alignment: Alignment.topRight, child: acts),
+                    ),
+                  ],
+                ),
+        );
+        final body = Padding(
+          padding: EdgeInsets.fromLTRB(pad, 0, pad, Space.x6),
+          child: child,
+        );
+        return FadeIn(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              head,
+              Expanded(
+                child: scroll
+                    ? Scrollbar(child: SingleChildScrollView(child: body))
+                    : body,
+              ),
+            ],
           ),
-          Wrap(spacing: 8, runSpacing: 8, children: actions),
-        ],
+        );
+      },
+    );
+  }
+}
+
+/// Fades and lifts its child in once, when it first appears (page and panel
+/// entrances). Nothing moves with Motion: Reduced.
+class FadeIn extends StatefulWidget {
+  const FadeIn({super.key, required this.child, this.offset = 6});
+  final Widget child;
+  final double offset;
+  @override
+  State<FadeIn> createState() => _FadeInState();
+}
+
+class _FadeInState extends State<FadeIn> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    final d = Motion.base(context);
+    if (d == Duration.zero) {
+      _c.value = 1;
+    } else {
+      _c
+        ..duration = d
+        ..forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = CurvedAnimation(parent: _c, curve: Motion.standard);
+    return AnimatedBuilder(
+      animation: a,
+      child: widget.child,
+      builder: (_, child) => Opacity(
+        opacity: a.value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - a.value) * widget.offset),
+          child: child,
+        ),
       ),
-    );
-    final body = Padding(
-      padding: const EdgeInsets.fromLTRB(28, 0, 28, 24),
-      child: child,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        head,
-        Expanded(child: scroll ? SingleChildScrollView(child: body) : body),
-      ],
     );
   }
 }
@@ -70,7 +154,7 @@ class Panel extends StatelessWidget {
     this.subtitle,
     this.trailing,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(Space.x4),
   });
   final String? title, subtitle;
   final Widget? trailing;
@@ -79,6 +163,7 @@ class Panel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DjTokens.of(context);
+    final text = Theme.of(context).textTheme;
     return Card(
       child: Padding(
         padding: padding,
@@ -88,27 +173,30 @@ class Panel extends StatelessWidget {
           children: [
             if (title != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
+                padding: const EdgeInsets.only(bottom: Space.x3),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: Space.x3,
+                  runSpacing: Space.x2,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(title!, style: text.titleMedium),
+                        ),
+                        if (subtitle != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              subtitle!,
+                              style: text.bodySmall?.copyWith(color: t.faint),
                             ),
                           ),
-                          if (subtitle != null)
-                            Text(
-                              subtitle!,
-                              style: TextStyle(color: t.faint, fontSize: 12.5),
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
                     ?trailing,
                   ],
@@ -122,7 +210,33 @@ class Panel extends StatelessWidget {
   }
 }
 
-class StatTile extends StatelessWidget {
+/// A small upper-case label above a group of controls.
+class SectionLabel extends StatelessWidget {
+  const SectionLabel(this.text, {super.key, this.trailing});
+  final String text;
+  final Widget? trailing;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: Space.x2, bottom: Space.x2),
+    child: Row(
+      children: [
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text(
+              text.toUpperCase(),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(letterSpacing: 0.8),
+            ),
+          ),
+        ),
+        ?trailing,
+      ],
+    ),
+  );
+}
+
+class StatTile extends StatefulWidget {
   const StatTile(
     this.label,
     this.value, {
@@ -134,30 +248,64 @@ class StatTile extends StatelessWidget {
   final bool warn;
   final VoidCallback? onTap;
   @override
+  State<StatTile> createState() => _StatTileState();
+}
+
+class _StatTileState extends State<StatTile> {
+  bool _hover = false;
+  @override
   Widget build(BuildContext context) {
     final t = DjTokens.of(context);
-    return SizedBox(
-      width: 170,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(color: t.faint, fontSize: 12)),
-                const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: warn ? t.warn : null,
-                  ),
+    final text = Theme.of(context).textTheme;
+    final active = _hover && widget.onTap != null;
+    return Semantics(
+      button: widget.onTap != null,
+      label: '${widget.label}: ${widget.value}',
+      excludeSemantics: true,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        cursor: widget.onTap != null
+            ? SystemMouseCursors.click
+            : MouseCursor.defer,
+        child: AnimatedContainer(
+          duration: Motion.fast(context),
+          curve: Motion.standard,
+          width: 168,
+          decoration: BoxDecoration(
+            color: active ? t.panel2 : t.panel,
+            borderRadius: Radii.large,
+            border: Border.all(color: active ? t.lineStrong : t.line),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: Radii.large,
+              onTap: widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(Space.x3 + 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodySmall?.copyWith(color: t.faint),
+                    ),
+                    const SizedBox(height: Space.x1 + 2),
+                    Text(
+                      widget.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.headlineSmall?.copyWith(
+                        color: widget.warn ? t.warn : null,
+                        fontFeatures: DjType.tabular,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -181,36 +329,123 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DjTokens.of(context);
+    final text = Theme.of(context).textTheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(Space.x8),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: FadeIn(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: t.tint(t.accent, 0.12),
+                    borderRadius: Radii.large,
+                    border: Border.all(color: t.tint(t.accent, 0.24)),
+                  ),
+                  child: Icon(icon, color: t.accent, size: IconSizes.xl),
+                ),
+                const SizedBox(height: Space.x4),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: text.titleLarge,
+                ),
+                if (message != null) ...[
+                  const SizedBox(height: Space.x2),
+                  Text(
+                    message!,
+                    textAlign: TextAlign.center,
+                    style: text.bodyMedium?.copyWith(color: t.faint),
+                  ),
+                ],
+                if (action != null) ...[
+                  const SizedBox(height: Space.x5),
+                  action!,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A page or panel that is still loading.
+class LoadingState extends StatelessWidget {
+  const LoadingState({super.key, this.label = 'Loading…'});
+  final String label;
+  @override
+  Widget build(BuildContext context) {
+    final t = DjTokens.of(context);
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        label: label,
+        child: Padding(
+          padding: const EdgeInsets.all(Space.x6),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: t.accent.withValues(alpha: 0.14),
-                child: Icon(icon, color: t.accent, size: 28),
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: Space.x3),
               Text(
-                title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
+                label,
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: t.faint),
               ),
-              if (message != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  message!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: t.faint),
-                ),
-              ],
-              if (action != null) ...[const SizedBox(height: 18), action!],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Something went wrong: what, and what the DJ can do about it.
+class ErrorBanner extends StatelessWidget {
+  const ErrorBanner(this.message, {super.key, this.action, this.icon});
+  final String message;
+  final Widget? action;
+  final IconData? icon;
+  @override
+  Widget build(BuildContext context) {
+    final t = DjTokens.of(context);
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(Space.x3),
+        decoration: BoxDecoration(
+          color: t.tint(t.danger, 0.10),
+          borderRadius: Radii.medium,
+          border: Border.all(color: t.tint(t.danger, 0.35)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon ?? Icons.error_outline,
+              color: t.danger,
+              size: IconSizes.md,
+            ),
+            const SizedBox(width: Space.x2 + 2),
+            Expanded(
+              child: SelectableText(
+                message,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            if (action != null) ...[const SizedBox(width: Space.x2), action!],
+          ],
         ),
       ),
     );
@@ -243,16 +478,20 @@ class Pill extends StatelessWidget {
   final String? tooltip;
   @override
   Widget build(BuildContext context) {
-    final c = color ?? DjTokens.of(context).faint;
+    final t = DjTokens.of(context);
+    final c = color ?? t.muted;
     final w = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: 2),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: Radii.small,
       ),
       child: Text(
         text,
-        style: TextStyle(color: c, fontSize: 11.5, fontWeight: FontWeight.w600),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: c, fontFeatures: DjType.tabular),
       ),
     );
     return tooltip == null ? w : Tooltip(message: tooltip!, child: w);
@@ -271,11 +510,15 @@ class HintText extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 16, color: t.faint),
-          const SizedBox(width: 6),
+          Icon(icon, size: IconSizes.sm, color: t.faint),
+          const SizedBox(width: Space.x1 + 2),
         ],
         Expanded(
-          child: Text(text, style: TextStyle(color: t.faint, fontSize: 12.5)),
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: t.faint),
+          ),
         ),
       ],
     );
@@ -373,26 +616,34 @@ class ProgressLine extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
+              child: Text(label, style: Theme.of(context).textTheme.titleSmall),
             ),
             if (total > 0)
-              Text('$done / $total', style: TextStyle(color: t.faint)),
+              Text(
+                '$done / $total',
+                style: TextStyle(color: t.faint, fontFeatures: DjType.tabular),
+              ),
           ],
         ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
+        const SizedBox(height: Space.x1 + 2),
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: total > 0 ? (done / total).clamp(0, 1) : 0),
+          duration: Motion.base(context),
+          curve: Motion.standard,
+          builder: (_, v, _) => LinearProgressIndicator(
             minHeight: 6,
-            value: total > 0 ? (done / total).clamp(0, 1) : null,
+            value: total > 0 ? v : null,
+            semanticsLabel: label,
+            semanticsValue: total > 0 ? '$done of $total' : null,
           ),
         ),
         if (message != null) ...[
-          const SizedBox(height: 4),
-          Text(message!, style: TextStyle(color: t.faint, fontSize: 12)),
+          const SizedBox(height: Space.x1),
+          Text(
+            message!,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: t.faint),
+          ),
         ],
       ],
     );
@@ -400,7 +651,7 @@ class ProgressLine extends StatelessWidget {
 }
 
 /// Space between stacked panels.
-const gap = SizedBox(height: 16, width: 16);
+const gap = SizedBox(height: Space.x4, width: Space.x4);
 
 /// Opens an https link in the default browser (store links, key pages).
 Future<void> openUrl(String url) async {

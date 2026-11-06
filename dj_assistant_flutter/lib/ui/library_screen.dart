@@ -257,7 +257,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: t.faint,
-                              fontSize: 12,
+                              fontSize: DjType.small,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -481,14 +481,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     Widget src(String? x) => x == 'analysis'
         ? Tooltip(
             message: 'Estimated by local analysis',
-            child: Text(' est', style: TextStyle(color: t.faint, fontSize: 10)),
+            child: Text(
+              ' est',
+              style: TextStyle(color: t.faint, fontSize: DjType.caption),
+            ),
           )
         : x == 'you'
         ? Tooltip(
             message: 'Your catalogue value',
             child: Text(
               ' you',
-              style: TextStyle(color: t.accent, fontSize: 10),
+              style: TextStyle(color: t.accent, fontSize: DjType.caption),
             ),
           )
         : const SizedBox.shrink();
@@ -496,7 +499,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       v,
       overflow: TextOverflow.ellipsis,
       maxLines: 1,
-      style: TextStyle(fontSize: 13, color: color),
+      style: TextStyle(fontSize: DjType.body, color: color),
     );
     Widget content(_Col c) => switch (c.id) {
       'title' => Row(

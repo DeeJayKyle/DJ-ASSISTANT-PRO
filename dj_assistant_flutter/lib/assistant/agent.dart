@@ -430,7 +430,7 @@ final List<ToolDef> tools = [
   ToolDef(
     'change_setting',
     Tier.act,
-    'Change an app preference: theme (dark|light), key_notation (camelot|musical), premium_ui (true|false), motion (full|reduced), surface (glass|solid), scan_video (true|false), low_bitrate_kbps (number).',
+    'Change an app preference: theme (dark|light), key_notation (camelot|musical), premium_ui (true|false), motion (full|reduced), accent (mint|cyan|violet|amber|rose), surface (glass|solid), scan_video (true|false), low_bitrate_kbps (number).',
     () => _obj(
       {
         'setting': {'type': 'string', 'enum': _assistantSettings},
@@ -446,6 +446,7 @@ const _assistantSettings = [
   'key_notation',
   'premium_ui',
   'motion',
+  'accent',
   'surface',
   'scan_video',
   'low_bitrate_kbps',

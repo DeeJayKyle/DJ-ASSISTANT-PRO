@@ -4,93 +4,222 @@ import 'dart:typed_data';
 
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../core/diag_log.dart';
 import '../ui/player.dart' show AudioEngine;
 import 'biquad.dart';
-import 'dsp.dart' show encodeWav;
 import 'stretch.dart';
 
-/// Several stereo layers (stems) played in sync, each with its own volume.
-class LayerPlayer {
-  final _sources = <AudioSource>[];
-  final _handles = <SoundHandle>[];
-  double _duration = 0;
+/// Plays interleaved stereo float audio that a [render] callback produces
+/// block by block, through one SoLoud buffer stream. About [lead] seconds are
+/// kept queued, so a change made in [render] is heard that much later.
+class PcmStream {
+  PcmStream(this.sampleRate, this.render, {this.lead = 0.12});
+  final int sampleRate;
+  final double lead;
+
+  /// Fills `l[0..n)` and `r[0..n)` with the next block.
+  final void Function(Float32List l, Float32List r, int n) render;
+
+  static const block = 1024;
+  AudioSource? _stream;
+  SoundHandle? _handle;
+  Timer? _timer;
+  final _clock = Stopwatch();
+  int _pushed = 0, _base = 0;
+  final _l = Float32List(block), _r = Float32List(block);
+  final _inter = Float32List(block * 2);
   SoLoud get _sl => SoLoud.instance;
 
-  bool get loaded => _sources.isNotEmpty;
-  bool get playing =>
-      _handles.isNotEmpty &&
-      _sl.getIsValidVoiceHandle(_handles.first) &&
-      !_sl.getPause(_handles.first);
+  bool get running => _stream != null;
+
+  /// Frames rendered so far that have been heard (an estimate from the clock).
+  int get heardFrames =>
+      _base +
+      math.min(
+        _pushed,
+        (_clock.elapsedMicroseconds * sampleRate / 1e6).floor(),
+      );
+
+  /// Starts the sound card; false (and logged) when there is no audio device.
+  Future<bool> start() async {
+    if (_stream != null) return true;
+    if (!await AudioEngine.instance.ready()) return false;
+    try {
+      _stream = _sl.setBufferStream(
+        maxBufferSizeDuration: const Duration(minutes: 10),
+        bufferingType: BufferingType.released,
+        bufferingTimeNeeds: 0.05,
+        sampleRate: sampleRate,
+        channels: Channels.stereo,
+        format: BufferType.f32le,
+      );
+      _pushed = 0;
+      _base = 0;
+      _clock
+        ..reset()
+        ..start();
+      _fill();
+      _handle = _sl.play(_stream!);
+      _timer = Timer.periodic(const Duration(milliseconds: 10), (_) => _fill());
+      return true;
+    } on Object catch (e, st) {
+      DiagLog.error('audio', 'could not start the audio stream: $e', st);
+      await stop();
+      return false;
+    }
+  }
+
+  void _fill() {
+    final s = _stream;
+    if (s == null) return;
+    // rotate the stream before it fills up (released data still counts)
+    if (_pushed > sampleRate * 9 * 60) {
+      final heard = heardFrames;
+      unawaited(
+        stop().then((_) async {
+          await start();
+          _base = heard;
+        }),
+      );
+      return;
+    }
+    while (_pushed / sampleRate - _clock.elapsedMicroseconds / 1e6 < lead) {
+      render(_l, _r, block);
+      for (var i = 0; i < block; i++) {
+        _inter[i * 2] = _l[i].clamp(-1, 1);
+        _inter[i * 2 + 1] = _r[i].clamp(-1, 1);
+      }
+      try {
+        _sl.addAudioDataStream(
+          s,
+          Uint8List.fromList(_inter.buffer.asUint8List()),
+        );
+      } on Object catch (e, st) {
+        DiagLog.error('audio', 'the audio stream stopped: $e', st);
+        unawaited(stop());
+        return;
+      }
+      _pushed += block;
+    }
+  }
+
+  Future<void> stop() async {
+    _timer?.cancel();
+    _timer = null;
+    final h = _handle, s = _stream;
+    _handle = null;
+    _stream = null;
+    _clock.stop();
+    try {
+      if (h != null && _sl.getIsValidVoiceHandle(h)) await _sl.stop(h);
+      if (s != null) await _sl.disposeSource(s);
+    } on Object {
+      // the device went away
+    }
+  }
+}
+
+/// Several stereo layers (stems) mixed in sync, each with its own volume.
+/// The mix is rendered in Dart and streamed, so nothing is encoded or
+/// copied when a song loads, and solo, mute and volume apply at once
+/// (about a tenth of a second later) without reloading.
+class LayerMix {
+  LayerMix(this.layers, this.sampleRate)
+    : volumes = List.filled(layers.length, 1),
+      length = layers.isEmpty ? 0 : layers[0][0].length;
+  final List<List<Float32List>> layers;
+  final int sampleRate, length;
+  List<double> volumes;
+
+  /// Next frame to render.
+  int pos = 0;
+  bool get atEnd => pos >= length;
+
+  /// Mixes the next [n] frames into [l], [r] (silence after the end).
+  void render(Float32List l, Float32List r, int n) {
+    l.fillRange(0, n, 0);
+    r.fillRange(0, n, 0);
+    final m = math.max(0, math.min(n, length - pos));
+    for (var k = 0; k < layers.length; k++) {
+      final g = k < volumes.length ? volumes[k] : 0.0;
+      if (g == 0) continue;
+      final a = layers[k][0], b = layers[k].length > 1 ? layers[k][1] : a;
+      for (var i = 0; i < m; i++) {
+        l[i] += a[pos + i] * g;
+        r[i] += b[pos + i] * g;
+      }
+    }
+    pos += n;
+  }
+}
+
+/// Plays a [LayerMix] (the Stems page, Remix previews).
+class LayerPlayer {
+  LayerMix? _mix;
+  PcmStream? _out;
+  int _startFrame = 0;
+  double _pausedAt = 0;
+
+  bool get loaded => _mix != null;
+  bool get playing => _out?.running ?? false;
 
   /// Seconds into the audio.
   double get position {
-    if (_handles.isEmpty || !_sl.getIsValidVoiceHandle(_handles.first)) {
-      return _pausedAt;
-    }
-    return _sl.getPosition(_handles.first).inMicroseconds / 1e6;
+    final m = _mix, o = _out;
+    if (m == null) return 0;
+    if (o == null || !o.running) return _pausedAt;
+    return math.min(m.length, _startFrame + o.heardFrames) / m.sampleRate;
   }
 
-  double _pausedAt = 0;
-
+  /// Prepares [layers]; false when there is no audio device (logged).
   Future<bool> load(List<List<Float32List>> layers, int sampleRate) async {
     await dispose();
-    if (!await AudioEngine.instance.ready()) return false;
-    var i = 0;
-    for (final l in layers) {
-      _sources.add(
-        await _sl.loadMem(
-          'studio-layer-${i++}-${DateTime.now().microsecondsSinceEpoch}.wav',
-          encodeWav(l, sampleRate),
-        ),
-      );
-    }
-    _duration = layers.isEmpty ? 0 : layers[0][0].length / sampleRate;
-    return true;
+    _mix = LayerMix(layers, sampleRate);
+    return AudioEngine.instance.ready();
   }
 
-  void play(double from, List<double> volumes) {
-    stop();
-    if (_sources.isEmpty) return;
-    for (var i = 0; i < _sources.length; i++) {
-      final h = _sl.play(_sources[i], paused: true, volume: volumes[i]);
-      _sl.seek(h, Duration(microseconds: (from * 1e6).round()));
-      _handles.add(h);
-    }
-    for (final h in _handles) {
-      _sl.setPause(h, false);
-    }
+  /// Starts at [from] seconds; false when the sound card can't be used.
+  Future<bool> play(double from, List<double> volumes) async {
+    await _stopOut();
+    final m = _mix;
+    if (m == null) return false;
+    m
+      ..volumes = List.of(volumes)
+      ..pos = (from * m.sampleRate).round().clamp(0, m.length);
+    _startFrame = m.pos;
+    final o = PcmStream(m.sampleRate, m.render);
+    _out = o;
+    return o.start();
   }
 
-  void setVolumes(List<double> v) {
-    for (var i = 0; i < _handles.length && i < v.length; i++) {
-      if (_sl.getIsValidVoiceHandle(_handles[i])) {
-        _sl.setVolume(_handles[i], v[i]);
-      }
-    }
-  }
+  void setVolumes(List<double> v) => _mix?.volumes = List.of(v);
 
   void pause() {
     _pausedAt = position;
-    stop();
+    unawaited(_stopOut());
   }
 
-  void stop() {
-    for (final h in _handles) {
-      if (_sl.getIsValidVoiceHandle(h)) unawaited(_sl.stop(h));
-    }
-    _handles.clear();
+  void stop() => unawaited(_stopOut());
+
+  Future<void> _stopOut() async {
+    final o = _out;
+    _out = null;
+    await o?.stop();
   }
 
-  bool get ended =>
-      _handles.isNotEmpty && !_sl.getIsValidVoiceHandle(_handles.first);
-  double get duration => _duration;
+  bool get ended {
+    final m = _mix, o = _out;
+    return m != null &&
+        o != null &&
+        o.running &&
+        _startFrame + o.heardFrames >= m.length;
+  }
+
+  double get duration => _mix == null ? 0 : _mix!.length / _mix!.sampleRate;
 
   Future<void> dispose() async {
-    stop();
-    for (final s in _sources) {
-      await _sl.disposeSource(s);
-    }
-    _sources.clear();
+    await _stopOut();
+    _mix = null;
     _pausedAt = 0;
   }
 }
@@ -134,118 +263,53 @@ class Deck {
 class DeckMixer {
   DeckMixer();
   static const outRate = 44100;
-  static const _block = 1024;
-  static const _lead = 0.12;
   final decks = [Deck(), Deck()];
   double crossfade = 0.5;
-  AudioSource? _stream;
-  SoundHandle? _handle;
-  Timer? _timer;
-  final _clock = Stopwatch();
-  int _pushed = 0;
-  final _l = Float32List(_block), _r = Float32List(_block);
-  final _dl = Float32List(_block), _dr = Float32List(_block);
+  PcmStream? _out;
+  final _dl = Float32List(PcmStream.block), _dr = Float32List(PcmStream.block);
   bool _starting = false;
-  SoLoud get _sl => SoLoud.instance;
 
   bool get anyPlaying => decks.any((d) => d.reader?.playing ?? false);
 
   /// Starts streaming when a deck plays; stops when both are paused.
   Future<void> update() async {
-    if (anyPlaying && _stream == null && !_starting) {
+    if (anyPlaying && _out == null && !_starting) {
       _starting = true;
       try {
-        if (!await AudioEngine.instance.ready()) return;
-        _stream = _sl.setBufferStream(
-          maxBufferSizeDuration: const Duration(minutes: 10),
-          bufferingType: BufferingType.released,
-          bufferingTimeNeeds: 0.05,
-          sampleRate: outRate,
-          channels: Channels.stereo,
-          format: BufferType.f32le,
-        );
-        _pushed = 0;
-        _clock
-          ..reset()
-          ..start();
-        _fill();
-        _handle = _sl.play(_stream!);
-        _timer = Timer.periodic(
-          const Duration(milliseconds: 10),
-          (_) => _fill(),
-        );
-      } on Object {
-        await _close();
+        final o = PcmStream(outRate, _mix);
+        if (await o.start()) _out = o;
       } finally {
         _starting = false;
       }
-    } else if (!anyPlaying && _stream != null) {
+    } else if (!anyPlaying && _out != null) {
       await _close();
     }
   }
 
-  void _fill() {
-    final s = _stream;
-    if (s == null) return;
-    // rotate the stream before it fills up (released data still counts)
-    if (_pushed > outRate * 9 * 60) {
-      unawaited(_close().then((_) => update()));
-      return;
-    }
-    while (_pushed / outRate - _clock.elapsedMicroseconds / 1e6 < _lead) {
-      _mix();
-      final inter = Float32List(_block * 2);
-      for (var i = 0; i < _block; i++) {
-        inter[i * 2] = _l[i];
-        inter[i * 2 + 1] = _r[i];
-      }
-      try {
-        _sl.addAudioDataStream(s, inter.buffer.asUint8List());
-      } on Object {
-        unawaited(_close());
-        return;
-      }
-      _pushed += _block;
-    }
-  }
-
-  void _mix() {
-    _l.fillRange(0, _block, 0);
-    _r.fillRange(0, _block, 0);
+  void _mix(Float32List l, Float32List r, int n) {
+    l.fillRange(0, n, 0);
+    r.fillRange(0, n, 0);
     for (var i = 0; i < 2; i++) {
       final d = decks[i];
-      final r = d.reader;
-      if (r == null || !r.playing) continue;
+      final rd = d.reader;
+      if (rd == null || !rd.playing) continue;
       d.configure(outRate);
-      r.render([_dl, _dr], _block);
-      d.strip.process(_dl, _dr, _block, outRate);
+      rd.render([_dl, _dr], n);
+      d.strip.process(_dl, _dr, n, outRate);
       final x = i == 0 ? 1 - crossfade : crossfade;
       final g = math.sin(x * math.pi / 2) * math.sqrt2 * 0.7 * d.volume;
-      for (var k = 0; k < _block; k++) {
-        _l[k] += _dl[k] * g;
-        _r[k] += _dr[k] * g;
+      for (var k = 0; k < n; k++) {
+        l[k] += _dl[k] * g;
+        r[k] += _dr[k] * g;
       }
-      if (r.pos >= r.length) r.playing = false;
-    }
-    for (var k = 0; k < _block; k++) {
-      _l[k] = _l[k].clamp(-1, 1);
-      _r[k] = _r[k].clamp(-1, 1);
+      if (rd.pos >= rd.length) rd.playing = false;
     }
   }
 
   Future<void> _close() async {
-    _timer?.cancel();
-    _timer = null;
-    final h = _handle, s = _stream;
-    _handle = null;
-    _stream = null;
-    _clock.stop();
-    try {
-      if (h != null && _sl.getIsValidVoiceHandle(h)) await _sl.stop(h);
-      if (s != null) await _sl.disposeSource(s);
-    } on Object {
-      // the device went away
-    }
+    final o = _out;
+    _out = null;
+    await o?.stop();
   }
 
   Future<void> dispose() async {

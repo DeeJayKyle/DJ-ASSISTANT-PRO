@@ -279,6 +279,8 @@ class _RuleBuilderState extends State<RuleBuilder> {
       final ev = enumValues[f.id];
       if (ev != null && op.arity == 1) {
         return DropdownButton<String>(
+          isExpanded: true,
+          style: Theme.of(context).textTheme.bodyMedium,
           value: ev.any((e) => e.$1 == cur) ? '$cur' : null,
           hint: const Text('choose'),
           items: [
@@ -323,6 +325,8 @@ class _RuleBuilderState extends State<RuleBuilder> {
         spacing: 8,
         children: [
           DropdownButton<String>(
+            isExpanded: true,
+            style: Theme.of(context).textTheme.bodyMedium,
             value: f.id,
             items: [
               for (final x in ruleFields)
@@ -338,6 +342,8 @@ class _RuleBuilderState extends State<RuleBuilder> {
             }),
           ),
           DropdownButton<String>(
+            isExpanded: true,
+            style: Theme.of(context).textTheme.bodyMedium,
             value: op.id,
             items: [
               for (final o in ops)

@@ -413,7 +413,10 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                         title,
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      Text(text, style: const TextStyle(fontSize: 12.5)),
+                      Text(
+                        text,
+                        style: const TextStyle(fontSize: DjType.small),
+                      ),
                     ],
                   ),
                 ),
@@ -510,7 +513,7 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                         title,
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
-                          fontSize: 16,
+                          fontSize: DjType.title,
                         ),
                       ),
                       Text(
@@ -608,7 +611,10 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                       children: [
                         Text(
                           x.row.fileName,
-                          style: TextStyle(color: t.faint, fontSize: 12),
+                          style: TextStyle(
+                            color: t.faint,
+                            fontSize: DjType.small,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
@@ -927,6 +933,8 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                   const SizedBox(width: 8),
                   Expanded(child: Text(formatName(x.name, st.format))),
                   DropdownButton<int?>(
+                    isExpanded: true,
+                    style: Theme.of(context).textTheme.bodyMedium,
                     value: st.bins[x.rid],
                     hint: const Text('Unsorted'),
                     items: [
@@ -1028,6 +1036,8 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                   ),
                 if (x.genreSource == 'ai') const Pill('AI'),
                 DropdownButton<String>(
+                  isExpanded: true,
+                  style: Theme.of(context).textTheme.bodyMedium,
                   value: allGenres.contains(x.genre) ? x.genre : null,
                   hint: Text(x.genre),
                   items: [

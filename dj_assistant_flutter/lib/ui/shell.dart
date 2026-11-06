@@ -127,36 +127,44 @@ class _ShellState extends ConsumerState<Shell> {
       child: Focus(
         autofocus: true,
         child: Scaffold(
-          body: Column(
-            children: [
-              const _TitleBar(),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (chat != 'full') const _Sidebar(),
-                    if (chat != 'full') const VerticalDivider(width: 1),
-                    if (chat != 'full')
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            // Studio stays mounted once opened, so decks keep playing.
-                            Offstage(
-                              offstage: !studio,
-                              child: const StudioHost(),
+          body: LayoutBuilder(
+            builder: (context, box) {
+              final w = box.maxWidth;
+              final rail = w < 1240;
+              final chatW = w < 1280 ? 320.0 : (w < 1600 ? 360.0 : 400.0);
+              return Column(
+                children: [
+                  const _TitleBar(),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (chat != 'full') _Sidebar(rail: rail),
+                        if (chat != 'full') const VerticalDivider(width: 1),
+                        if (chat != 'full')
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                // Studio stays mounted once opened, so decks keep playing.
+                                Offstage(
+                                  offstage: !studio,
+                                  child: const StudioHost(),
+                                ),
+                                if (!studio) Positioned.fill(child: body),
+                              ],
                             ),
-                            if (!studio) Positioned.fill(child: body),
-                          ],
-                        ),
-                      ),
-                    if (chat == 'open')
-                      const SizedBox(width: 380, child: AssistantPanel()),
-                    if (chat == 'full') const Expanded(child: AssistantPanel()),
-                  ],
-                ),
-              ),
-              const _StatusBar(),
-            ],
+                          ),
+                        if (chat == 'open')
+                          SizedBox(width: chatW, child: const AssistantPanel()),
+                        if (chat == 'full')
+                          const Expanded(child: AssistantPanel()),
+                      ],
+                    ),
+                  ),
+                  const _StatusBar(),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -186,7 +194,10 @@ class _TitleBar extends ConsumerWidget {
           const SizedBox(width: 8),
           const Text(
             'DJ Assistant',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: DjType.title,
+            ),
           ),
           const SizedBox(width: 16),
           MenuAnchor(
@@ -347,7 +358,11 @@ class _TitleBar extends ConsumerWidget {
 }
 
 class _Sidebar extends ConsumerStatefulWidget {
-  const _Sidebar();
+  const _Sidebar({this.rail = false});
+
+  /// Icons only (compact windows): crates and sources are one click away on
+  /// the Virtual Crates and Scan Activity pages.
+  final bool rail;
   @override
   ConsumerState<_Sidebar> createState() => _SidebarState();
 }
@@ -369,54 +384,42 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         (stats['errors'] ?? 0) +
         (stats['missing'] ?? 0) +
         (stats['low_bitrate'] ?? 0);
-    Widget item(_Nav n, {String? count, bool warn = false}) {
-      final on = view.id == n.id;
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          selected: on,
-          selectedTileColor: t.accent.withValues(alpha: 0.12),
-          selectedColor: t.accent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          leading: Icon(n.icon, size: 19),
-          title: Text(n.label),
-          trailing: count == null
-              ? null
-              : Text(
-                  count,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: warn ? t.warn : t.faint,
+    Widget item(_Nav n, {String? count, bool warn = false}) => _NavItem(
+      nav: n,
+      selected: view.id == n.id || (n.id == 'library' && view.id == 'library'),
+      rail: widget.rail,
+      count: count,
+      warn: warn,
+      onTap: () => ref.read(viewProvider.notifier).go(n.id),
+    );
+
+    Widget section(String label, {Widget? trailing}) => widget.rail
+        ? const Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: Space.x4,
+              vertical: Space.x2,
+            ),
+            child: Divider(),
+          )
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 10, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: DjType.caption,
+                      letterSpacing: 1.2,
+                      color: t.faint,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-          onTap: () => ref.read(viewProvider.notifier).go(n.id),
-        ),
-      );
-    }
-
-    Widget section(String label, {Widget? trailing}) => Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 10, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                letterSpacing: 1.2,
-                color: t.faint,
-                fontWeight: FontWeight.w600,
-              ),
+                ?trailing,
+              ],
             ),
-          ),
-          ?trailing,
-        ],
-      ),
-    );
+          );
 
     List<Widget> tree(int? parent, int depth) => [
       for (final c in crates.where((c) => c.parentId == parent)) ...[
@@ -446,11 +449,11 @@ class _SidebarState extends ConsumerState<_Sidebar> {
           minLeadingWidth: 18,
           title: Text(c.name, overflow: TextOverflow.ellipsis),
           subtitle: c.smart
-              ? const Text('smart', style: TextStyle(fontSize: 10.5))
+              ? const Text('smart', style: TextStyle(fontSize: DjType.caption))
               : null,
           trailing: Text(
             c.trackCount == 0 ? '' : '${c.trackCount}',
-            style: TextStyle(fontSize: 11.5, color: t.faint),
+            style: TextStyle(fontSize: DjType.caption, color: t.faint),
           ),
           onTap: () =>
               ref.read(viewProvider.notifier).go('crate', crateId: c.id),
@@ -459,8 +462,42 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       ],
     ];
 
+    if (widget.rail) {
+      return SizedBox(
+        width: 64,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(vertical: Space.x2),
+          children: [
+            for (final n in _main)
+              item(
+                n,
+                count: n.id == 'health' && problems > 0 ? '$problems' : null,
+                warn: n.id == 'health',
+              ),
+            section(''),
+            for (final n in _create) item(n),
+            section(''),
+            for (final n in _prepare)
+              item(
+                n,
+                count: n.id == 'suggestions' && pending > 0 ? '$pending' : null,
+              ),
+            section(''),
+            if (docs)
+              item(
+                const _Nav(
+                  'files',
+                  'Personal Files',
+                  Icons.description_outlined,
+                ),
+              ),
+            item(const _Nav('settings', 'Settings', Icons.settings_outlined)),
+          ],
+        ),
+      );
+    }
     return SizedBox(
-      width: 250,
+      width: 232,
       child: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 8),
         children: [
@@ -497,7 +534,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
               padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Text(
                 'No crates yet. Try a template under Virtual Crates.',
-                style: TextStyle(fontSize: 12, color: t.faint),
+                style: TextStyle(fontSize: DjType.small, color: t.faint),
               ),
             ),
           ...tree(null, 0),
@@ -552,6 +589,138 @@ class _SidebarState extends ConsumerState<_Sidebar> {
   }
 }
 
+/// A sidebar entry: hover, focus and press states, an animated selection
+/// marker, and a tooltip with the name when only the icon shows.
+class _NavItem extends StatefulWidget {
+  const _NavItem({
+    required this.nav,
+    required this.selected,
+    required this.rail,
+    required this.onTap,
+    this.count,
+    this.warn = false,
+  });
+  final _Nav nav;
+  final bool selected, rail, warn;
+  final String? count;
+  final VoidCallback onTap;
+  @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DjTokens.of(context);
+    final text = Theme.of(context).textTheme;
+    final on = widget.selected;
+    final fg = on ? t.accent : (_hover ? t.text : t.muted);
+    final badge = widget.count == null
+        ? null
+        : Text(
+            widget.count!,
+            style: text.labelMedium?.copyWith(
+              color: widget.warn ? t.warn : t.faint,
+              fontFeatures: DjType.tabular,
+            ),
+          );
+    Widget body = AnimatedContainer(
+      duration: Motion.fast(context),
+      curve: Motion.standard,
+      height: 36,
+      padding: EdgeInsets.symmetric(horizontal: widget.rail ? 0 : Space.x3),
+      decoration: BoxDecoration(
+        color: on
+            ? t.tint(t.accent, 0.13)
+            : (_hover ? t.text.withValues(alpha: 0.05) : Colors.transparent),
+        borderRadius: Radii.medium,
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            top: 9,
+            bottom: 9,
+            child: AnimatedContainer(
+              duration: Motion.base(context),
+              curve: Motion.emphasized,
+              width: 3,
+              transform: Matrix4.diagonal3Values(1, on ? 1 : 0, 1),
+              transformAlignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: t.accent,
+                borderRadius: Radii.small,
+              ),
+            ),
+          ),
+          if (widget.rail)
+            Badge(
+              isLabelVisible: widget.count != null,
+              backgroundColor: widget.warn ? t.warn : t.accent,
+              smallSize: 7,
+              child: Icon(widget.nav.icon, size: IconSizes.md + 1, color: fg),
+            )
+          else
+            Row(
+              children: [
+                const SizedBox(width: Space.x1),
+                Icon(widget.nav.icon, size: IconSizes.md + 1, color: fg),
+                const SizedBox(width: Space.x3),
+                Expanded(
+                  child: Text(
+                    widget.nav.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodyMedium?.copyWith(
+                      color: on ? t.accent : t.text,
+                      fontWeight: on ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+                ?badge,
+              ],
+            ),
+        ],
+      ),
+    );
+    if (widget.rail) {
+      body = Tooltip(
+        message: widget.count == null
+            ? widget.nav.label
+            : '${widget.nav.label} (${widget.count})',
+        preferBelow: false,
+        verticalOffset: 0,
+        margin: const EdgeInsets.only(left: 64),
+        child: body,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Space.x2, vertical: 1),
+      child: Semantics(
+        button: true,
+        selected: on,
+        label: widget.nav.label,
+        excludeSemantics: widget.rail,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: Radii.medium,
+              onTap: widget.onTap,
+              child: body,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusBar extends ConsumerWidget {
   const _StatusBar();
   @override
@@ -566,7 +735,7 @@ class _StatusBar extends ConsumerWidget {
       for (final JobState j in s.jobs.all())
         if (j.state == 'running' || j.state == 'paused') j,
     ];
-    TextStyle st() => TextStyle(fontSize: 11.5, color: t.faint);
+    TextStyle st() => TextStyle(fontSize: DjType.caption, color: t.faint);
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 12),

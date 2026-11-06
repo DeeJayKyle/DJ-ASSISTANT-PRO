@@ -385,7 +385,7 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
                     aiOn
                         ? '${status?['label']} · ${status?['model']}'
                         : 'Built-in helper',
-                    style: TextStyle(color: t.faint, fontSize: 11.5),
+                    style: TextStyle(color: t.faint, fontSize: DjType.caption),
                   ),
                 ),
                 IconButton(
@@ -414,7 +414,7 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Text(
                 '${status!['reason'] ?? ''}',
-                style: TextStyle(color: t.faint, fontSize: 12),
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
             ),
           const Divider(),
@@ -506,13 +506,13 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
                   'Understood: ${m.reply!.understood.join(' · ')}',
-                  style: TextStyle(color: t.faint, fontSize: 11.5),
+                  style: TextStyle(color: t.faint, fontSize: DjType.caption),
                 ),
               ),
             if (turn != null && turn.lookedUp.isNotEmpty)
               Text(
                 'Looked up: ${turn.lookedUp.toSet().join(', ')}',
-                style: TextStyle(color: t.faint, fontSize: 11.5),
+                style: TextStyle(color: t.faint, fontSize: DjType.caption),
               ),
             if (turn != null)
               for (final d in turn.done)
@@ -520,7 +520,7 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
                   '${d['ok'] == true ? '✓' : (d['skipped'] == true ? '–' : '✗')} ${d['summary']}${d['error'] != null ? ' (${d['error']})' : ''}',
                   style: TextStyle(
                     color: d['ok'] == true ? t.ok : t.faint,
-                    fontSize: 12,
+                    fontSize: DjType.small,
                   ),
                 ),
             if (turn != null && turn.pending.isNotEmpty) ...[

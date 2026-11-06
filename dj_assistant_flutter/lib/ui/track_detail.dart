@@ -176,7 +176,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                     ),
                     Text(
                       'conf. ${(((a['bpm_confidence'] as num?) ?? 0) * 100).round()}%',
-                      style: TextStyle(color: t.faint, fontSize: 12),
+                      style: TextStyle(color: t.faint, fontSize: DjType.small),
                     ),
                     if (a['bpm'] != null)
                       TextButton(
@@ -242,10 +242,13 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                 ),
               ),
               for (final w in (a['warnings'] as List?) ?? const [])
-                Text('$w', style: TextStyle(color: t.warn, fontSize: 12)),
+                Text(
+                  '$w',
+                  style: TextStyle(color: t.warn, fontSize: DjType.small),
+                ),
               Text(
                 "Estimates from ${a['method']} v${a['version']}. They can be wrong (half/double tempo, modal keys) — your values always win. Serato's own cues and beatgrids are not read or changed.",
-                style: TextStyle(color: t.faint, fontSize: 12),
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
             ])
           else
@@ -279,7 +282,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                   ),
                   subtitle: Text(
                     '${x.source} · ${(((x.confidence ?? 0) * 100).round())}% · ${x.evidence ?? ''}',
-                    style: const TextStyle(fontSize: 11.5),
+                    style: const TextStyle(fontSize: DjType.caption),
                   ),
                   trailing: Wrap(
                     children: [
@@ -390,7 +393,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
           section('My catalogue values', [
             Text(
               'These override what the app shows and filters on. They are stored only in DJ Assistant and are never written to the music file or to Serato.',
-              style: TextStyle(color: t.faint, fontSize: 12),
+              style: TextStyle(color: t.faint, fontSize: DjType.small),
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -406,6 +409,8 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                 SizedBox(
                   width: 170,
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    style: Theme.of(context).textTheme.bodyMedium,
                     initialValue: clean,
                     decoration: const InputDecoration(
                       labelText: 'Clean / explicit',

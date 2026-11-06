@@ -188,7 +188,10 @@ class _WriteDialogState extends State<_WriteDialog> {
               dense: true,
               title: Text(
                 p.path,
-                style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+                style: const TextStyle(
+                  fontFamily: 'Consolas',
+                  fontSize: DjType.small,
+                ),
               ),
               subtitle: p.blocked != null
                   ? Text(p.blocked!, style: TextStyle(color: t.danger))

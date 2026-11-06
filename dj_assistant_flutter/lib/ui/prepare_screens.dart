@@ -119,6 +119,8 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        style: Theme.of(context).textTheme.bodyMedium,
                         initialValue: curve,
                         decoration: const InputDecoration(
                           labelText: 'Energy curve',
@@ -138,6 +140,8 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<int?>(
+                        isExpanded: true,
+                        style: Theme.of(context).textTheme.bodyMedium,
                         initialValue: crateId,
                         decoration: const InputDecoration(
                           labelText: 'Only from crate (optional)',
@@ -411,6 +415,8 @@ class _GigScreenState extends ConsumerState<GigScreen> {
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<int?>(
+                    isExpanded: true,
+                    style: Theme.of(context).textTheme.bodyMedium,
                     initialValue: setId,
                     decoration: const InputDecoration(
                       labelText: 'Set list (optional)',
@@ -747,6 +753,8 @@ class _GigPackScreenState extends ConsumerState<GigPackScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  style: Theme.of(context).textTheme.bodyMedium,
                   initialValue: source,
                   decoration: const InputDecoration(labelText: 'What to copy'),
                   hint: const Text('Choose a crate or saved set…'),
@@ -951,6 +959,8 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<int?>(
+                    isExpanded: true,
+                    style: Theme.of(context).textTheme.bodyMedium,
                     initialValue: crateId,
                     decoration: const InputDecoration(labelText: 'Crate'),
                     hint: const Text('Pick a crate with a few tracks.'),
@@ -978,7 +988,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                       title: Text('${r['track']}'),
                       subtitle: Text(
                         (r['reasons'] as List).join(' · '),
-                        style: const TextStyle(fontSize: 12),
+                        style: const TextStyle(fontSize: DjType.small),
                       ),
                       trailing: TextButton(
                         onPressed: () => guard(
@@ -1118,7 +1128,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                       ),
                       subtitle: Text(
                         '${it['reason']} · ${it['source']} · ${it['ownership']}${it['released'] != null ? ' · ${it['released']}' : ''}',
-                        style: const TextStyle(fontSize: 12),
+                        style: const TextStyle(fontSize: DjType.small),
                       ),
                       trailing: Wrap(
                         children: [

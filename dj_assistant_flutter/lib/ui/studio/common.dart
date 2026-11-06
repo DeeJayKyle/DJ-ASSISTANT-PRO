@@ -148,7 +148,7 @@ class StudioPanel extends StatelessWidget {
                       title!,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                        fontSize: DjType.title,
                       ),
                     ),
                   ...?trailing,
@@ -190,7 +190,7 @@ class Knob extends StatelessWidget {
         children: [
           Text(
             '$label  ${format?.call(value) ?? value.toStringAsFixed(2)}',
-            style: TextStyle(fontSize: 12, color: t.muted),
+            style: TextStyle(fontSize: DjType.small, color: t.muted),
           ),
           Slider(
             value: value.clamp(min, max),
@@ -300,7 +300,10 @@ class _SongPickerState extends ConsumerState<SongPicker> {
                               padding: const EdgeInsets.only(left: 6),
                               child: Text(
                                 'stems',
-                                style: TextStyle(color: t.accent, fontSize: 11),
+                                style: TextStyle(
+                                  color: t.accent,
+                                  fontSize: DjType.caption,
+                                ),
                               ),
                             ),
                         ],
@@ -410,7 +413,7 @@ class _WavePainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: label,
-          style: TextStyle(color: mark, fontSize: 10),
+          style: TextStyle(color: mark, fontSize: DjType.caption),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

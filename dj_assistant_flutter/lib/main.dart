@@ -74,7 +74,16 @@ class _DjAssistantAppState extends ConsumerState<DjAssistantApp> {
       title: 'DJ Assistant',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messengerKey,
-      theme: djTheme(light: light),
+      theme: djTheme(
+        light: light,
+        accent: '${settings['accent'] ?? 'mint'}',
+        glass: settings['surface'] != 'solid',
+      ),
+      themeAnimationDuration: settings['motion'] == 'reduced'
+          ? Duration.zero
+          : const Duration(milliseconds: Motion.baseMs),
+      builder: (context, child) =>
+          Motion(reduced: settings['motion'] == 'reduced', child: child!),
       home: const Shell(),
     );
   }

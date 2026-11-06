@@ -24,7 +24,17 @@ jobs:
       - run: flutter pub get
       - run: dart format --output=none --set-exit-if-changed lib test
       - run: flutter analyze --fatal-infos
+      # test/screens also writes a screenshot of every page (3 sizes, dark
+      # and light) for review; it fails on any overflow or layout error.
       - run: flutter test
+        env:
+          SCREENSHOTS: ${{ runner.temp }}/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dj-assistant-2-screenshots
+          path: ${{ runner.temp }}/screenshots/
+          if-no-files-found: ignore
 
   windows:
     runs-on: windows-latest

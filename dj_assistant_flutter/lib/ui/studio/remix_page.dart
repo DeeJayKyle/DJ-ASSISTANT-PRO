@@ -170,7 +170,14 @@ class _RemixPageState extends ConsumerState<RemixPage> {
       final r = await render();
       await player.load([r.mix], _outRate);
       final from = head * 60 / project.bpm;
-      player.play(math.min(from, player.duration - 0.01), [1]);
+      if (!await player.play(math.min(from, player.duration - 0.01), [1])) {
+        toast(
+          'No sound output: the sound card could not be started (see Settings → About → Open log folder).',
+          error: true,
+        );
+        return;
+      }
+      if (!mounted) return;
       final bpm = project.bpm;
       _tick?.cancel();
       _tick = Timer.periodic(const Duration(milliseconds: 40), (_) {
@@ -343,7 +350,7 @@ class _RemixPageState extends ConsumerState<RemixPage> {
             ),
             Text(
               'Add the whole song or one of its stems:',
-              style: TextStyle(color: t.faint, fontSize: 12),
+              style: TextStyle(color: t.faint, fontSize: DjType.small),
             ),
             const SizedBox(height: 6),
             Wrap(
@@ -407,6 +414,8 @@ class _RemixPageState extends ConsumerState<RemixPage> {
           ),
         ),
         DropdownButton<String>(
+          isExpanded: true,
+          style: Theme.of(context).textTheme.bodyMedium,
           value: '${project.tonic}:${project.mode}',
           items: [
             for (var i = 0; i < 12; i++)
@@ -507,7 +516,7 @@ class _RemixPageState extends ConsumerState<RemixPage> {
                                     child: Text(
                                       '${b + 1}',
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: DjType.caption,
                                         color: t.faint,
                                       ),
                                     ),
@@ -545,7 +554,7 @@ class _RemixPageState extends ConsumerState<RemixPage> {
           const SizedBox(height: 6),
           Text(
             'Each clip is time-stretched to ${project.bpm} BPM and moved into ${noteNames[project.tonic]} ${project.mode} (the shortest way round, via the relative key for major/minor). Drag a clip to move it, its edges to trim, its top-right corner to loop.',
-            style: TextStyle(color: t.faint, fontSize: 12),
+            style: TextStyle(color: t.faint, fontSize: DjType.small),
           ),
         ],
       ),
@@ -752,7 +761,10 @@ class _RemixPageState extends ConsumerState<RemixPage> {
         ),
         child: Text(
           label,
-          style: TextStyle(fontSize: 11, color: on ? Colors.black : null),
+          style: TextStyle(
+            fontSize: DjType.caption,
+            color: on ? Colors.black : null,
+          ),
         ),
       ),
     ),
@@ -826,7 +838,7 @@ class _RemixPageState extends ConsumerState<RemixPage> {
                       '${c.length}b${c.loops > 1 ? ' ×${c.loops}' : ''}',
                       style: const TextStyle(
                         color: Colors.black87,
-                        fontSize: 11,
+                        fontSize: DjType.caption,
                       ),
                     ),
                   ),

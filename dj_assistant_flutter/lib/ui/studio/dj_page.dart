@@ -332,7 +332,10 @@ class _DjPageState extends ConsumerState<DjPage> {
                         Text(
                           d.song!.artist!,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: t.faint, fontSize: 12),
+                          style: TextStyle(
+                            color: t.faint,
+                            fontSize: DjType.small,
+                          ),
                         ),
                     ],
                   ),
@@ -523,7 +526,7 @@ class _DjPageState extends ConsumerState<DjPage> {
                   if (!d.stems)
                     Text(
                       'Turn on Stems to drop the vocals, drums, bass or melodies live.',
-                      style: TextStyle(color: t.faint, fontSize: 12),
+                      style: TextStyle(color: t.faint, fontSize: DjType.small),
                     ),
                 ],
               ),

@@ -290,7 +290,7 @@ class _OrganiseScreenState extends ConsumerState<OrganiseScreen> {
                             dense: true,
                             title: Text(
                               o.from,
-                              style: const TextStyle(fontSize: 12),
+                              style: const TextStyle(fontSize: DjType.small),
                             ),
                             subtitle: o.blocked != null
                                 ? Text(
@@ -299,7 +299,9 @@ class _OrganiseScreenState extends ConsumerState<OrganiseScreen> {
                                   )
                                 : Text(
                                     '→ ${o.to}',
-                                    style: const TextStyle(fontSize: 12),
+                                    style: const TextStyle(
+                                      fontSize: DjType.small,
+                                    ),
                                   ),
                           ),
                       ],
@@ -495,7 +497,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                           in (rep['duplicates'] as List).cast<Map>().take(20))
                         Text(
                           (d['paths'] as List).join('\n'),
-                          style: const TextStyle(fontSize: 12),
+                          style: const TextStyle(fontSize: DjType.small),
                         ),
                     ],
                   ),
@@ -512,7 +514,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                       ))
                         Text(
                           '${f['path']} (${f['status']})',
-                          style: const TextStyle(fontSize: 12),
+                          style: const TextStyle(fontSize: DjType.small),
                         ),
                     ],
                   ),
@@ -533,7 +535,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                                 in (rep['suggestions'] as List).cast<Map>())
                               Text(
                                 '${x['folder']}: ${x['count']} files. ${x['note']}',
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(fontSize: DjType.small),
                               ),
                           ],
                         ),

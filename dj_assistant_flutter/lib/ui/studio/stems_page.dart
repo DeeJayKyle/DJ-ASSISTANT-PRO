@@ -138,10 +138,17 @@ class _StemsPageState extends ConsumerState<StemsPage> {
     }
   }
 
-  void play([double? from]) {
+  Future<void> play([double? from]) async {
     final l = loaded;
     if (l == null) return;
-    player.play(from ?? pos, volumes);
+    if (!await player.play(from ?? pos, volumes)) {
+      toast(
+        'No sound output: the sound card could not be started (see Settings → About → Open log folder).',
+        error: true,
+      );
+      return;
+    }
+    if (!mounted) return;
     _tick?.cancel();
     _tick = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (!mounted) return;
@@ -225,7 +232,7 @@ class _StemsPageState extends ConsumerState<StemsPage> {
         children: [
           Text(
             'Split it into vocals, drums, bass and melodies, find its key, tempo and chords, and turn the parts into MIDI. It all runs on this computer.',
-            style: TextStyle(color: t.faint, fontSize: 12.5),
+            style: TextStyle(color: t.faint, fontSize: DjType.small),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -297,7 +304,7 @@ class _StemsPageState extends ConsumerState<StemsPage> {
                       Text(
                         song!.title,
                         style: const TextStyle(
-                          fontSize: 17,
+                          fontSize: DjType.heading,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -456,7 +463,7 @@ class _StemsPageState extends ConsumerState<StemsPage> {
               const SizedBox(height: 6),
               Text(
                 '${l.stemsBy == 'ai' ? 'Separated with the HTDemucs AI model on this computer.' : 'Separated with fast signal processing: private and quick, but parts can bleed into each other more than with the AI model.'} MIDI has a track each for bass, melody, vocal melody, chords and drums.',
-                style: TextStyle(color: t.faint, fontSize: 12),
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
             ],
           ],
@@ -491,11 +498,17 @@ class _Stat extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+            fontSize: DjType.heading,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         Text(
           label,
-          style: TextStyle(color: DjTokens.of(context).faint, fontSize: 11),
+          style: TextStyle(
+            color: DjTokens.of(context).faint,
+            fontSize: DjType.caption,
+          ),
         ),
       ],
     ),

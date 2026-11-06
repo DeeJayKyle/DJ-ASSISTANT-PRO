@@ -104,7 +104,10 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
                         for (final c in tp.crates.take(10))
                           Text(
                             '• $c',
-                            style: TextStyle(color: t.muted, fontSize: 12.5),
+                            style: TextStyle(
+                              color: t.muted,
+                              fontSize: DjType.small,
+                            ),
                           ),
                         const SizedBox(height: 8),
                         Row(
@@ -229,7 +232,7 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
           const SizedBox(height: 8),
           Text(
             'Rename these in Settings → Labels.',
-            style: TextStyle(color: t.faint, fontSize: 12),
+            style: TextStyle(color: t.faint, fontSize: DjType.small),
           ),
         ],
       ),
@@ -318,6 +321,8 @@ class _CrateDialogState extends State<_CrateDialog> {
                   SizedBox(
                     width: 180,
                     child: DropdownButtonFormField<int?>(
+                      isExpanded: true,
+                      style: Theme.of(context).textTheme.bodyMedium,
                       initialValue: parent,
                       decoration: const InputDecoration(
                         labelText: 'Inside folder (optional)',

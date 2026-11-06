@@ -47,6 +47,7 @@ class SettingsService {
       'auto_update': _flag('auto_update', true),
       'surface': cat.getSetting('surface') ?? 'glass',
       'motion': cat.getSetting('motion') ?? 'full',
+      'accent': cat.getSetting('accent') ?? 'mint',
       'key_notation': cat.getSetting('key_notation') ?? 'camelot',
       'scan_video': _flag('scan_video', true),
       'premium_ui': _flag('premium_ui', false),
@@ -97,6 +98,14 @@ class SettingsService {
         choice(['glass', 'solid'], 'unknown surface style');
       case 'motion':
         choice(['full', 'reduced'], 'unknown motion setting');
+      case 'accent':
+        choice([
+          'mint',
+          'cyan',
+          'violet',
+          'amber',
+          'rose',
+        ], 'accent must be mint, cyan, violet, amber or rose');
       case 'key_notation':
         choice([
           'camelot',

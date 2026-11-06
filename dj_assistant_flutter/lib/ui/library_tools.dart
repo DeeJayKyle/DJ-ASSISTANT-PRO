@@ -425,7 +425,7 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
                               Text(
                                 fmtNumber(it.count),
                                 style: TextStyle(
-                                  fontSize: 20,
+                                  fontSize: DjType.heading,
                                   fontWeight: FontWeight.w700,
                                   color: it.count > 0 ? t.warn : t.ok,
                                 ),
@@ -435,7 +435,10 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
                           const SizedBox(height: 4),
                           Text(
                             it.explanation,
-                            style: TextStyle(color: t.faint, fontSize: 12.5),
+                            style: TextStyle(
+                              color: t.faint,
+                              fontSize: DjType.small,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Wrap(
@@ -651,7 +654,10 @@ class _HealthFixState extends ConsumerState<HealthFix> {
                           ),
                           Text(
                             '${r.track.artist ?? unknown} · ${r.folder}',
-                            style: TextStyle(color: t.faint, fontSize: 12),
+                            style: TextStyle(
+                              color: t.faint,
+                              fontSize: DjType.small,
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Wrap(
@@ -829,7 +835,10 @@ class DuplicatesScreen extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             g.reason,
-                            style: TextStyle(color: t.faint, fontSize: 12.5),
+                            style: TextStyle(
+                              color: t.faint,
+                              fontSize: DjType.small,
+                            ),
                           ),
                         ),
                         if (g.decision != null) Pill(g.decision!),
@@ -1012,7 +1021,7 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
                 ),
                 subtitle: Text(
                   '${x.source} · ${((x.confidence ?? 0) * 100).round()}% · ${x.evidence ?? ''}',
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: DjType.small),
                 ),
                 trailing: status == 'pending'
                     ? Wrap(

@@ -387,7 +387,7 @@ class _SynthLabState extends ConsumerState<SynthLab> {
               ),
               Text(
                 'Play with your computer keys (A W S E D…), the on-screen keys or a MIDI controller. The download has samples every four semitones plus an .sfz file most samplers can open.',
-                style: TextStyle(color: t.faint, fontSize: 12),
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
             ],
           ),
@@ -422,7 +422,7 @@ class _SynthLabState extends ConsumerState<SynthLab> {
           child: Text(
             idx < _keys.length ? _keys[idx].toUpperCase() : '',
             style: TextStyle(
-              fontSize: 10,
+              fontSize: DjType.caption,
               color: black ? Colors.white70 : Colors.black54,
             ),
           ),
@@ -788,7 +788,7 @@ class _DrumLabState extends ConsumerState<DrumLab> {
                                       kit.pads[i].key.toUpperCase(),
                                       style: TextStyle(
                                         color: t.faint,
-                                        fontSize: 11,
+                                        fontSize: DjType.caption,
                                       ),
                                     ),
                                   ],
@@ -801,7 +801,7 @@ class _DrumLabState extends ConsumerState<DrumLab> {
                     const SizedBox(height: 6),
                     Text(
                       'Keys Z X C V / A S D F / Q W E R / 1 2 3 4, or MIDI notes 36–51.',
-                      style: TextStyle(color: t.faint, fontSize: 12),
+                      style: TextStyle(color: t.faint, fontSize: DjType.small),
                     ),
                   ],
                 ),
@@ -915,7 +915,7 @@ class _DrumLabState extends ConsumerState<DrumLab> {
                 ),
               Text(
                 'The first 8 pads are shown, plus any other pad with hits. Edits play straight away.',
-                style: TextStyle(color: t.faint, fontSize: 12),
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
             ],
           ),
