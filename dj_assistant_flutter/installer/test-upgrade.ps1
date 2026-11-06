@@ -71,4 +71,21 @@ Check (Test-Path $menu) 'fresh install has a Start menu shortcut'
 Run $Setup '/P /UPDATE'
 Check ((Get-ItemProperty $key).DisplayVersion -eq $Version) 'reinstall over itself'
 Smoke
+
+# 6. a 2.0.0 install updates to this version (2.x to 2.x, files replaced)
+if ($Version -ne '2.0.0') {
+  Run (Join-Path $dir 'uninstall.exe') "/S _?=$dir"
+  Remove-Item (Join-Path $dir 'uninstall.exe') -ErrorAction SilentlyContinue
+  $prev = Join-Path $env:RUNNER_TEMP 'DJ-Assistant_2.0.0_x64-setup.exe'
+  Invoke-WebRequest 'https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/download/v2.0.0/DJ-Assistant_2.0.0_x64-setup.exe' -OutFile $prev
+  Run $prev '/S'
+  Check ((Get-ItemProperty $key).DisplayVersion -eq '2.0.0') '2.0.0 is installed'
+  Run $Setup '/P /UPDATE'
+  Check ((Get-ItemProperty $key).DisplayVersion -eq $Version) "2.0.0 updated to $Version"
+  Check (Test-Path (Join-Path $data 'keep-me.txt')) 'app data kept across the 2.x update'
+  $ort = (Get-Item (Join-Path $dir 'onnxruntime.dll')).VersionInfo.ProductVersion
+  Check ($ort.StartsWith('1.22')) "the update replaced ONNX Runtime ($ort)"
+  Check (Test-Path (Join-Path $dir 'DirectML.dll')) 'DirectML installed'
+  Smoke
+}
 Write-Host 'Installer checks passed.'

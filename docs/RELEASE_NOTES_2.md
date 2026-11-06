@@ -1,26 +1,24 @@
-DJ Assistant 2.0.0
+DJ Assistant 2.0.1
 
-**DJ Assistant, rebuilt.** 2.0 is a new native Windows app (Flutter), written from scratch with the same features and the same rules as 1.8: local-first, private, read-only by default, and no telemetry.
+**Stems work again, Pro Stems AI uses your graphics card, and a cleaner look throughout.**
 
-**Your library comes with you**
-- 2.0 opens the same catalogue, accounts, crates, sets, analysis, suggestions, change log and settings as 1.8. Nothing is converted or copied.
-- Saved API keys stay in Windows Credential Manager and are found again.
-- Changes logged by 1.8 can still be rolled back.
+**Stems (fixes)**
+- **Fast stems failed on every song in 2.0.0.** Splitting now works on the Stems, Remix and DJ Decks pages.
+- **Pro Stems AI never ran in 2.0.0.** The AI engine shipped with 2.0.0 was too old for the model, so every AI split quietly fell back to Fast. 2.0.1 ships a current one.
+- **Pro Stems AI runs on your graphics card again** (DirectML, as in 1.8) when the PC has one, and on the processor otherwise. The Stems page says which one it used.
+- **Playback starts straight away** and uses far less memory. The stems are mixed live instead of being copied for playback, so solo, mute and volume apply instantly. If the sound card can't be started, the page now tells you instead of staying silent.
+- When a song can't be decoded, the page shows the real reason.
 
-**What's different**
-- **Faster and lighter:** no web view and no local song server. Audio plays straight from your files.
-- **DJ Decks** are mixed natively. The EQ, filter, loops, hot cues and crossfader work as before. Knob moves are heard about a tenth of a second later.
-- **MIDI controllers** in Synth Lab and Drum Lab connect through Windows directly.
-- **Pro Stems AI** runs on the processor for now. The stems are just as clean, but separation is slower on PCs where 1.8 used the graphics card.
-- **Ogg Vorbis and Opus** files are catalogued and tagged, but not analysed yet.
-- **Fixes:** AIFF files with extra data after the audio are read correctly. MP3 comments show the real comment instead of iTunes' loudness data.
+**A cleaner look**
+- A new design across every page: the Inter typeface (built in, never downloaded), consistent spacing, panels, buttons, fields and menus, and readable contrast in dark and light.
+- Pages fade in. Hovering, pressing and keyboard focus are visible everywhere. Settings → Appearance → Motion: Reduced turns the animations off.
+- New accent colours in Settings → Appearance: mint, cyan, violet, amber and rose. Panels: Glass/Solid now takes effect.
+- Smaller windows work better. Below about 1240 px wide the sidebar becomes a row of icons, and nothing on any page overflows at 1100 px.
 
-**Safety is unchanged**
-- Music files are only read unless you turn on writing.
-- Every change is previewed, checked, backed up, verified and reversible.
-- Studio and Quick Prep exports only ever create new files.
-- Nothing goes online unless you turn that service on. The update check sends only the app version, and can be turned off in Settings → Online services.
+**Diagnostics**
+- Settings → About → **Open log folder**. If something goes wrong, the log says what happened. It stays on your PC and is never sent anywhere.
 
-**Installing:** the update replaces 1.8 in the same folder and keeps your Start menu and desktop shortcuts. Uninstalling never removes your library data.
+**Updating**
+- Updates 2.0.0 and 1.8 in place and keeps your library, settings and shortcuts. Uninstalling never removes your library data.
 
-**Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning. 2.0 has passed automated tests on Windows, including updating from 1.8.1, but has not yet been hand-tested on a real library. If anything misbehaves, 1.8.1 can still be installed from its release page, and it opens the same data.
+**Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning. 2.0.1 has passed automated tests on Windows: updating from 1.8.1 and 2.0.0, splitting MP3, M4A, FLAC, WAV and AIFF files with both methods, and driving the real app through every page. It has not yet been hand-tested on a real library with a sound card and graphics card.
