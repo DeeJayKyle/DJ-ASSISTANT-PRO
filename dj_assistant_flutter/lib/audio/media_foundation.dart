@@ -18,7 +18,12 @@ class MediaFoundationReader implements PcmReader {
     // initialise it for this reader (a decode runs synchronously on one
     // thread) and balance it in [close].
     _com = _Mf.instance.coInit();
-    _Mf.instance.ensureStarted();
+    try {
+      _Mf.instance.ensureStarted();
+    } catch (_) {
+      _uninit();
+      rethrow;
+    }
     final url = path.toNativeUtf16();
     final out = calloc<Pointer<Void>>();
     try {

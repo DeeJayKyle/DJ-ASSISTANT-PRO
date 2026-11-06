@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
+
+import 'package:ffi/ffi.dart' show calloc;
 
 import '../audio/pcm.dart';
 import '../core/diag_log.dart';
@@ -84,6 +87,8 @@ Future<T> runIsolate<T>(
   port.listen((m) {
     if (m is double) {
       onProgress?.call(m);
+    } else if (m is List && m.length == 1 && m[0] == 'cancelled') {
+      if (!done.isCompleted) done.completeError(Cancelled());
     } else if (m is List && m.length >= 2) {
       if (m[0] == 'ok') {
         done.complete(m[1] as T);
@@ -99,14 +104,14 @@ Future<T> runIsolate<T>(
       done.completeError(Cancelled());
     }
   });
-  final iso =
-      await Isolate.spawn<(SendPort, T Function(void Function(double)))>(
-        _entry<T>,
-        (port.sendPort, work),
-        onExit: port.sendPort,
-      );
-  onIsolate?.call(iso);
   try {
+    final iso =
+        await Isolate.spawn<(SendPort, T Function(void Function(double)))>(
+          _entry<T>,
+          (port.sendPort, work),
+          onExit: port.sendPort,
+        );
+    onIsolate?.call(iso);
     return await done.future;
   } finally {
     port.close();
@@ -126,6 +131,8 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
     });
     // hands the result over without copying it (stems are large)
     Isolate.exit(send, ['ok', r]);
+  } on Cancelled {
+    send.send(['cancelled']);
   } catch (e, st) {
     send.send([
       'err',
@@ -206,7 +213,10 @@ class StudioEngine {
 
   /// Where the last AI run happened: 'gpu' (DirectML) or 'cpu'.
   String? aiDevice;
-  Isolate? _aiIsolate;
+
+  /// Set to 1 to stop the running AI split after its current segment (the
+  /// job then closes the model itself, freeing ONNX Runtime's memory).
+  ffi.Pointer<ffi.Int32>? _aiCancel;
 
   Future<Loaded> load(SongRef song) async {
     final hit = songs.remove(song.id);
@@ -247,8 +257,8 @@ class StudioEngine {
   }
 
   void cancelAi() {
-    _aiIsolate?.kill(priority: Isolate.immediate);
-    _aiIsolate = null;
+    final c = _aiCancel;
+    if (c != null) c.value = 1;
   }
 
   Future<Stems> _separateAi(
@@ -256,12 +266,20 @@ class StudioEngine {
     String model,
     void Function(double)? onProgress,
   ) async {
-    final (out, device) = await runIsolate<(Stems, String)>(
-      _aiJob(l.mix, l.sampleRate, model),
-      onProgress: onProgress,
-      onIsolate: (i) => _aiIsolate = i,
-    );
-    _aiIsolate = null;
+    final cancel = calloc<ffi.Int32>();
+    _aiCancel = cancel;
+    final (Stems, String) r;
+    try {
+      r = await runIsolate<(Stems, String)>(
+        _aiJob(l.mix, l.sampleRate, model, cancel.address),
+        onProgress: onProgress,
+      );
+    } finally {
+      // the isolate has finished with the flag once it has answered
+      if (identical(_aiCancel, cancel)) _aiCancel = null;
+      calloc.free(cancel);
+    }
+    final (out, device) = r;
     aiDevice = device;
     return {
       'vocals': out['vocals']!,
@@ -474,11 +492,21 @@ class StudioEngine {
   List<Float32List> mix,
   int sr,
   String model,
+  int cancelAddress,
 ) => (progress) {
+  final cancel = ffi.Pointer<ffi.Int32>.fromAddress(cancelAddress);
   final m = HtDemucs.open(model);
   try {
     return (
-      separateAi(mix, sr, m.run, onProgress: (d, t) => progress(d / t)),
+      separateAi(
+        mix,
+        sr,
+        m.run,
+        onProgress: (d, t) {
+          if (cancel.value != 0) throw Cancelled();
+          progress(d / t);
+        },
+      ),
       m.device,
     );
   } finally {

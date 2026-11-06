@@ -67,8 +67,7 @@ typedef _AppendDmlD = bg.OrtStatusPtr Function(
 /// the processor otherwise ([device] says which).
 class HtDemucs {
   HtDemucs._(this._session, this.device, this.inputNames, this.outputNames) {
-    _wave = calloc<ffi.Float>(2 * seg);
-    _spec = calloc<ffi.Float>(4 * bins * frames);
+    // the only call here that can fail comes first, so nothing leaks
     final mi = calloc<ffi.Pointer<bg.OrtMemoryInfo>>();
     try {
       _check(
@@ -88,6 +87,8 @@ class HtDemucs {
     } finally {
       calloc.free(mi);
     }
+    _wave = calloc<ffi.Float>(2 * seg);
+    _spec = calloc<ffi.Float>(4 * bins * frames);
     _inNames = _cStrings(inputNames);
     _outNames = _cStrings(outputNames);
   }
@@ -129,13 +130,19 @@ class HtDemucs {
   static HtDemucs _open(String modelPath, {required bool dml}) {
     final api = _api;
     final op = calloc<ffi.Pointer<bg.OrtSessionOptions>>();
-    _check(
-      api.CreateSessionOptions.asFunction<
-        bg.OrtStatusPtr Function(ffi.Pointer<ffi.Pointer<bg.OrtSessionOptions>>)
-      >()(op),
-    );
-    final o = op.value;
-    calloc.free(op);
+    final ffi.Pointer<bg.OrtSessionOptions> o;
+    try {
+      _check(
+        api.CreateSessionOptions.asFunction<
+          bg.OrtStatusPtr Function(
+            ffi.Pointer<ffi.Pointer<bg.OrtSessionOptions>>,
+          )
+        >()(op),
+      );
+      o = op.value;
+    } finally {
+      calloc.free(op);
+    }
     final path = Platform.isWindows
         ? modelPath.toNativeUtf16().cast<ffi.Char>()
         : modelPath.toNativeUtf8().cast<ffi.Char>();
@@ -180,12 +187,19 @@ class HtDemucs {
         >()(OrtEnv.instance.ptr, path, o, sp),
       );
       final s = sp.value;
-      return HtDemucs._(
-        s,
-        dml ? 'gpu' : 'cpu',
-        _names(s, input: true),
-        _names(s, input: false),
-      );
+      try {
+        return HtDemucs._(
+          s,
+          dml ? 'gpu' : 'cpu',
+          _names(s, input: true),
+          _names(s, input: false),
+        );
+      } catch (_) {
+        api.ReleaseSession.asFunction<
+          void Function(ffi.Pointer<bg.OrtSession>)
+        >()(s);
+        rethrow;
+      }
     } finally {
       calloc
         ..free(path)

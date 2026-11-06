@@ -30,9 +30,16 @@ class PcmStream {
   final _inter = Float32List(block * 2);
   SoLoud get _sl => SoLoud.instance;
 
-  bool get running => _stream != null;
+  /// False once [stop] is called; a rotation in progress then stays down.
+  bool _on = false;
 
-  /// Frames rendered so far that have been heard (an estimate from the clock).
+  /// Bumped by [stop]: an older rotation must not reopen the stream.
+  int _gen = 0;
+
+  /// Playing (including the moment the stream is being renewed).
+  bool get running => _on;
+
+  /// Frames heard so far (an estimate from the clock).
   int get heardFrames =>
       _base +
       math.min(
@@ -42,8 +49,17 @@ class PcmStream {
 
   /// Starts the sound card; false (and logged) when there is no audio device.
   Future<bool> start() async {
-    if (_stream != null) return true;
+    if (_on) return true;
+    _on = true;
+    final g = ++_gen;
+    final ok = await _open(g, 0);
+    if (!ok) _on = false;
+    return ok;
+  }
+
+  Future<bool> _open(int g, int base) async {
     if (!await AudioEngine.instance.ready()) return false;
+    if (g != _gen || !_on) return false;
     try {
       _stream = _sl.setBufferStream(
         maxBufferSizeDuration: const Duration(minutes: 10),
@@ -54,7 +70,7 @@ class PcmStream {
         format: BufferType.f32le,
       );
       _pushed = 0;
-      _base = 0;
+      _base = base;
       _clock
         ..reset()
         ..start();
@@ -64,7 +80,7 @@ class PcmStream {
       return true;
     } on Object catch (e, st) {
       DiagLog.error('audio', 'could not start the audio stream: $e', st);
-      await stop();
+      await _close();
       return false;
     }
   }
@@ -72,13 +88,17 @@ class PcmStream {
   void _fill() {
     final s = _stream;
     if (s == null) return;
-    // rotate the stream before it fills up (released data still counts)
+    // Renew the stream before it fills up (released data still counts). The
+    // new one carries on from what was rendered, so nothing is skipped and
+    // the position stays continuous.
     if (_pushed > sampleRate * 9 * 60) {
-      final heard = heardFrames;
+      final rendered = _base + _pushed, g = _gen;
+      _base = rendered;
+      _pushed = 0;
+      _clock.reset();
       unawaited(
-        stop().then((_) async {
-          await start();
-          _base = heard;
+        _close().then((_) async {
+          if (g == _gen && _on && !await _open(g, rendered)) _on = false;
         }),
       );
       return;
@@ -103,7 +123,14 @@ class PcmStream {
     }
   }
 
+  /// Stops for good (a renewal in progress does not reopen it).
   Future<void> stop() async {
+    _on = false;
+    _gen++;
+    await _close();
+  }
+
+  Future<void> _close() async {
     _timer?.cancel();
     _timer = null;
     final h = _handle, s = _stream;
@@ -160,6 +187,10 @@ class LayerPlayer {
   int _startFrame = 0;
   double _pausedAt = 0;
 
+  /// Bumped by every play, stop and load: a play that was overtaken (the
+  /// playhead dragged quickly) gives up instead of starting a second stream.
+  int _gen = 0;
+
   bool get loaded => _mix != null;
   bool get playing => _out?.running ?? false;
 
@@ -178,28 +209,40 @@ class LayerPlayer {
     return AudioEngine.instance.ready();
   }
 
-  /// Starts at [from] seconds; false when the sound card can't be used.
+  /// Starts at [from] seconds; false when the sound card can't be used or a
+  /// newer play, stop or load overtook this one.
   Future<bool> play(double from, List<double> volumes) async {
+    final g = ++_gen;
     await _stopOut();
     final m = _mix;
-    if (m == null) return false;
+    if (m == null || g != _gen) return false;
     m
       ..volumes = List.of(volumes)
       ..pos = (from * m.sampleRate).round().clamp(0, m.length);
     _startFrame = m.pos;
+    _pausedAt = from;
     final o = PcmStream(m.sampleRate, m.render);
     _out = o;
-    return o.start();
+    final ok = await o.start();
+    if (g != _gen) {
+      await o.stop();
+      return false;
+    }
+    return ok;
   }
 
   void setVolumes(List<double> v) => _mix?.volumes = List.of(v);
 
   void pause() {
     _pausedAt = position;
+    _gen++;
     unawaited(_stopOut());
   }
 
-  void stop() => unawaited(_stopOut());
+  void stop() {
+    _gen++;
+    unawaited(_stopOut());
+  }
 
   Future<void> _stopOut() async {
     final o = _out;
@@ -218,6 +261,7 @@ class LayerPlayer {
   double get duration => _mix == null ? 0 : _mix!.length / _mix!.sampleRate;
 
   Future<void> dispose() async {
+    _gen++;
     await _stopOut();
     _mix = null;
     _pausedAt = 0;
@@ -277,7 +321,14 @@ class DeckMixer {
       _starting = true;
       try {
         final o = PcmStream(outRate, _mix);
-        if (await o.start()) _out = o;
+        if (await o.start()) {
+          // both decks may have stopped while the sound card started
+          if (anyPlaying) {
+            _out = o;
+          } else {
+            await o.stop();
+          }
+        }
       } finally {
         _starting = false;
       }

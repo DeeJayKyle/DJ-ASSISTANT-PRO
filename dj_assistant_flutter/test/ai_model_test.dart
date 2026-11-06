@@ -90,4 +90,38 @@ void main() {
     skip: skip,
     timeout: const Timeout(Duration(minutes: 10)),
   );
+
+  test(
+    'cancelling stops after the current segment and frees the model',
+    () async {
+      final engine = StudioEngine(cores: 2)..aiModel = model;
+      // 30 s: several segments
+      final one = clip();
+      final mix = [
+        for (final c in one)
+          Float32List(c.length * 3)
+            ..setAll(0, c)
+            ..setAll(c.length, c)
+            ..setAll(c.length * 2, c),
+      ];
+      final l = Loaded(const SongRef(id: 'c', title: 'c', path: ''), aiSr, mix);
+      var cancelled = false;
+      final err = await engine
+          .separate(
+            l,
+            method: 'ai',
+            onProgress: (_) {
+              if (!cancelled) {
+                cancelled = true;
+                engine.cancelAi();
+              }
+            },
+          )
+          .then<Object?>((_) => null, onError: (Object e) => e);
+      expect(err, isA<Cancelled>());
+      expect(l.aiStems, isNull);
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 10)),
+  );
 }
