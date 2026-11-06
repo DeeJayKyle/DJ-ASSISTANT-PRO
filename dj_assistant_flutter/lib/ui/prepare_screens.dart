@@ -951,10 +951,10 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
     return PageFrame(
       title: 'Discovery',
       subtitle: 'Every recommendation shows why, where it came from and when. Listening similarity is not proof two tracks mix well.',
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        crossAxisAlignment: WrapCrossAlignment.start,
+      child: AutoGrid(
+        minWidth: 460,
+        spacing: Space.x4,
+        maxColumns: 2,
         children: [
           SizedBox(
             width: 560,
