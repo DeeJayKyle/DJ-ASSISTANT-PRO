@@ -9,12 +9,47 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:path/path.dart' as p;
 import 'package:onnxruntime/onnxruntime.dart';
 import 'package:onnxruntime/src/bindings/onnxruntime_bindings_generated.dart'
     as bg;
 
 import 'ai_stems.dart';
 import 'gpu.dart';
+
+/// Loads the ONNX Runtime the app ships, by its full path, before anything
+/// asks for it by name: Windows has its own older onnxruntime.dll in
+/// System32 (Windows ML), which can't read the HTDemucs model. Throws when
+/// the runtime is older than 1.16 (ONNX IR version 10).
+void loadRuntime() {
+  if (Platform.isWindows) {
+    final dir = p.dirname(Platform.resolvedExecutable);
+    for (final f in [
+      Platform.environment['DJ_ORT_DLL'],
+      p.join(dir, 'onnxruntime.dll'),
+    ]) {
+      if (f != null && File(f).existsSync()) {
+        // providers_shared and DirectML load from the same folder
+        final shared = p.join(p.dirname(f), 'onnxruntime_providers_shared.dll');
+        if (File(shared).existsSync()) ffi.DynamicLibrary.open(shared);
+        final dml = p.join(p.dirname(f), 'DirectML.dll');
+        if (File(dml).existsSync()) ffi.DynamicLibrary.open(dml);
+        ffi.DynamicLibrary.open(f);
+        break;
+      }
+    }
+  }
+  final v = OrtEnv.version;
+  final parts = v.split('.').map(int.tryParse).toList();
+  final major = parts.isNotEmpty ? parts[0] ?? 0 : 0;
+  final minor = parts.length > 1 ? parts[1] ?? 0 : 0;
+  if (major < 1 || (major == 1 && minor < 16)) {
+    throw StateError(
+      'ONNX Runtime $v is too old for the Pro Stems AI model (1.16 or later '
+      'is needed); reinstall DJ Assistant',
+    );
+  }
+}
 
 typedef _AppendDml = bg.OrtStatusPtr Function(
   ffi.Pointer<bg.OrtSessionOptions>,
@@ -75,6 +110,7 @@ class HtDemucs {
   /// Opens [modelPath]; with [gpu], uses DirectML when there is a hardware
   /// graphics card, falling back to the processor if it can't run the model.
   static HtDemucs open(String modelPath, {bool gpu = true}) {
+    loadRuntime();
     OrtEnv.instance.init();
     if (!File(modelPath).existsSync()) {
       throw StateError('the model file is missing ($modelPath)');

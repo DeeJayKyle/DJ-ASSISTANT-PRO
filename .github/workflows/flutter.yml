@@ -78,8 +78,8 @@ jobs:
         shell: pwsh
         run: |
           $rel = 'build\windows\x64\runner\Release'
-          Copy-Item "$rel\onnxruntime.dll", "$rel\onnxruntime_providers_shared.dll", "$rel\DirectML.dll" .
-          $env:PATH = "$((Resolve-Path $rel).Path);$env:PATH"
+          # the app loads it from its own folder; the test points at the build
+          $env:DJ_ORT_DLL = (Resolve-Path "$rel\onnxruntime.dll").Path
           flutter test test/ai_model_test.dart
           if ($LASTEXITCODE -ne 0) { throw 'AI tests failed' }
       - name: Build the installer
