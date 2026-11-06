@@ -16,6 +16,16 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final dir = Directory.systemTemp.createTempSync('dja_keys');
+    // after the test, once every file is closed (Windows locks open files)
+    addTearDown(() async {
+      for (var i = 0; i < 20 && dir.existsSync(); i++) {
+        try {
+          dir.deleteSync(recursive: true);
+        } on FileSystemException {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+      }
+    });
     final accounts = AccountsService.open(dir.path);
     final container = ProviderContainer(
       overrides: [
@@ -50,6 +60,5 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 300)),
     );
     accounts.close();
-    dir.deleteSync(recursive: true);
   });
 }
