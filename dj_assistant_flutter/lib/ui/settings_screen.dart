@@ -85,6 +85,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       value: st[key] == true,
       onChanged: (v) => _set(key, v),
     );
+    Widget number(String key, String title, String sub, String unit) => Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title),
+              Text(
+                sub,
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: Space.x3),
+        SizedBox(
+          width: 120,
+          child: TextFormField(
+            key: ValueKey('$key-${st[key]}'),
+            initialValue: '${st[key] ?? ''}',
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(suffixText: unit),
+            onFieldSubmitted: (v) => _set(key, int.tryParse(v.trim()) ?? v),
+          ),
+        ),
+      ],
+    );
     Widget choice(String key, String title, List<(String, String)> opts) =>
         Padding(
           padding: const EdgeInsets.symmetric(vertical: Space.x1 + 2),
@@ -211,6 +238,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          gap,
+          Panel(
+            title: 'Studio',
+            subtitle: 'How Stems, Remix and DJ Decks use this computer.',
+            child: Column(
+              children: [
+                sw(
+                  'ai_gpu',
+                  'Pro Stems AI on the graphics card',
+                  sub: 'Uses DirectML when this PC has a graphics card; off runs it on the processor.',
+                ),
+                number(
+                  'studio_cores',
+                  'Processor cores for the Fast split',
+                  '0 = automatic (every core but one).',
+                  'cores',
+                ),
+                number(
+                  'audio_buffer_ms',
+                  'Audio buffer',
+                  'How far ahead audio is prepared. Lower answers knobs faster; raise it if playback crackles.',
+                  'ms',
                 ),
               ],
             ),

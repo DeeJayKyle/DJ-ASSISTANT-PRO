@@ -201,10 +201,16 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
 }
 
 class StudioEngine {
-  StudioEngine({int? cores})
-    : workers =
-          cores ?? math.max(2, math.min(6, Platform.numberOfProcessors - 1));
-  final int workers;
+  StudioEngine({this.cores});
+
+  /// Settings → Studio: cores for the Fast split; null or 0 is automatic.
+  int? cores;
+
+  /// Settings → Studio: run Pro Stems AI on the graphics card when there is one.
+  bool useGpu = true;
+
+  int get workers =>
+      (cores ?? 0) > 0 ? cores! : math.max(2, Platform.numberOfProcessors - 1);
   static const keep = 8;
   final songs = <String, Loaded>{};
 
@@ -275,7 +281,7 @@ class StudioEngine {
     final (Stems, String) r;
     try {
       r = await runIsolate<(Stems, String)>(
-        _aiJob(l.mix, l.sampleRate, model, cancel.address),
+        _aiJob(l.mix, l.sampleRate, model, cancel.address, useGpu),
         onProgress: onProgress,
       );
     } finally {
@@ -497,9 +503,10 @@ class StudioEngine {
   int sr,
   String model,
   int cancelAddress,
+  bool gpu,
 ) => (progress) {
   final cancel = ffi.Pointer<ffi.Int32>.fromAddress(cancelAddress);
-  final m = HtDemucs.open(model);
+  final m = HtDemucs.open(model, gpu: gpu);
   try {
     return (
       separateAi(

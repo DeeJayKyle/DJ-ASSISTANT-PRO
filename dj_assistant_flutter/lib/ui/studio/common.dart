@@ -11,6 +11,7 @@ import '../../assistant/quick_ai.dart';
 import '../../core/export.dart';
 import '../../core/library.dart';
 import '../../core/packs.dart';
+import '../../studio/audio_out.dart' show PcmStream;
 import '../../studio/engine.dart';
 import '../state.dart';
 import '../theme.dart';
@@ -18,6 +19,17 @@ import '../theme.dart';
 /// One Studio engine for the app (decoded songs and stems are shared by the
 /// Stems, Remix and DJ pages).
 final studioEngineProvider = Provider<StudioEngine>((ref) => StudioEngine());
+
+/// Settings → Studio and → Limits, applied every time a page uses the engine
+/// (so a change takes effect without a restart).
+StudioEngine applyStudioSettings(WidgetRef ref, StudioEngine e) {
+  final st = ref.read(settingsProvider);
+  PcmStream.defaultLead = ((st['audio_buffer_ms'] as int?) ?? 120) / 1000;
+  return e
+    ..maxMinutes = userLimit(ref, 'studio_minutes')
+    ..cores = st['studio_cores'] as int?
+    ..useGpu = st['ai_gpu'] != false;
+}
 
 /// Songs already split this session (shown with a "stems" badge).
 class SplitSongs extends Notifier<Set<String>> {

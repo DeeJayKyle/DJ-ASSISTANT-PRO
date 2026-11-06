@@ -13,7 +13,11 @@ import 'stretch.dart';
 /// block by block, through one SoLoud buffer stream. About [lead] seconds are
 /// kept queued, so a change made in [render] is heard that much later.
 class PcmStream {
-  PcmStream(this.sampleRate, this.render, {this.lead = 0.12});
+  PcmStream(this.sampleRate, this.render, {double? lead})
+    : lead = lead ?? defaultLead;
+
+  /// Settings → Studio: audio buffer (seconds queued ahead of the sound card).
+  static double defaultLead = 0.12;
   final int sampleRate;
   final double lead;
 

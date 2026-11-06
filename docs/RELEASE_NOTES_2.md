@@ -9,6 +9,7 @@ DJ Assistant 2.0.2
   - song pickers, Suggestions, Discovery, file and change histories, duplicate groups and DJ-software exports;
   - long lists that used to be cut off on screen now show everything.
 - **You decide.** *Settings → Limits and batch sizes* lists every one of these numbers with what it does. Set your own, or press *Remove all limits*.
+- **New Studio settings:** turn Pro Stems AI on the graphics card on or off, choose how many processor cores the Fast split uses, and set the audio buffer (lower for faster knob response, higher if playback crackles).
 
 **AI assistance for every feature**
 - Every page has an **Ask the assistant** button (✦), and the assistant suggests things to do on the page you're on.

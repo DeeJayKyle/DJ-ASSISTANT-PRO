@@ -50,6 +50,10 @@ class SettingsService {
       'accent': cat.getSetting('accent') ?? 'mint',
       'key_notation': cat.getSetting('key_notation') ?? 'camelot',
       'scan_video': _flag('scan_video', true),
+      'ai_gpu': _flag('ai_gpu', true),
+      'studio_cores': int.tryParse(cat.getSetting('studio_cores') ?? '') ?? 0,
+      'audio_buffer_ms':
+          int.tryParse(cat.getSetting('audio_buffer_ms') ?? '') ?? 120,
       'premium_ui': _flag('premium_ui', false),
       'auto_prep': autoPrepEnabled(cat),
       'ui_prefs': prefs is Map ? prefs : <String, Object?>{},
@@ -68,6 +72,7 @@ class SettingsService {
     'learning_enabled',
     'auto_update',
     'scan_video',
+    'ai_gpu',
     'premium_ui',
     'auto_prep',
     'watch_enabled',
@@ -98,6 +103,17 @@ class SettingsService {
         choice(['glass', 'solid'], 'unknown surface style');
       case 'motion':
         choice(['full', 'reduced'], 'unknown motion setting');
+      case 'studio_cores':
+        // 0: automatic (every core but one)
+        final v = value is num ? value.toInt() : int.tryParse('$value');
+        if (v == null || v < 0) _bad('cores must be 0 (automatic) or more');
+        cat.setSetting(key, '$v');
+      case 'audio_buffer_ms':
+        final v = value is num ? value.toInt() : int.tryParse('$value');
+        if (v == null || v < 10) {
+          _bad('the audio buffer must be at least 10 ms');
+        }
+        cat.setSetting(key, '$v');
       case 'accent':
         choice([
           'mint',

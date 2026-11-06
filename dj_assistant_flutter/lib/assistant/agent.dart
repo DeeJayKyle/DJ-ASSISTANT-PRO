@@ -576,7 +576,7 @@ final List<ToolDef> tools = [
   ToolDef(
     'change_setting',
     Tier.act,
-    'Change an app preference: theme (dark|light), key_notation (camelot|musical), premium_ui (true|false), motion (full|reduced), accent (mint|cyan|violet|amber|rose), surface (glass|solid), scan_video (true|false), low_bitrate_kbps (number).',
+    'Change an app preference: theme (dark|light), key_notation (camelot|musical), premium_ui (true|false), motion (full|reduced), accent (mint|cyan|violet|amber|rose), surface (glass|solid), scan_video (true|false), low_bitrate_kbps (number), ai_gpu (true|false: Pro Stems AI on the graphics card), studio_cores (number, 0 = automatic), audio_buffer_ms (number).',
     () => _obj(
       {
         'setting': {'type': 'string', 'enum': _assistantSettings},
@@ -596,6 +596,9 @@ const _assistantSettings = [
   'surface',
   'scan_video',
   'low_bitrate_kbps',
+  'ai_gpu',
+  'studio_cores',
+  'audio_buffer_ms',
 ];
 
 Tier? tierOf(String name) =>

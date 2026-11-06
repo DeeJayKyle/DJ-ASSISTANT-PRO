@@ -59,8 +59,7 @@ class _RemixPageState extends ConsumerState<RemixPage> {
 
   // Settings → Limits apply as soon as they change
   StudioEngine get engine =>
-      ref.read(studioEngineProvider)
-        ..maxMinutes = userLimit(ref, 'studio_minutes');
+      applyStudioSettings(ref, ref.read(studioEngineProvider));
 
   @override
   void dispose() {
