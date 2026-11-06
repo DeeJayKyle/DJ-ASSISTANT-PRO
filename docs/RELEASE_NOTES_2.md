@@ -7,7 +7,7 @@ DJ Assistant 2.0.3
 - **No more running out of memory.** Before splitting, DJ Assistant checks the memory your PC has free. If a song is too long to split at the moment, it says how much is needed instead of crashing. Closing other apps usually helps.
 
 **A faster Library**
-- **Scrolling a big library is smooth.** With 50,000 tracks, each new screenful used to take up to half a second to load; now it takes about a thousandth of that.
+- **Scrolling a big library is smooth.** With 50,000 tracks, each new screenful used to take up to half a second to load; now it takes a millisecond or two.
 - Search uses every word you type (it used to stop after 12).
 
 **Ogg Vorbis and Opus**
