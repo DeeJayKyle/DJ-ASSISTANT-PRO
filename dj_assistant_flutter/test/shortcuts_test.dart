@@ -17,18 +17,21 @@ void main() {
     addTearDown(tester.view.reset);
     final dir = Directory.systemTemp.createTempSync('dja_keys');
     final accounts = AccountsService.open(dir.path);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          accountsProvider.overrideWithValue(accounts),
-          sessionFactoryProvider.overrideWithValue(
-            (db) => AppSession(
-              dbPath: db,
-              online: NoOnline(),
-              secrets: MemorySecrets(),
-            ),
+    final container = ProviderContainer(
+      overrides: [
+        accountsProvider.overrideWithValue(accounts),
+        sessionFactoryProvider.overrideWithValue(
+          (db) => AppSession(
+            dbPath: db,
+            online: NoOnline(),
+            secrets: MemorySecrets(),
           ),
-        ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
         child: const DjAssistantApp(checkUpdates: false),
       ),
     );
@@ -40,7 +43,9 @@ void main() {
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
     expect(find.text('Keyboard shortcuts'), findsNothing);
+    // close the catalogue, or Windows won't delete its folder
     await tester.pumpWidget(const SizedBox());
+    container.dispose();
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 300)),
     );
