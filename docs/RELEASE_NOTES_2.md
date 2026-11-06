@@ -1,24 +1,28 @@
-DJ Assistant 2.0.1
+DJ Assistant 2.0.2
 
-**Stems work again, Pro Stems AI uses your graphics card, and a cleaner look throughout.**
+**No limits, and AI help on every page.**
 
-**Stems (fixes)**
-- **Fast stems failed on every song in 2.0.0.** Splitting now works on the Stems, Remix and DJ Decks pages.
-- **Pro Stems AI never ran in 2.0.0.** The AI engine shipped with 2.0.0 was too old for the model, so every AI split quietly fell back to Fast. 2.0.1 ships a current one.
-- **Pro Stems AI runs on your graphics card again** (DirectML, as in 1.8) when the PC has one, and on the processor otherwise. The Stems page says which one it used.
-- **Playback starts straight away** and uses far less memory. The stems are mixed live instead of being copied for playback, so solo, mute and volume apply instantly. If the sound card can't be started, the page now tells you instead of staying silent.
-- When a song can't be decoded, the page shows the real reason.
+**Nothing is limited any more**
+- **Auto-prep checks your whole library.** It used to look up at most 200 tracks on MusicBrainz and check 300 against the online catalogues each time. Now every track that needs it is checked. MusicBrainz still takes one track a second (MusicBrainz's own rule), so a big library takes a while in the background. You can pause or cancel it.
+- The same goes for every other feature that had a fixed number:
+  - Studio songs of any length (was 15 minutes); analysis reads the whole track (was the first 15 minutes);
+  - song pickers, Suggestions, Discovery, file and change histories, duplicate groups and DJ-software exports;
+  - long lists that used to be cut off on screen now show everything.
+- **You decide.** *Settings → Limits and batch sizes* lists every one of these numbers with what it does. Set your own, or press *Remove all limits*.
 
-**A cleaner look**
-- A new design across every page: the Inter typeface (built in, never downloaded), consistent spacing, panels, buttons, fields and menus, and readable contrast in dark and light.
-- Pages fade in. Hovering, pressing and keyboard focus are visible everywhere. Settings → Appearance → Motion: Reduced turns the animations off.
-- New accent colours in Settings → Appearance: mint, cyan, violet, amber and rose. Panels: Glass/Solid now takes effect.
-- Smaller windows work better. Below about 1240 px wide the sidebar becomes a row of icons, and nothing on any page overflows at 1100 px.
+**AI assistance for every feature**
+- Every page has an **Ask the assistant** button (✦), and the assistant suggests things to do on the page you're on.
+- The AI assistant can now also:
+  - review suggestions (accept, reject, or accept everything above a confidence);
+  - run Auto-prep, and look up your library on MusicBrainz or the online catalogues;
+  - find exact duplicates and record your decisions;
+  - follow artists and match a tracklist on Discovery;
+  - read and change your limits;
+  - open any Studio page with a song: Stems splits it (Fast or AI), Remix selects it, DJ Decks loads it.
+- As before, it never changes anything without your OK: every change shows as a card you press Run on.
+- The assistant no longer stops after 10 steps, and its answers can be longer. Both can be limited in Settings.
 
-**Diagnostics**
-- Settings → About → **Open log folder**. If something goes wrong, the log says what happened. It stays on your PC and is never sent anywhere.
+**Also new since 2.0.1**
+- Keyboard shortcuts sheet: press F1 (or Ctrl+/).
 
-**Updating**
-- Updates 2.0.0 and 1.8 in place and keeps your library, settings and shortcuts. Uninstalling never removes your library data.
-
-**Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning. 2.0.1 has passed automated tests on Windows: updating from 1.8.1 and 2.0.0, splitting MP3, M4A, FLAC, WAV and AIFF files with both methods, and driving the real app through every page. It has not yet been hand-tested on a real library with a sound card and graphics card.
+**Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning. Without limits, very long files (DJ mixes of an hour or more) use more memory in the Studio and take longer to analyse. You can set a limit for either in Settings.
