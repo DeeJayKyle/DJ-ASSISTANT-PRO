@@ -59,6 +59,11 @@ class StudioException implements Exception {
 
 /// Runs [work] in a new isolate, forwarding its progress (0…1). [onIsolate]
 /// receives the isolate so a caller can kill it to cancel.
+///
+/// [work] is copied into the isolate together with everything its scope
+/// captures, so build it in a top-level function that takes only the data it
+/// needs (see [_partJob], [_aiJob]). A closure written inline next to UI
+/// callbacks would drag the page's state along, which can't be sent.
 Future<T> runIsolate<T>(
   T Function(void Function(double) progress) work, {
   void Function(double)? onProgress,
@@ -216,21 +221,8 @@ class StudioEngine {
     String model,
     void Function(double)? onProgress,
   ) async {
-    final mix = l.mix, sr = l.sampleRate;
     final out = await runIsolate<Stems>(
-      (progress) {
-        final m = HtDemucs.open(model);
-        try {
-          return separateAi(
-            mix,
-            sr,
-            m.run,
-            onProgress: (d, t) => progress(d / t),
-          );
-        } finally {
-          m.close();
-        }
-      },
+      _aiJob(l.mix, l.sampleRate, model),
       onProgress: onProgress,
       onIsolate: (i) => _aiIsolate = i,
     );
@@ -295,15 +287,7 @@ class StudioEngine {
             ),
           ];
           return runIsolate<Part>(
-            (progress) => separatePart(
-              ch,
-              p.inStart,
-              len,
-              sr,
-              p.f0,
-              p.f1,
-              onProgress: progress,
-            ),
+            _partJob(ch, p.inStart, len, sr, p.f0, p.f1),
             onProgress: (f) {
               prog[i] = f;
               onProgress?.call(prog.reduce((a, b) => a + b) / prog.length);
@@ -419,7 +403,42 @@ class StudioEngine {
           }(),
     };
     return Isolate.run(
-      () => renderProject(project, srcs, sampleRate, withTracks: withTracks),
+      _renderJob(project, srcs, sampleRate, withTracks: withTracks),
     );
   }
 }
+
+// Isolate jobs. Each is built in its own top-level scope so the closure sent
+// to the isolate captures only its arguments, never the engine or a page.
+
+Stems Function(void Function(double)) _aiJob(
+  List<Float32List> mix,
+  int sr,
+  String model,
+) => (progress) {
+  final m = HtDemucs.open(model);
+  try {
+    return separateAi(mix, sr, m.run, onProgress: (d, t) => progress(d / t));
+  } finally {
+    m.close();
+  }
+};
+
+Part Function(void Function(double)) _partJob(
+  List<Float32List> ch,
+  int start,
+  int len,
+  int sr,
+  int f0,
+  int f1,
+) =>
+    (progress) =>
+        separatePart(ch, start, len, sr, f0, f1, onProgress: progress);
+
+Rendered Function() _renderJob(
+  Project project,
+  Map<String, Source> srcs,
+  int sampleRate, {
+  required bool withTracks,
+}) =>
+    () => renderProject(project, srcs, sampleRate, withTracks: withTracks);
