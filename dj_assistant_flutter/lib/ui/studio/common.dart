@@ -32,17 +32,24 @@ final splitSongsProvider = NotifierProvider<SplitSongs, Set<String>>(
 
 /// A song handed from one Studio page to another ("Remix it →", "DJ it →").
 class StudioHandoff {
-  const StudioHandoff(this.page, this.song, this.at);
+  const StudioHandoff(this.page, this.song, this.at, {this.method});
   final String page;
   final SongRef song;
   final int at;
+
+  /// For Stems: 'fast' or 'ai' (null: the page's current choice).
+  final String? method;
 }
 
 class Handoff extends Notifier<StudioHandoff?> {
   @override
   StudioHandoff? build() => null;
-  void send(String page, SongRef s) =>
-      state = StudioHandoff(page, s, DateTime.now().microsecondsSinceEpoch);
+  void send(String page, SongRef s, {String? method}) => state = StudioHandoff(
+    page,
+    s,
+    DateTime.now().microsecondsSinceEpoch,
+    method: method,
+  );
 }
 
 final handoffProvider = NotifierProvider<Handoff, StudioHandoff?>(Handoff.new);

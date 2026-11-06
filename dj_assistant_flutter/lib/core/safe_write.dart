@@ -398,8 +398,8 @@ class SafeWriteService {
     List<int> ids, {
     bool includeEstimates = false,
   }) {
-    if (ids.isEmpty || ids.length > 5000) {
-      _no('choose between 1 and 5000 tracks');
+    if (ids.isEmpty) {
+      _no('choose at least one track');
     }
     final out = <PlannedChange>[];
     for (final id in ids) {

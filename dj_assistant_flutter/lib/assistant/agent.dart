@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../app/session.dart';
 import '../core/crates.dart';
+import '../core/duplicates.dart' show dupDecisions;
 import '../core/limits.dart';
 import '../core/json.dart';
 import '../core/keys.dart';
@@ -84,7 +85,7 @@ const _str = {'type': 'string'};
 Json _setParams() => _obj(
   {
     'name': _str,
-    'duration_min': _int(5, 720),
+    'duration_min': _int(1),
     'event_type': {
       'type': 'string',
       'description': 'e.g. wedding, club, corporate, birthday, lounge',
@@ -144,7 +145,7 @@ final List<ToolDef> tools = [
         ],
       },
       'desc': {'type': 'boolean'},
-      'limit': _int(1, 100),
+      'limit': _int(1),
     }),
   ),
   ToolDef(
@@ -192,7 +193,7 @@ final List<ToolDef> tools = [
     'crate_tracks',
     Tier.read,
     'Tracks in one crate (compact rows).',
-    () => _obj({'crate_id': _int(), 'limit': _int(1, 200)}, ['crate_id']),
+    () => _obj({'crate_id': _int(), 'limit': _int(1)}, ['crate_id']),
   ),
   ToolDef(
     'crate_templates',
@@ -210,13 +211,13 @@ final List<ToolDef> tools = [
     'duplicates_summary',
     Tier.read,
     'Duplicate groups (exact / possible / alternate versions) with their tracks and reasons. Exact groups need a full-file hash run first.',
-    () => _obj({'limit': _int(1, 50)}),
+    () => _obj({'limit': _int(1)}),
   ),
   ToolDef(
     'suggestions_summary',
     Tier.read,
     'Pending metadata suggestions (field, current value, suggested value, source, confidence).',
-    () => _obj({'limit': _int(1, 100)}),
+    () => _obj({'limit': _int(1)}),
   ),
   ToolDef(
     'jobs_status',
@@ -284,6 +285,9 @@ final List<ToolDef> tools = [
             'gig',
             'gig-pack',
             'settings',
+            'quick',
+            'organize',
+            'files',
           ],
         },
         'crate_id': _int(),
@@ -426,6 +430,148 @@ final List<ToolDef> tools = [
     Tier.act,
     'End the current gig and produce the recap.',
     _obj,
+  ),
+  // ---- every feature: suggestions, auto-prep, lookups, duplicates,
+  // discovery, limits, Studio, and every page
+  ToolDef(
+    'list_suggestions',
+    Tier.read,
+    'Metadata suggestions (pending, accepted or rejected) with their evidence and confidence.',
+    () => _obj({
+      'status': {
+        'type': 'string',
+        'enum': ['pending', 'accepted', 'rejected'],
+      },
+      'track_id': _int(),
+      'limit': _int(1),
+    }),
+  ),
+  ToolDef(
+    'duplicate_groups',
+    Tier.read,
+    'Exact duplicates (same file contents), possible duplicates and alternate versions, with the decision the DJ made for each group.',
+    _obj,
+  ),
+  ToolDef(
+    'discovery_items',
+    Tier.read,
+    'Recommendations and new releases on the Discovery page, and the artists the DJ follows.',
+    _obj,
+  ),
+  ToolDef(
+    'get_limits',
+    Tier.read,
+    'Every limit in Settings → Limits and batch sizes (null means no limit).',
+    _obj,
+  ),
+  ToolDef(
+    'run_auto_prep',
+    Tier.act,
+    'Run auto-prep: analysis, suggestions from names and folders, online lookups for services that are on, then the confident fixes (catalogue only).',
+    _obj,
+  ),
+  ToolDef(
+    'decide_suggestions',
+    Tier.act,
+    'Accept or reject suggestions by id (accepting writes the value to the catalogue only, never to files).',
+    () => _obj({
+      'accept': _ids('Suggestion ids to accept.'),
+      'reject': _ids('Suggestion ids to reject.'),
+    }),
+  ),
+  ToolDef(
+    'accept_confident_suggestions',
+    Tier.act,
+    'Accept every pending suggestion at or above a confidence (0–1), optionally from one source.',
+    () => _obj(
+      {
+        'min_confidence': {'type': 'number'},
+        'source': _str,
+      },
+      ['min_confidence'],
+    ),
+  ),
+  ToolDef(
+    'online_lookup',
+    Tier.act,
+    'Look tracks up online: musicbrainz (year, genre, album) or catalogs (BPM, key, credits from the catalogues the DJ turned on). Only for services that are on. Without track_ids, the whole library.',
+    () => _obj(
+      {
+        'service': {
+          'type': 'string',
+          'enum': ['musicbrainz', 'catalogs'],
+        },
+        'track_ids': _ids('Tracks to look up (default: all).'),
+      },
+      ['service'],
+    ),
+  ),
+  ToolDef(
+    'find_exact_duplicates',
+    Tier.act,
+    'Compare file contents (full-file hash, read-only) to confirm exact duplicates, in the background.',
+    _obj,
+  ),
+  ToolDef(
+    'decide_duplicates',
+    Tier.act,
+    'Record the DJ\'s decision for a duplicate group: ${dupDecisions.join(', ')}, or null to clear it. Nothing is deleted.',
+    () => _obj(
+      {
+        'group_key': _str,
+        'decision': {
+          'type': ['string', 'null'],
+          'enum': [...dupDecisions, null],
+        },
+      },
+      ['group_key'],
+    ),
+  ),
+  ToolDef(
+    'follow_artist',
+    Tier.act,
+    'Follow an artist on the Discovery page (new releases are checked when MusicBrainz is on).',
+    () => _obj({'name': _str}, ['name']),
+  ),
+  ToolDef(
+    'match_tracklist',
+    Tier.read,
+    'Match a pasted tracklist ("Artist - Title" per line) against the library: owned, missing, unknown.',
+    () => _obj({'text': _str}, ['text']),
+  ),
+  ToolDef(
+    'set_limit',
+    Tier.act,
+    'Set or remove a limit in Settings → Limits and batch sizes (value null removes it). See get_limits for the names.',
+    () => _obj(
+      {
+        'limit': {
+          'type': 'string',
+          'enum': [for (final d in limitDefs) d.key],
+        },
+        'value': <String, Object?>{},
+      },
+      ['limit'],
+    ),
+  ),
+  ToolDef(
+    'open_studio',
+    Tier.ui,
+    'Open a Studio page. With track_id: stems splits that song (method fast or ai), remix selects it, dj loads it on a free deck.',
+    () => _obj(
+      {
+        'page': {
+          'type': 'string',
+          'enum': ['stems', 'remix', 'dj', 'synth', 'drums'],
+        },
+        'track_id': _int(),
+        'method': {
+          'type': 'string',
+          'enum': ['fast', 'ai'],
+        },
+      },
+      ['page'],
+    ),
   ),
   ToolDef(
     'change_setting',
@@ -676,13 +822,34 @@ class Agent {
         return 'End the gig and make the recap';
       case 'change_setting':
         return 'Change ${_s(input, 'setting')} to ${input['value'] == null ? '' : _bare(input['value'])}';
+      case 'run_auto_prep':
+        return 'Run auto-prep (catalogue only; online steps only for services that are on)';
+      case 'decide_suggestions':
+        return 'Accept ${n('accept')} and reject ${n('reject')} suggestion(s) (catalogue only)';
+      case 'accept_confident_suggestions':
+        return 'Accept every pending suggestion with confidence ≥ ${input['min_confidence']}${_s(input, 'source').isEmpty ? '' : ' from ${_s(input, 'source')}'}';
+      case 'online_lookup':
+        final t = n('track_ids');
+        return 'Look up ${t == 0 ? 'the whole library' : '$t track(s)'} on ${_s(input, 'service') == 'musicbrainz' ? 'MusicBrainz' : 'the online catalogues'}';
+      case 'find_exact_duplicates':
+        return 'Compare file contents to find exact duplicates (read-only)';
+      case 'decide_duplicates':
+        return 'Mark a duplicate group as ${input['decision'] == null ? 'undecided' : _bare(input['decision'])} (nothing is deleted)';
+      case 'follow_artist':
+        return 'Follow ${_s(input, 'name')} on Discovery';
+      case 'set_limit':
+        return input['value'] == null
+            ? 'Remove the limit ${_s(input, 'limit')}'
+            : 'Set the limit ${_s(input, 'limit')} to ${_bare(input['value'])}';
     }
     return name.replaceAll('_', ' ');
   }
 
   /// Runs one tool. ui tools return a confirmation; the front end applies them.
   Object? runTool(String name, Json input) {
-    int lim(int d, int max) => (_intOf(input['limit']) ?? d).clamp(1, max);
+    // a default page size; the assistant can ask for as many as it needs
+    int lim(int d) =>
+        (_intOf(input['limit']) ?? d) < 1 ? 1 : (_intOf(input['limit']) ?? d);
     switch (name) {
       case 'library_overview':
         final videos = _search(
@@ -712,7 +879,7 @@ class Agent {
           filters: input['filters'],
           sort: input['sort'] as String?,
           desc: input['desc'] == true,
-          limit: lim(25, 100),
+          limit: lim(25),
         );
         final rows = [for (final r in page.rows) compactRow(r.toJson())];
         return {'total': page.total, 'shown': rows.length, 'tracks': rows};
@@ -742,7 +909,7 @@ class Agent {
       case 'crate_tracks':
         final id = _intOf(input['crate_id']);
         if (id == null) throw AgentException('give the crate id');
-        final page = app.crates.tracks(id, limit: lim(50, 200));
+        final page = app.crates.tracks(id, limit: lim(50));
         return {
           'total': page.total,
           'tracks': [for (final r in page.rows) compactRow(r.toJson())],
@@ -762,13 +929,13 @@ class Agent {
         final g = app.duplicates.findGroups();
         return {
           'groups': g.length,
-          'first': [for (final x in g.take(lim(15, 50))) x.toJson()],
+          'first': [for (final x in g.take(lim(15))) x.toJson()],
         };
       case 'suggestions_summary':
         final s = app.suggestions.list(status: 'pending');
         return {
           'pending': s.length,
-          'first': [for (final x in s.take(lim(30, 100))) x.toJson()],
+          'first': [for (final x in s.take(lim(30))) x.toJson()],
         };
       case 'jobs_status':
         return {
@@ -788,7 +955,7 @@ class Agent {
         return app.gig.current();
       case 'get_settings':
         return app.settings.all()..remove('privacy_acknowledged');
-      case 'show_tracks' || 'open_view':
+      case 'show_tracks' || 'open_view' || 'open_studio':
         return {'ok': true, 'note': 'The app is now showing it to the DJ.'};
 
       case 'create_crate':
@@ -837,8 +1004,8 @@ class Agent {
         );
       case 'update_tracks':
         final tids = _idList(input, 'track_ids');
-        if (tids.isEmpty || tids.length > 5000) {
-          throw AgentException('choose between 1 and 5000 tracks');
+        if (tids.isEmpty) {
+          throw AgentException('choose at least one track');
         }
         final patch = input['values'] is Map
             ? Map<String, Object?>.from(input['values']! as Map)
@@ -886,6 +1053,99 @@ class Agent {
       case 'end_gig_mode':
         final id = app.gig.end();
         return {'gig_id': id, 'recap': id == null ? null : app.gig.recap(id)};
+      case 'list_suggestions':
+        return [
+          for (final x in app.suggestions.list(
+            status: _s(input, 'status').isEmpty ? null : _s(input, 'status'),
+            trackId: _intOf(input['track_id']),
+            limit: _intOf(input['limit']),
+          ))
+            {
+              'id': x.id,
+              'track_id': x.trackId,
+              'track': x.track,
+              'field': x.field,
+              'current': x.currentValue,
+              'suggested': x.suggestedValue,
+              'source': x.source,
+              'confidence': x.confidence,
+              'status': x.status,
+            },
+        ];
+      case 'duplicate_groups':
+        return [
+          for (final g in app.duplicates.findGroups())
+            {
+              'kind': g.kind,
+              'group_key': g.key,
+              'reason': g.reason,
+              'decision': g.decision,
+              'tracks': [for (final r in g.tracks) compactRow(r.toJson())],
+            },
+        ];
+      case 'discovery_items':
+        return {
+          'items': app.discovery.items(),
+          'followed': app.discovery.followed(),
+        };
+      case 'get_limits':
+        return {
+          for (final d in limitDefs)
+            d.key: {
+              'label': d.label,
+              'value': limitOf(app.cat, d.key),
+              'unit': d.unit,
+            },
+        };
+      case 'match_tracklist':
+        return app.discovery.matchTracklist(_s(input, 'text'));
+      case 'run_auto_prep':
+        return app.runAutoPrep();
+      case 'decide_suggestions':
+        final acc = _idList(input, 'accept'), rej = _idList(input, 'reject');
+        for (final id in acc) {
+          app.suggestions.accept(id);
+        }
+        for (final id in rej) {
+          app.suggestions.reject(id);
+        }
+        return {'accepted': acc.length, 'rejected': rej.length};
+      case 'accept_confident_suggestions':
+        final min = (input['min_confidence'] as num?)?.toDouble() ?? 0.9;
+        final src = _s(input, 'source');
+        return {
+          'accepted': app.suggestions.acceptBulk(
+            min,
+            source: src.isEmpty ? null : src,
+          ),
+        };
+      case 'online_lookup':
+        final ids = _idList(input, 'track_ids');
+        final all = ids.isEmpty
+            ? app.library.trackIds(const TrackQuery())
+            : ids;
+        return _s(input, 'service') == 'musicbrainz'
+            ? app.lookupMusicbrainz(all)
+            : app.lookupCatalogs(all);
+      case 'find_exact_duplicates':
+        return app.startHash();
+      case 'decide_duplicates':
+        app.duplicates.setDecision(
+          _s(input, 'group_key'),
+          input['decision'] == null ? null : '${input['decision']}',
+        );
+        return {'ok': true};
+      case 'follow_artist':
+        app.discovery.follow('artist', _s(input, 'name'));
+        return {'ok': true};
+      case 'set_limit':
+        final v = input['value'];
+        setLimit(
+          app.cat,
+          _s(input, 'limit'),
+          v == null ? null : (v is num ? v.toInt() : int.tryParse('$v')),
+        );
+        return {'ok': true};
       case 'change_setting':
         final key = _s(input, 'setting');
         if (!_assistantSettings.contains(key)) {

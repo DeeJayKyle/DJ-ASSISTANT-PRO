@@ -46,10 +46,8 @@ class DjExportService {
       _Node(r['id'] as int, r['name'] as String, r['parent_id'] as int?),
   ];
 
-  List<int> _members(int crateId) => LibraryService(cat).trackIds(
-    TrackQuery(extraWhere: CratesService(cat).membership(crateId)),
-    max: 50000,
-  );
+  List<int> _members(int crateId) => LibraryService(cat)
+      .trackIds(TrackQuery(extraWhere: CratesService(cat).membership(crateId)));
 
   /// The chosen crates plus everything nested inside them.
   List<int> _selection(List<_Node> all, List<int>? ids) {

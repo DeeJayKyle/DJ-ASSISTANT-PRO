@@ -222,6 +222,10 @@ class _StemsPageState extends ConsumerState<StemsPage> {
 
   @override
   Widget build(BuildContext context) {
+    // a song sent here (by the assistant or another page) is split at once
+    ref.listen(handoffProvider, (_, h) {
+      if (h != null && h.page == 'stems') unawaited(pick(h.song, h.method));
+    });
     final t = DjTokens.of(context);
     final l = loaded, a = l?.analysis;
     final chord = a == null ? null : chordAt(a.chords, pos);

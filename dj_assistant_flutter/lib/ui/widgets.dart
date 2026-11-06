@@ -21,6 +21,10 @@ class PageFrame extends StatefulWidget {
   final Widget child;
   final bool scroll;
 
+  /// Opens the assistant on this page's suggestions (set by the shell), so
+  /// every page offers AI help from its header.
+  static void Function(BuildContext context)? onAskAssistant;
+
   @override
   State<PageFrame> createState() => _PageFrameState();
 }
@@ -61,11 +65,19 @@ class _PageFrameState extends State<PageFrame> {
           spacing: Space.x2,
           runSpacing: Space.x2,
           crossAxisAlignment: WrapCrossAlignment.center,
-          children: actions,
+          children: [
+            ...actions,
+            if (PageFrame.onAskAssistant case final ask?)
+              IconButton(
+                tooltip: 'Ask the assistant about this page (Ctrl+J)',
+                icon: Icon(Icons.auto_awesome, color: t.accent),
+                onPressed: () => ask(context),
+              ),
+          ],
         );
         final head = Padding(
           padding: EdgeInsets.fromLTRB(pad, Space.x5, pad, Space.x3),
-          child: narrow || actions.isEmpty
+          child: narrow
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

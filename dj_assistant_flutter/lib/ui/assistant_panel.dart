@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../assistant/agent.dart';
 import '../assistant/rule_assistant.dart';
 import '../core/crates.dart';
+import '../core/library_edit.dart';
 import 'state.dart';
+import 'studio/common.dart' show handoffProvider, songOf;
 import 'theme.dart';
 
 /// The assistant lives here for the whole session (the conversation survives
@@ -39,6 +41,18 @@ void applyUiAction(WidgetRef ref, Map<String, Object?> a) {
           ),
         );
     v.go('library');
+    return;
+  }
+  if (a['type'] == 'open_studio') {
+    final page = '${a['page'] ?? 'stems'}';
+    final id = (a['track_id'] as num?)?.toInt();
+    final row = id == null ? null : ref.read(sessionProvider).library.row(id);
+    v.go('studio:$page');
+    if (row != null && const {'stems', 'remix', 'dj'}.contains(page)) {
+      ref
+          .read(handoffProvider.notifier)
+          .send(page, songOf(row), method: a['method'] as String?);
+    }
     return;
   }
   final view = '${a['view'] ?? 'library'}';
@@ -456,6 +470,11 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
                         : _bubble(context, msgs[i]),
                   ),
           ),
+          if (aiOn)
+            _PageSuggestions(
+              view: ref.watch(viewProvider).id,
+              onPick: (p) => _send(p),
+            ),
           Padding(
             padding: const EdgeInsets.all(10),
             child: TextField(
@@ -654,6 +673,111 @@ class RichReply extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the AI assistant can do on each page, offered as one-tap requests.
+const pageAiSuggestions = <String, List<String>>{
+  'library': [
+    'Which tracks here are missing BPM or key? Analyse them',
+    'Tidy the genres in my library',
+    'Tag my vocal tracks',
+  ],
+  'quick': [
+    'Prepare my newest folder for a wedding gig',
+    'Clean the track names in my newest folder',
+  ],
+  'crates': [
+    'Build crates for my top genres',
+    'Make a smart crate for 120–128 BPM house',
+  ],
+  'crate': ['What would fit in this crate?', 'Order this crate for a warm-up'],
+  'duplicates': [
+    'Find exact duplicates and explain each group',
+    'Mark the alternate versions as intentional',
+  ],
+  'activity': ['Scan my music folders', 'Analyse every track not analysed yet'],
+  'health': [
+    'Fix missing genres with confident suggestions',
+    'Look up missing years on MusicBrainz',
+  ],
+  'suggestions': [
+    'Accept every suggestion above 90% confidence',
+    'Show the suggestions with the least evidence',
+    'Look up my whole library in the online catalogues',
+  ],
+  'organize': [
+    'Run auto-prep on my whole library',
+    'What would auto-prep change?',
+  ],
+  'set-studio': [
+    'Plan a 3 hour club set from 118 to 128 BPM',
+    'Plan a wedding set with a clean-only filter',
+  ],
+  'discovery': [
+    'Follow the artists I play most',
+    'What new releases do I not own yet?',
+  ],
+  'gig': ['Start gig mode with my last saved set', 'Recap my last gig'],
+  'gig-pack': ['Which set should I pack for tonight?'],
+  'files': ['Which personal files take the most space?'],
+  'settings': [
+    'Show me every limit',
+    'Remove all limits',
+    'Switch to the light theme',
+  ],
+  'studio:stems': [
+    'Split my newest track into stems with AI',
+    'Split the most played track with the Fast method',
+  ],
+  'studio:remix': [
+    'Pick two songs in the same key for a mashup',
+    'Open my best 124 BPM track in Remix',
+  ],
+  'studio:dj': [
+    'Load two tracks that mix well on the decks',
+    'Which track should I play after this one?',
+  ],
+  'studio:synth': ['Open Synth Lab and suggest a sound for deep house'],
+  'studio:drums': ['Open Drum Lab and suggest a kit for Afrobeats'],
+};
+
+class _PageSuggestions extends StatelessWidget {
+  const _PageSuggestions({required this.view, required this.onPick});
+  final String view;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = pageAiSuggestions[view] ?? const <String>[];
+    if (items.isEmpty) return const SizedBox.shrink();
+    final t = DjTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'FOR THIS PAGE',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(letterSpacing: 0.8, color: t.faint),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final p in items)
+                ActionChip(
+                  avatar: Icon(Icons.auto_awesome, size: 14, color: t.accent),
+                  label: Text(p),
+                  onPressed: () => onPick(p),
+                ),
+            ],
+          ),
         ],
       ),
     );

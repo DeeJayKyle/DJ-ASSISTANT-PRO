@@ -266,7 +266,7 @@ class SuggestionsService {
 
   int acceptBulk(double min, {String? source}) {
     var n = 0;
-    for (final s in list(status: 'pending', limit: 50000)) {
+    for (final s in list(status: 'pending')) {
       if ((s.confidence ?? 0) < min || (source != null && s.source != source)) {
         continue;
       }
@@ -285,7 +285,7 @@ class SuggestionsService {
   /// existing value only at or above [minReplace].
   int acceptRecommended(double minFill, double minReplace) {
     var n = 0;
-    for (final s in list(status: 'pending', limit: 50000)) {
+    for (final s in list(status: 'pending')) {
       if (!autoFields.contains(s.field)) continue;
       final empty = s.currentValue == null || s.currentValue!.trim().isEmpty;
       if ((s.confidence ?? 0) < (empty ? minFill : minReplace)) continue;

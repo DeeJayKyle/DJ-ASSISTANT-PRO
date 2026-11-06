@@ -99,7 +99,7 @@ class DuplicatesService {
 
   /// Every duplicate group: exact ones need a current full-file hash; possible and
   /// alternate ones are metadata candidates.
-  List<DupGroup> findGroups({int maxGroups = 500}) {
+  List<DupGroup> findGroups({int? maxGroups}) {
     final dec = {
       for (final r in cat.db.select(
         'SELECT pair_key, decision FROM duplicate_reviews',
@@ -110,8 +110,7 @@ class DuplicatesService {
     final exactSets = <Set<int>>[];
     for (final r in cat.db.select(
       "SELECT content_hash, GROUP_CONCAT(id) AS ids FROM tracks WHERE presence='present' AND content_hash IS NOT NULL "
-      'AND hash_size = file_size AND hash_mtime IS file_mtime GROUP BY content_hash HAVING COUNT(*) > 1 LIMIT ?',
-      [maxGroups],
+      'AND hash_size = file_size AND hash_mtime IS file_mtime GROUP BY content_hash HAVING COUNT(*) > 1${maxGroups == null ? '' : ' LIMIT $maxGroups'}',
     )) {
       final ids = (r['ids'] as String).split(',').map(int.parse).toList();
       final key = groupKey('exact', ids);
@@ -141,7 +140,7 @@ class DuplicatesService {
       ));
     }
     for (final e in byKey.entries) {
-      if (groups.length >= maxGroups) break;
+      if (maxGroups != null && groups.length >= maxGroups) break;
       final k = e.key, members = e.value;
       final byVersion = <String, List<(int, int?, String)>>{};
       for (final m in members) {

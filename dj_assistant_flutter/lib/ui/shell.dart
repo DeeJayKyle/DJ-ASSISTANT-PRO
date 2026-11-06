@@ -115,6 +115,10 @@ class _ShellState extends ConsumerState<Shell> {
 
   @override
   Widget build(BuildContext context) {
+    PageFrame.onAskAssistant = (_) {
+      final mode = ref.read(chatModeProvider);
+      if (mode == 'hidden') ref.read(chatModeProvider.notifier).set('open');
+    };
     final view = ref.watch(viewProvider);
     final chat = ref.watch(chatModeProvider);
     final body = screenFor(view);
