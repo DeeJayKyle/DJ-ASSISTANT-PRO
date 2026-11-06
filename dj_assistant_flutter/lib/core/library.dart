@@ -155,7 +155,6 @@ class LibraryService {
     if (text != null) {
       final tokens = text
           .split(RegExp(r'\s+'))
-          .take(12)
           .map(fold)
           .where((s) => s.isNotEmpty);
       for (final tok in tokens) {
@@ -175,11 +174,21 @@ class LibraryService {
     return (parts.isEmpty ? '1=1' : parts.join(' AND '), params);
   }
 
+  // The ordered ids of the last query, kept until the catalogue changes:
+  // sorting 50,000 tracks by folded artist and title takes a few hundred
+  // milliseconds, and the Library asks for a new page of 200 as it scrolls.
+  String? _orderKey;
+  (int, int)? _orderToken;
+  List<int>? _order;
+
+  /// Changes made by this connection, and by any other (scan, analysis jobs).
+  (int, int) _token() => (
+    cat.db.select('SELECT total_changes() AS n').first['n'] as int,
+    cat.db.select('PRAGMA data_version').first.values.first as int,
+  );
+
   TrackPage search(TrackQuery q) {
     final (w, params) = where(q);
-    final total =
-        cat.db.select('SELECT COUNT(*) AS n $from WHERE $w', params).first['n']
-            as int;
     final limit = q.limit < 1 ? 1 : q.limit;
     final offset = q.offset < 0 ? 0 : q.offset;
     final String order;
@@ -190,10 +199,37 @@ class LibraryService {
       if (e == null) throw ArgumentError('unknown sort column');
       order = '$e IS NULL, $e ${q.desc ? 'DESC' : 'ASC'}, t.id';
     }
-    final rows = cat.db.select(
-      'SELECT ${_rowCols(lowBitrateKbps)} $from WHERE $w ORDER BY $order LIMIT $limit OFFSET $offset',
-      params,
-    );
-    return TrackPage(total, offset, rows.map(TrackRow.new).toList());
+    final key = '$w\u0000${params.join('\u0001')}\u0000$order';
+    final token = _token();
+    if (_order == null || _orderKey != key || _orderToken != token) {
+      _order = [
+        for (final r in cat.db.select(
+          'SELECT t.id AS id $from WHERE $w ORDER BY $order',
+          params,
+        ))
+          r['id'] as int,
+      ];
+      _orderKey = key;
+      _orderToken = token;
+    }
+    final ids = _order!;
+    final total = ids.length;
+    final end = offset + limit > total ? total : offset + limit;
+    final slice = offset >= total ? const <int>[] : ids.sublist(offset, end);
+    final byId = <int, TrackRow>{};
+    for (var k = 0; k < slice.length; k += 500) {
+      final chunk = slice.sublist(
+        k,
+        k + 500 > slice.length ? slice.length : k + 500,
+      );
+      for (final r in cat.db.select(
+        'SELECT ${_rowCols(lowBitrateKbps)} $from WHERE t.id IN (${List.filled(chunk.length, '?').join(',')})',
+        chunk,
+      )) {
+        final row = TrackRow(r);
+        byId[row.id] = row;
+      }
+    }
+    return TrackPage(total, offset, [for (final id in slice) ?byId[id]]);
   }
 }
