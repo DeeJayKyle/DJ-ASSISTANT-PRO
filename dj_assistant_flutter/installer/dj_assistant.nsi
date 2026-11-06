@@ -102,13 +102,27 @@ Function .onInit
   ${EndIf}
 FunctionEnd
 
-; Waits until a running copy has closed (the 1.x updater exits before it runs us).
+; Waits until a running copy has closed. The 1.x updater starts us and then
+; quits, so 1.x may still be closing, or a virus scanner may still hold its
+; file: both the new and the 1.x program must be free before anything is
+; removed.
 Function WaitForAppToClose
+  StrCpy $R7 "$INSTDIR\${MAINBINARYNAME}.exe"
+  Call WaitForFile
+  ReadRegStr $R7 HKCU "${UNINSTKEY}" "MainBinaryName"
+  ${If} $R7 != ""
+    StrCpy $R7 "$INSTDIR\$R7"
+    Call WaitForFile
+  ${EndIf}
+FunctionEnd
+
+; Waits until the program file $R7 can be opened for writing.
+Function WaitForFile
   StrCpy $R9 0
   loop:
     ClearErrors
-    ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
-      FileOpen $R8 "$INSTDIR\${MAINBINARYNAME}.exe" a
+    ${If} ${FileExists} "$R7"
+      FileOpen $R8 "$R7" a
       ${If} ${Errors}
         IntOp $R9 $R9 + 1
         ${If} $R9 > 30
@@ -149,6 +163,21 @@ Function RemoveOneX
   ${EndIf}
   ; _?= leaves the uninstaller itself behind
   Delete "$INSTDIR\uninstall.exe"
+  ; the 1.x uninstaller skips a file it can't delete (still held by a scanner)
+  ${If} $OldMainBinaryName != ""
+  ${AndIf} $OldMainBinaryName != "${MAINBINARYNAME}.exe"
+    StrCpy $R9 0
+    retry:
+    ${If} ${FileExists} "$INSTDIR\$OldMainBinaryName"
+      Delete "$INSTDIR\$OldMainBinaryName"
+      IntOp $R9 $R9 + 1
+      ${If} $R9 < 40
+        Sleep 250
+        Goto retry
+      ${EndIf}
+      Delete /REBOOTOK "$INSTDIR\$OldMainBinaryName"
+    ${EndIf}
+  ${EndIf}
 FunctionEnd
 
 ; Points an existing shortcut at the new program (1.x's exe had another name).
