@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../audio/pcm.dart';
+import '../core/diag_log.dart';
 import 'ai_stems.dart';
 import 'dsp.dart';
 import 'midi.dart';
@@ -50,11 +51,20 @@ class Loaded {
 }
 
 class StudioException implements Exception {
-  StudioException(this.message, {this.fallback = false});
+  StudioException(this.message, {this.fallback = false, this.detail});
   final String message;
   final bool fallback;
+
+  /// The underlying reason (decoder or runtime message), shown on the page
+  /// and written to the diagnostics log.
+  final String? detail;
+
+  /// A stack trace from the isolate that failed, for the log only.
+  String? stack;
+
   @override
-  String toString() => message;
+  String toString() =>
+      detail == null || detail!.isEmpty ? message : '$message ($detail)';
 }
 
 /// Runs [work] in a new isolate, forwarding its progress (0…1). [onIsolate]
@@ -74,11 +84,16 @@ Future<T> runIsolate<T>(
   port.listen((m) {
     if (m is double) {
       onProgress?.call(m);
-    } else if (m is List && m.length == 2) {
+    } else if (m is List && m.length >= 2) {
       if (m[0] == 'ok') {
         done.complete(m[1] as T);
       } else {
-        done.completeError(StudioException('${m[1]}'));
+        done.completeError(
+          StudioException(
+            '${m[1]}',
+            detail: m.length > 3 ? m[3] as String? : null,
+          )..stack = m.length > 2 ? m[2] as String? : null,
+        );
       }
     } else if (m == null && !done.isCompleted) {
       done.completeError(Cancelled());
@@ -110,13 +125,19 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
       }
     });
     send.send(['ok', r]);
-  } catch (e) {
-    send.send(['err', e is StudioException ? e.message : '$e']);
+  } catch (e, st) {
+    send.send([
+      'err',
+      e is StudioException ? e.message : '$e',
+      '$st',
+      if (e is StudioException) e.detail,
+    ]);
   }
 }
 
-/// Decodes a whole file to stereo float channels (read only).
-(int, List<Float32List>) decodeStereo(
+/// Decodes a whole file to stereo float channels (read only); also says
+/// which decoder read it.
+(int, List<Float32List>, String) decodeStereo(
   String path, {
   double maxSeconds = 15 * 60,
 }) {
@@ -128,8 +149,8 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
   final PcmReader r;
   try {
     r = openPcm(path);
-  } on Object {
-    throw StudioException('This file can’t be decoded here.');
+  } on Object catch (e) {
+    throw StudioException('This file can’t be decoded here.', detail: '$e');
   }
   try {
     final sr = r.sampleRate, ch = r.channels;
@@ -162,9 +183,10 @@ void _entry<T>((SendPort, T Function(void Function(double))) a) {
         Float32List.fromList(Float32List.sublistView(l, 0, n)),
         Float32List.fromList(Float32List.sublistView(rt, 0, n)),
       ],
+      '${r.runtimeType}',
     );
-  } on DecodeException {
-    throw StudioException('This file can’t be decoded here.');
+  } on DecodeException catch (e) {
+    throw StudioException('This file can’t be decoded here.', detail: '$e');
   } finally {
     r.close();
   }
@@ -181,7 +203,7 @@ class StudioEngine {
   /// The installed Pro Stems AI model file, or null.
   String? aiModel;
 
-  /// Where the last AI run happened ('cpu').
+  /// Where the last AI run happened: 'gpu' (DirectML) or 'cpu'.
   String? aiDevice;
   Isolate? _aiIsolate;
 
@@ -191,8 +213,20 @@ class StudioEngine {
       songs[song.id] = hit; // most recently used last
       return hit;
     }
-    final path = song.path;
-    final (sr, mix) = await Isolate.run(() => decodeStereo(path));
+    final path = song.path, sw = Stopwatch()..start();
+    final (int, List<Float32List>, String) d;
+    try {
+      d = await Isolate.run(() => decodeStereo(path));
+    } on Object catch (e, st) {
+      DiagLog.error('studio', 'decoding $path failed: $e', st);
+      rethrow;
+    }
+    final (sr, mix, decoder) = d;
+    DiagLog.info(
+      'studio',
+      'decoded $path with $decoder: ${mix[0].length / sr} s at $sr Hz '
+          'in ${sw.elapsedMilliseconds} ms',
+    );
     final l = Loaded(song, sr, mix);
     songs[song.id] = l;
     while (songs.length > keep) {
@@ -221,13 +255,13 @@ class StudioEngine {
     String model,
     void Function(double)? onProgress,
   ) async {
-    final out = await runIsolate<Stems>(
+    final (out, device) = await runIsolate<(Stems, String)>(
       _aiJob(l.mix, l.sampleRate, model),
       onProgress: onProgress,
       onIsolate: (i) => _aiIsolate = i,
     );
     _aiIsolate = null;
-    aiDevice = 'cpu';
+    aiDevice = device;
     return {
       'vocals': out['vocals']!,
       'drums': out['drums']!,
@@ -249,10 +283,23 @@ class StudioEngine {
     if (method == 'ai' && model != null) {
       if (l.aiStems == null) {
         try {
+          final sw = Stopwatch()..start();
           l.aiStems = await _separateAi(l, model, onProgress);
+          DiagLog.info(
+            'studio',
+            'AI split of ${l.durationSec.toStringAsFixed(1)} s on $aiDevice '
+                'in ${sw.elapsedMilliseconds} ms',
+          );
         } on Cancelled {
           rethrow;
-        } catch (e) {
+        } catch (e, st) {
+          DiagLog.error(
+            'studio',
+            'AI split failed, using Fast: $e',
+            e is StudioException && e.stack != null
+                ? StackTrace.fromString(e.stack!)
+                : st,
+          );
           aiDevice = null;
           l.stems = await separate(l, onProgress: onProgress, method: 'fast');
           l.stemsBy = 'fast';
@@ -272,30 +319,41 @@ class StudioEngine {
       return l.stems!;
     }
     final len = l.mix[0].length, sr = l.sampleRate;
-    final plans = planParts(len, workers);
+    final plans = planParts(len, workers), sw = Stopwatch()..start();
     final prog = List.filled(plans.length, 0.0);
-    final parts = await Future.wait([
-      for (var i = 0; i < plans.length; i++)
-        () {
-          final p = plans[i];
-          final ch = [
-            Float32List.fromList(
-              Float32List.sublistView(l.mix[0], p.inStart, p.inEnd),
-            ),
-            Float32List.fromList(
-              Float32List.sublistView(l.mix[1], p.inStart, p.inEnd),
-            ),
-          ];
-          return runIsolate<Part>(
-            _partJob(ch, p.inStart, len, sr, p.f0, p.f1),
-            onProgress: (f) {
-              prog[i] = f;
-              onProgress?.call(prog.reduce((a, b) => a + b) / prog.length);
-            },
-          );
-        }(),
-    ]);
+    final List<Part> parts;
+    try {
+      parts = await Future.wait([
+        for (var i = 0; i < plans.length; i++)
+          () {
+            final p = plans[i];
+            final ch = [
+              Float32List.fromList(
+                Float32List.sublistView(l.mix[0], p.inStart, p.inEnd),
+              ),
+              Float32List.fromList(
+                Float32List.sublistView(l.mix[1], p.inStart, p.inEnd),
+              ),
+            ];
+            return runIsolate<Part>(
+              _partJob(ch, p.inStart, len, sr, p.f0, p.f1),
+              onProgress: (f) {
+                prog[i] = f;
+                onProgress?.call(prog.reduce((a, b) => a + b) / prog.length);
+              },
+            );
+          }(),
+      ]);
+    } on Object catch (e, st) {
+      DiagLog.error('studio', 'Fast split failed: $e', st);
+      rethrow;
+    }
     l.stems = mergeParts(parts, len);
+    DiagLog.info(
+      'studio',
+      'Fast split of ${l.durationSec.toStringAsFixed(1)} s on '
+          '${plans.length} isolates in ${sw.elapsedMilliseconds} ms',
+    );
     l.fastStems = l.stems;
     l.stemsBy = 'fast';
     return l.stems!;
@@ -411,14 +469,17 @@ class StudioEngine {
 // Isolate jobs. Each is built in its own top-level scope so the closure sent
 // to the isolate captures only its arguments, never the engine or a page.
 
-Stems Function(void Function(double)) _aiJob(
+(Stems, String) Function(void Function(double)) _aiJob(
   List<Float32List> mix,
   int sr,
   String model,
 ) => (progress) {
   final m = HtDemucs.open(model);
   try {
-    return separateAi(mix, sr, m.run, onProgress: (d, t) => progress(d / t));
+    return (
+      separateAi(mix, sr, m.run, onProgress: (d, t) => progress(d / t)),
+      m.device,
+    );
   } finally {
     m.close();
   }

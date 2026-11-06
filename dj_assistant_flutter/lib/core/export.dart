@@ -191,6 +191,17 @@ String studioWriteInto(String folder, String rel, List<int> bytes) {
   return path;
 }
 
+/// Opens a folder in Explorer (or the platform's file manager).
+Future<void> openFolder(String dir) async {
+  if (Platform.isWindows) {
+    await Process.run('explorer', [dir]);
+  } else if (Platform.isMacOS) {
+    await Process.run('open', [dir]);
+  } else {
+    await Process.run('xdg-open', [dir]);
+  }
+}
+
 /// Shows a file in Explorer (or the platform's file manager).
 Future<void> revealInFolder(String path) async {
   if (Platform.isWindows) {

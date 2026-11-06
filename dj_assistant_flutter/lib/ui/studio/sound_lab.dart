@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import '../../core/diag_log.dart';
 import '../../assistant/quick_ai.dart' show extractJson;
 import '../../studio/drums.dart';
 import '../../studio/dsp.dart' show encodeWav;
@@ -206,7 +207,8 @@ class _SynthLabState extends ConsumerState<SynthLab> {
       final m = MidiInput.instance;
       m.onNote = (n, on, v) => on ? noteOn(n, v) : noteOff(n);
       setState(() => midiName = m.connect().join(', '));
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      DiagLog.error('sound-lab', e, st);
       toast(errText(e), error: true);
     }
   }
@@ -527,7 +529,8 @@ class _DrumLabState extends ConsumerState<DrumLab> {
       };
       m.connect();
       setState(() => midiOn = true);
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      DiagLog.error('sound-lab', e, st);
       toast(errText(e), error: true);
     }
   }

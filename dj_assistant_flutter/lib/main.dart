@@ -1,7 +1,10 @@
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/accounts.dart';
+import 'core/diag_log.dart';
 import 'core/updater.dart';
 import 'online/http_online.dart' show HttpOnline, appVersion;
 import 'ui/shell.dart';
@@ -10,6 +13,17 @@ import 'ui/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  DiagLog.init(defaultDataDir());
+  DiagLog.info('app', 'DJ Assistant $appVersion');
+  final flutterError = FlutterError.onError;
+  FlutterError.onError = (d) {
+    DiagLog.error('ui', d.exceptionAsString(), d.stack);
+    flutterError?.call(d);
+  };
+  PlatformDispatcher.instance.onError = (e, st) {
+    DiagLog.error('uncaught', e, st);
+    return false;
+  };
   final accounts = AccountsService.open(defaultDataDir());
   runApp(
     ProviderScope(

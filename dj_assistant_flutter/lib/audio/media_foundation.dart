@@ -14,14 +14,23 @@ import 'pcm.dart';
 /// (mfreadwrite.h, mfobjects.h, mfapi.h).
 class MediaFoundationReader implements PcmReader {
   MediaFoundationReader(String path) {
+    // COM is per thread, and an isolate can run on any thread of Dart's pool:
+    // initialise it for this reader (a decode runs synchronously on one
+    // thread) and balance it in [close].
+    _com = _Mf.instance.coInit();
     _Mf.instance.ensureStarted();
     final url = path.toNativeUtf16();
     final out = calloc<Pointer<Void>>();
     try {
-      _check(
-        _Mf.instance.createSourceReaderFromUrl(url, nullptr, out),
-        'cannot open this file',
-      );
+      try {
+        _check(
+          _Mf.instance.createSourceReaderFromUrl(url, nullptr, out),
+          'cannot open this file',
+        );
+      } catch (_) {
+        _uninit();
+        rethrow;
+      }
       _reader = out.value;
     } finally {
       calloc.free(url);
@@ -31,8 +40,16 @@ class MediaFoundationReader implements PcmReader {
       _configure();
     } catch (_) {
       _release(_reader);
+      _uninit();
       rethrow;
     }
+  }
+
+  /// CoInitializeEx's result: S_OK or S_FALSE must be balanced.
+  int _com = -1;
+  void _uninit() {
+    if (_com == 0 || _com == 1) _Mf.instance.coUninit();
+    _com = -1;
   }
 
   late final Pointer<Void> _reader;
@@ -241,6 +258,7 @@ class MediaFoundationReader implements PcmReader {
     if (_closed) return;
     _closed = true;
     _release(_reader);
+    _uninit();
   }
 }
 
@@ -401,6 +419,9 @@ class _Mf {
           Int32 Function(Pointer<Void>, Uint32),
           int Function(Pointer<Void>, int)
         >('CoInitializeEx');
+    _coUninit = ole.lookupFunction<Void Function(), void Function()>(
+      'CoUninitialize',
+    );
     _startup = plat
         .lookupFunction<Int32 Function(Uint32, Uint32), int Function(int, int)>(
           'MFStartup',
@@ -420,7 +441,13 @@ class _Mf {
   static final instance = _Mf._();
 
   late final int Function(Pointer<Void>, int) _coInit;
+  late final void Function() _coUninit;
   late final int Function(int, int) _startup;
+
+  /// COINIT_MULTITHREADED on the calling thread. S_FALSE: already
+  /// initialised; RPC_E_CHANGED_MODE: an STA thread (still usable).
+  int coInit() => _coInit(nullptr, 0);
+  void coUninit() => _coUninit();
   late final int Function(Pointer<Pointer<Void>>) createMediaType;
   late final int Function(Pointer<Utf16>, Pointer<Void>, Pointer<Pointer<Void>>)
   createSourceReaderFromUrl;
@@ -428,8 +455,6 @@ class _Mf {
 
   void ensureStarted() {
     if (_started) return;
-    // COINIT_MULTITHREADED; S_FALSE or RPC_E_CHANGED_MODE mean COM is already up.
-    _coInit(nullptr, 0);
     _check(
       _startup(0x00020070, 0),
       'Media Foundation is not available on this PC',

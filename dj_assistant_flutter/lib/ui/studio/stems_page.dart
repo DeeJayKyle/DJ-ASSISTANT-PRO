@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../studio/ai_stems.dart' show Cancelled;
 import '../../studio/audio_out.dart';
 import '../../studio/dsp.dart';
+import '../../core/diag_log.dart';
 import '../../studio/engine.dart';
 import '../../studio/stems.dart';
 import '../state.dart';
@@ -117,14 +118,17 @@ class _StemsPageState extends ConsumerState<StemsPage> {
         phase = 'ready';
       });
       final secs = DateTime.now().difference(t0).inMilliseconds / 1000;
-      final by = l.stemsBy == 'ai' ? ' with AI (processor)' : '';
+      final by = l.stemsBy == 'ai'
+          ? ' with AI (${engine.aiDevice == 'gpu' ? 'graphics card' : 'processor'})'
+          : '';
       toast(
         'Split into 4 stems$by in ${secs.toStringAsFixed(1)} s.$note',
         error: note.isNotEmpty,
       );
     } on Cancelled {
       if (mounted) setState(() => phase = 'idle');
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      DiagLog.error('stems', 'splitting ${s.path} failed: $e', st);
       if (mounted) {
         setState(() {
           error = errText(e);

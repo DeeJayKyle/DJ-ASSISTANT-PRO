@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../assistant/ai_config.dart';
 import '../assistant/quick_ai.dart';
 import '../core/catalogue.dart';
+import '../core/diag_log.dart';
+import '../core/export.dart' show openFolder;
 import '../core/packs.dart';
 import '../core/updater.dart';
 import '../online/http_online.dart';
@@ -404,9 +406,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           gap,
           Panel(
             title: 'About',
-            child: SelectableText(
-              'Data folder: $base\nCatalogue: ${s.dbPath}\nNo telemetry. Nothing is sent online unless you turn a service on.',
-              style: TextStyle(color: t.muted),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  'Data folder: $base\nCatalogue: ${s.dbPath}\nNo telemetry. Nothing is sent online unless you turn a service on.',
+                  style: TextStyle(color: t.muted),
+                ),
+                if (DiagLog.folder case final logs?) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.folder_open, size: 16),
+                        label: const Text('Open log folder'),
+                        onPressed: () => openFolder(logs),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Errors are logged on this PC only, to help fix problems. Nothing is sent.',
+                          style: TextStyle(color: t.faint),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
         ],

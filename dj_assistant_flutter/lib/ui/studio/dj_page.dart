@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/diag_log.dart';
 import '../../studio/audio_out.dart';
 import '../../studio/dsp.dart' show overview;
 import '../../studio/engine.dart';
@@ -112,7 +113,8 @@ class _DjPageState extends ConsumerState<DjPage> {
           ..peaks = overview(l.mix, 700)
           ..busy = null;
       });
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      DiagLog.error('dj', e, st);
       setState(() => d.busy = null);
       toast(errText(e), error: true);
     }
@@ -134,7 +136,8 @@ class _DjPageState extends ConsumerState<DjPage> {
           },
         );
         ref.read(splitSongsProvider.notifier).mark(l.song.id);
-      } on Object catch (e) {
+      } on Object catch (e, st) {
+        DiagLog.error('dj', e, st);
         setState(() => d.busy = null);
         toast(errText(e), error: true);
         return;

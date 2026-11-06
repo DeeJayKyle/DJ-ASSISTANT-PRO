@@ -37,6 +37,41 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - run: flutter build windows --release
+      - name: The build ships ONNX Runtime 1.22 with DirectML (1.15 can't read the stems model)
+        shell: pwsh
+        run: |
+          $rel = 'build\windows\x64\runner\Release'
+          foreach ($f in 'onnxruntime.dll', 'onnxruntime_providers_shared.dll', 'DirectML.dll') {
+            if (-not (Test-Path "$rel\$f")) { throw "missing $f" }
+          }
+          $v = (Get-Item "$rel\onnxruntime.dll").VersionInfo.ProductVersion
+          Write-Host "onnxruntime.dll $v"
+          if (-not $v.StartsWith('1.22')) { throw "onnxruntime.dll is $v, expected 1.22" }
+      # Pro Stems AI with the real model, as the app runs it (the pack's URL and checksum).
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/stems-model
+          key: htdemucs-e5e425c17683f163a472462eb5f5a4ffcd11c31858d57fbd0833b012d8b88077
+      - name: Pro Stems AI model
+        shell: pwsh
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP 'stems-model'
+          $m = Join-Path $d 'htdemucs_embedded.onnx'
+          New-Item -ItemType Directory -Force $d | Out-Null
+          if (-not (Test-Path $m)) {
+            Invoke-WebRequest 'https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/download/packs-1/htdemucs_embedded.onnx' -OutFile $m
+          }
+          $h = (Get-FileHash $m -Algorithm SHA256).Hash.ToLower()
+          if ($h -ne 'e5e425c17683f163a472462eb5f5a4ffcd11c31858d57fbd0833b012d8b88077') { Remove-Item $m; throw "model checksum $h" }
+          "DJ_AI_MODEL=$m" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Test Pro Stems AI with the built ONNX Runtime
+        shell: pwsh
+        run: |
+          $rel = 'build\windows\x64\runner\Release'
+          Copy-Item "$rel\onnxruntime.dll", "$rel\onnxruntime_providers_shared.dll", "$rel\DirectML.dll" .
+          $env:PATH = "$((Resolve-Path $rel).Path);$env:PATH"
+          flutter test test/ai_model_test.dart
+          if ($LASTEXITCODE -ne 0) { throw 'AI tests failed' }
       - name: Build the installer
         shell: pwsh
         run: |

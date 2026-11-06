@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/diag_log.dart';
 import '../../studio/audio_out.dart';
 import '../../studio/dsp.dart' show encodeWav;
 import '../../studio/engine.dart';
@@ -136,7 +137,8 @@ class _RemixPageState extends ConsumerState<RemixPage> {
           tracks: [...base.tracks, newTrackFor(s, layer)],
         );
       });
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      DiagLog.error('remix', e, st);
       toast(errText(e), error: true);
     } finally {
       if (mounted) setState(() => busy = null);
@@ -180,7 +182,8 @@ class _RemixPageState extends ConsumerState<RemixPage> {
         setState(() => head = player.position * bpm / 60);
       });
       setState(() {});
-    } on Object catch (e) {
+    } on Object catch (e, st) {
+      DiagLog.error('remix', e, st);
       toast(errText(e), error: true);
     }
   }
