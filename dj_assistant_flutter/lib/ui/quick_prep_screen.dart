@@ -933,7 +933,6 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                   const SizedBox(width: 8),
                   Expanded(child: Text(formatName(x.name, st.format))),
                   DropdownButton<int?>(
-                    isExpanded: true,
                     style: Theme.of(context).textTheme.bodyMedium,
                     value: st.bins[x.rid],
                     hint: const Text('Unsorted'),
@@ -1036,7 +1035,6 @@ class _QuickPrepScreenState extends ConsumerState<QuickPrepScreen> {
                   ),
                 if (x.genreSource == 'ai') const Pill('AI'),
                 DropdownButton<String>(
-                  isExpanded: true,
                   style: Theme.of(context).textTheme.bodyMedium,
                   value: allGenres.contains(x.genre) ? x.genre : null,
                   hint: Text(x.genre),

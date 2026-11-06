@@ -273,9 +273,11 @@ ThemeData djTheme({
         onPrimary: t.onAccent,
         secondary: t.accent,
         onSecondary: t.onAccent,
+        secondaryContainer: Color.alphaBlend(t.tint(t.accent, 0.16), t.panel2),
+        onSecondaryContainer: light ? t.accent : t.text,
+        onSurfaceVariant: t.muted,
         surface: t.panel,
         onSurface: t.text,
-        onSurfaceVariant: t.muted,
         surfaceContainerLowest: t.bg,
         surfaceContainerLow: t.panel,
         surfaceContainer: t.panel2,
@@ -349,13 +351,8 @@ ThemeData djTheme({
         padding: buttonPad,
         textStyle: buttonText,
         minimumSize: minSize,
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.disabled) ? t.panel3 : t.accent,
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.disabled) ? t.faint : t.onAccent,
-        ),
-        overlayColor: overlay(t.onAccent),
+        // colours come from the scheme: primary for filled buttons, the
+        // tinted secondary container for tonal ones
         elevation: const WidgetStatePropertyAll(0),
       ),
     ),

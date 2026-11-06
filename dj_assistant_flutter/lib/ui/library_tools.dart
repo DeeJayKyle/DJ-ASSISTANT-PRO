@@ -399,9 +399,8 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          AutoGrid(
+            minWidth: 300,
             children: [
               for (final it in items)
                 SizedBox(

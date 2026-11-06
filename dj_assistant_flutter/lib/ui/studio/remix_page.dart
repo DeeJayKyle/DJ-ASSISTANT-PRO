@@ -414,7 +414,6 @@ class _RemixPageState extends ConsumerState<RemixPage> {
           ),
         ),
         DropdownButton<String>(
-          isExpanded: true,
           style: Theme.of(context).textTheme.bodyMedium,
           value: '${project.tonic}:${project.mode}',
           items: [
