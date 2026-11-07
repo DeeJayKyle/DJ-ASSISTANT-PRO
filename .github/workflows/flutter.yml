@@ -96,6 +96,13 @@ jobs:
           $env:DJ_ORT_DLL = (Resolve-Path "$rel\onnxruntime.dll").Path
           flutter test test/ai_model_test.dart
           if ($LASTEXITCODE -ne 0) { throw 'AI tests failed' }
+      - name: Get Pro Stems AI as the app does (Settings → Packs → Get)
+        shell: pwsh
+        env:
+          DJ_PACK_DOWNLOAD: "1"
+        run: |
+          flutter test test/pack_download_test.dart
+          if ($LASTEXITCODE -ne 0) { throw 'pack download failed' }
       - name: Build the installer
         shell: pwsh
         run: |
