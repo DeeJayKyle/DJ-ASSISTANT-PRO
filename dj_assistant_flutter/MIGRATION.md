@@ -151,7 +151,7 @@ Development happens on Linux. Dart code is checked here with `flutter analyze`,
 | 3. Core services | Done. Every 1.x command group in the inventory above has its Dart service (`lib/core`, `lib/online`, `lib/assistant`, `lib/analysis`, `lib/audio`, `lib/app/session.dart`). |
 | 4. UI and state | Done. Shell (title bar with accounts, sidebar with crates and folders, status bar, job toasts, Ctrl+J assistant), every 1.x screen, Quick Prep, and the Studio (Stems, Remix, DJ Decks, Synth Lab, Drum Lab). Riverpod providers in `lib/ui/state.dart`. |
 | 5. Verify | Done, except hands-on testing on a DJ's PC (below). |
-| Release | **v2.0.3 published** (`release-flutter.yml`), after v2.0.0, v2.0.1 and v2.0.2. Each installer is signed with 1.x's update key and published with `latest.json`, so 1.8 and earlier 2.0 installs are offered it by their auto-updater. |
+| Release | **v2.0.4 published** (`release-flutter.yml`), after v2.0.0 to v2.0.3. Each installer is signed with 1.x's update key and published with `latest.json`, so 1.8 and earlier 2.0 installs are offered it by their auto-updater. |
 
 ### Evidence
 
