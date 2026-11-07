@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../online/online.dart';
 import 'catalogue.dart';
 import 'jobs.dart';
 
@@ -155,6 +156,22 @@ Future<void> installPack(
   );
   prog.message = '${pack.name} is installed.';
 }
+
+/// The download job for a pack. Built here, at the top level, so the closure
+/// sent to the job's isolate captures only these arguments: a closure written
+/// inline in a page would drag the page's state along, which can't be sent,
+/// and the download would never start.
+JobBody packInstallJob(String base, String packId, Downloader download) =>
+    (ctx) async {
+      final pack = packById(packId);
+      if (pack == null) throw PackException('unknown pack');
+      await installPack(base, pack, download, ctx);
+    };
+
+/// A [Downloader] through [make] (the session's network factory), built at
+/// the top level for the same reason as [packInstallJob].
+Downloader packDownloader(Online Function() make) =>
+    (url, dest, progress) => make().download(url, dest, progress);
 
 /// Deletes a pack's files (only inside its own folder).
 void removePack(String base, String id) {

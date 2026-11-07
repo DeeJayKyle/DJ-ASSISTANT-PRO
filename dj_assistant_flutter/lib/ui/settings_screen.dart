@@ -789,15 +789,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : FilledButton(
                       onPressed: () {
                         final pack = packById('${p['id']}')!;
-                        final make = s.onlineFactory;
                         s.jobs
                             .start(
                               'pack:${pack.id}',
-                              (ctx) => installPack(
+                              packInstallJob(
                                 base,
-                                pack,
-                                (u, d, pr) => make().download(u, d, pr),
-                                ctx,
+                                pack.id,
+                                packDownloader(s.onlineFactory),
                               ),
                             )
                             .ignore();

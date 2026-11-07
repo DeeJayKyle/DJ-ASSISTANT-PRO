@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'catalogue.dart';
+import 'diag_log.dart';
 
 /// Background jobs (analysis, lookups, exports…), ported from 1.x `jobs.rs`: one
 /// job per kind at a time, each in its own isolate, pausable and cancellable, with
@@ -205,12 +206,19 @@ class JobsController {
       (err) => finish('failed', 'internal error: ${(err as List).first}'),
     );
     exit.listen((_) => finish('failed', 'the job stopped unexpectedly'));
-    await Isolate.spawn(
-      _jobMain,
-      (port.sendPort, body, paused),
-      onError: errors.sendPort,
-      onExit: exit.sendPort,
-    );
+    try {
+      await Isolate.spawn(
+        _jobMain,
+        (port.sendPort, body, paused),
+        onError: errors.sendPort,
+        onExit: exit.sendPort,
+      );
+    } on Object catch (err, stack) {
+      // e.g. the job captured something that can't be sent to an isolate:
+      // report it instead of showing the job as running forever
+      DiagLog.error('jobs', '$kind could not start: $err', stack);
+      finish('failed', "couldn't start: $err");
+    }
     return e.done!.future;
   }
 
