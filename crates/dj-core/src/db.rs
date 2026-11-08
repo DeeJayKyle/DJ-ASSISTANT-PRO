@@ -376,6 +376,10 @@ CREATE TABLE catalog_checked (
     checked_at INTEGER NOT NULL
 );
 "#,
+    // 7 (2.1): whole-file beatgrid (tempo markers, downbeat) from local analysis
+    r#"
+ALTER TABLE analysis ADD COLUMN beatgrid_json TEXT;
+"#,
 ];
 
 pub fn now_ms() -> i64 {

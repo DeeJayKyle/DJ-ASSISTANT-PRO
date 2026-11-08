@@ -12,9 +12,11 @@ import '../core/export.dart' show openFolder;
 import '../core/packs.dart';
 import '../core/updater.dart';
 import '../online/http_online.dart';
+import '../studio/stems_cache.dart';
 import 'assistant_panel.dart';
 import 'format.dart';
 import 'shortcuts_sheet.dart';
+import 'studio/common.dart' show preparedStemsDir;
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -213,6 +215,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Folder watcher',
                   sub: 'Notices new music in your folders; never moves anything.',
                 ),
+                choice('bpm_range', 'BPM range for analysis', const [
+                  ('auto', 'Automatic'),
+                  ('58-115', '58–115'),
+                  ('68-135', '68–135'),
+                  ('78-155', '78–155'),
+                  ('88-175', '88–175'),
+                ]),
+                Text(
+                  'Half- and double-time readings are folded into this range (for example 174 becomes 87 in 58–115). Changing it applies to tracks analysed from now on; use Re-analyse to update the rest.',
+                  style: TextStyle(color: t.faint, fontSize: DjType.small),
+                ),
                 sw(
                   'auto_prep',
                   'Auto-prep after every scan',
@@ -259,6 +272,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   '0 = automatic (every core but one).',
                   'cores',
                 ),
+                sw(
+                  'stems_cache',
+                  'Keep prepared stems',
+                  sub: 'Each song is split once and its stems are kept on this computer (never beside your music), so it loads instantly next time. Stems → Prepare stems does a whole crate.',
+                ),
+                if (st['stems_cache'] != false) ...[
+                  number(
+                    'stems_cache_gb',
+                    'Space for prepared stems',
+                    'The songs used longest ago are removed to stay under this. A 5-minute song takes about 210 MB.',
+                    'GB',
+                  ),
+                  Builder(
+                    builder: (_) {
+                      final cache = StemsCache(preparedStemsDir(ref));
+                      final (bytes, n) = cache.usage();
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '$n ${n == 1 ? 'song' : 'songs'} prepared, ${(bytes / StemsCache.gigabyte).toStringAsFixed(1)} GB used.',
+                              style: TextStyle(
+                                color: t.muted,
+                                fontSize: DjType.small,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: n == 0
+                                ? null
+                                : () async {
+                                    final ok = await confirm(
+                                      context,
+                                      title: 'Remove all prepared stems?',
+                                      message: 'Songs will be split again the next time they are used. Your music is not touched.',
+                                      ok: 'Remove',
+                                      danger: true,
+                                    );
+                                    if (!ok) return;
+                                    cache.clear();
+                                    setState(() {});
+                                    toast('Prepared stems removed.');
+                                  },
+                            child: const Text('Remove all'),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
                 number(
                   'audio_buffer_ms',
                   'Audio buffer',

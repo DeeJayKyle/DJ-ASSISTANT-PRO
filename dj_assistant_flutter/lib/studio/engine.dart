@@ -16,6 +16,7 @@ import 'midi.dart';
 import 'onnx_model.dart';
 import 'remix.dart';
 import 'stems.dart';
+import 'stems_cache.dart';
 
 /// The Studio engine (1.x `src/studio/engine.ts`): decodes songs, analyses
 /// them, runs separation on every core, keeps results per song, renders
@@ -51,6 +52,9 @@ class Loaded {
 
   /// How [stems] were made: 'ai' (Pro Stems AI) or 'fast' (signal processing).
   String? stemsBy;
+
+  /// Methods whose stems came from (or were saved to) prepared stems.
+  final prepared = <String>{};
   double get durationSec => mix[0].length / sampleRate;
 }
 
@@ -227,6 +231,127 @@ class StudioEngine {
   /// The installed Pro Stems AI model file, or null.
   String? aiModel;
 
+  /// Settings → Studio: prepared stems (split once, kept on this computer);
+  /// null keeps stems in memory only.
+  StemsCache? stemsCache;
+
+  /// Version of the Fast splitter, part of a prepared stems file's identity.
+  static const fastModel = 'fast-1';
+
+  String? _modelId(String method) {
+    if (method == 'fast') return fastModel;
+    final m = aiModel;
+    if (m == null) return null;
+    try {
+      return '${m.split(RegExp(r'[\\/]')).last}:${File(m).lengthSync()}';
+    } on FileSystemException {
+      return null;
+    }
+  }
+
+  StemsSource? _source(SongRef song, String method) {
+    final id = _modelId(method);
+    return id == null ? null : StemsSource.of(song.path, method, id);
+  }
+
+  /// True when [song] has prepared stems made with [method].
+  Future<bool> isPrepared(SongRef song, String method) async {
+    final c = stemsCache, src = _source(song, method);
+    if (c == null || src == null) return false;
+    final f = c.fileFor(src);
+    return File(f).exists();
+  }
+
+  Future<Stems?> _fromPrepared(Loaded l, String method) async {
+    final c = stemsCache, src = _source(l.song, method);
+    if (c == null || src == null) return null;
+    final sw = Stopwatch()..start();
+    try {
+      final r = await Isolate.run(() => c.load(src));
+      if (r == null) return null;
+      final (stems, sr) = r;
+      if (sr != l.sampleRate ||
+          stems[stemNames.first]![0].length != l.mix[0].length) {
+        return null;
+      }
+      l.prepared.add(method);
+      DiagLog.info(
+        'studio',
+        'prepared $method stems for ${l.song.path} read in '
+            '${sw.elapsedMilliseconds} ms',
+      );
+      return stems;
+    } on Object catch (e, st) {
+      DiagLog.error('studio', 'reading prepared stems failed: $e', st);
+      return null;
+    }
+  }
+
+  /// Saves [stems] as prepared stems in the background; a full drive or a
+  /// folder that can't be written only means they aren't kept.
+  Future<void> _savePrepared(Loaded l, String method, Stems stems) async {
+    final c = stemsCache, src = _source(l.song, method);
+    if (c == null || src == null) return;
+    final sr = l.sampleRate;
+    try {
+      final ok = await Isolate.run(() => c.save(src, stems, sr));
+      if (ok) {
+        l.prepared.add(method);
+      } else {
+        DiagLog.info(
+          'studio',
+          'prepared stems not kept for ${l.song.path}: not enough space',
+        );
+      }
+    } on Object catch (e, st) {
+      DiagLog.error('studio', 'saving prepared stems failed: $e', st);
+    }
+  }
+
+  /// Prepares stems for [songs] one after another (for a gig crate), keeping
+  /// none of them in memory. [onSong] hears (index, song, error or null);
+  /// [onProgress] the fraction of the current song. Songs already prepared
+  /// are skipped.
+  Future<int> prepare(
+    List<SongRef> songs, {
+    String? method,
+    void Function(int, SongRef, Object?)? onSong,
+    void Function(double)? onProgress,
+    bool Function()? cancelled,
+  }) async {
+    final how = method ?? (aiModel != null ? 'ai' : 'fast');
+    if (stemsCache == null) {
+      throw StudioException(
+        'Prepared stems are turned off in Settings → Studio.',
+      );
+    }
+    var done = 0;
+    for (var i = 0; i < songs.length; i++) {
+      if (cancelled?.call() ?? false) break;
+      final song = songs[i];
+      try {
+        if (!await isPrepared(song, how)) {
+          final keep = songs.length == 1 || this.songs.containsKey(song.id);
+          final l = await load(song);
+          await separate(
+            l,
+            method: how,
+            onProgress: onProgress,
+            waitForSave: true,
+          );
+          if (!keep) this.songs.remove(song.id);
+        }
+        done++;
+        onSong?.call(i, song, null);
+      } on Cancelled {
+        rethrow;
+      } on Object catch (e) {
+        onSong?.call(i, song, e);
+      }
+    }
+    return done;
+  }
+
   /// Where the last AI run happened: 'gpu' (DirectML) or 'cpu'.
   String? aiDevice;
 
@@ -329,10 +454,12 @@ class StudioEngine {
     Loaded l, {
     void Function(double)? onProgress,
     String? method,
+    bool waitForSave = false,
   }) async {
     method ??= aiModel != null ? 'ai' : 'fast';
     final model = aiModel;
     if (method == 'ai' && model != null) {
+      l.aiStems ??= await _fromPrepared(l, 'ai');
       if (l.aiStems == null) {
         try {
           final sw = Stopwatch()..start();
@@ -342,6 +469,8 @@ class StudioEngine {
             'AI split of ${l.durationSec.toStringAsFixed(1)} s on $aiDevice '
                 'in ${sw.elapsedMilliseconds} ms',
           );
+          final save = _savePrepared(l, 'ai', l.aiStems!);
+          if (waitForSave) await save;
         } on Cancelled {
           rethrow;
         } catch (e, st) {
@@ -365,6 +494,7 @@ class StudioEngine {
       l.stemsBy = 'ai';
       return l.stems!;
     }
+    l.fastStems ??= await _fromPrepared(l, 'fast');
     if (l.fastStems != null) {
       l.stems = l.fastStems;
       l.stemsBy = 'fast';
@@ -421,6 +551,8 @@ class StudioEngine {
     );
     l.fastStems = l.stems;
     l.stemsBy = 'fast';
+    final save = _savePrepared(l, 'fast', l.stems!);
+    if (waitForSave) await save;
     return l.stems!;
   }
 

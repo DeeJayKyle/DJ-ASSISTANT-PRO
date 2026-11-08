@@ -269,7 +269,16 @@ void main() {
       reason: 'the round trip keeps every track',
     );
 
-    // rekordbox XML.
+    // rekordbox XML, with the analysed beatgrid as tempo markers.
+    cat.db.execute(
+      'INSERT OR REPLACE INTO analysis (track_id, method, version, analysed_at, status, beatgrid_json) '
+      "VALUES (?, 'dj-assistant-dsp', 2, 0, 'ok', ?)",
+      [
+        a,
+        '{"bpm":124.0,"first_beat_ms":250,"downbeat_ms":1218,"stable":false,"beats":300,'
+            '"markers":[{"ms":250,"bpm":124.0,"beat":3},{"ms":60250,"bpm":126.5,"beat":1}]}',
+      ],
+    );
     final xmlPath = p.join(out.path, 'rekordbox.xml');
     final r = dj.exportRekordbox(xmlPath, crateIds: [folder.id, afro.id]);
     expect(
@@ -288,6 +297,14 @@ void main() {
     expect(xml, contains('Name="Afro" Type="1" KeyType="0" Entries="$afroN"'));
     expect(xml, contains('Location="file://localhost/'));
     expect(xml, contains('Deep%20Tenant%20-%20Warehouse%2094.mp3'));
+    expect(
+      xml,
+      contains(
+        '<TEMPO Inizio="0.250" Bpm="124.00" Metro="4/4" Battito="3"/>\n'
+        '      <TEMPO Inizio="60.250" Bpm="126.50" Metro="4/4" Battito="1"/>\n'
+        '    </TRACK>',
+      ),
+    );
     expect(r['tracks'], 2 + afroN);
     expect(
       DjExportService.fileUrl(r'C:\Music\A & B.mp3'),

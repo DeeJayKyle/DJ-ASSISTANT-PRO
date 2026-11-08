@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
+import 'analysis_store.dart';
 import 'catalogue.dart';
 import 'crates.dart';
 import 'gigpack.dart';
@@ -271,8 +272,24 @@ class DjExportService {
         'AverageBpm="${bpm == null ? '0.00' : bpm.toStringAsFixed(2)}" BitRate="${r['bitrate_kbps'] ?? 0}" '
         'SampleRate="${r['sample_rate'] ?? 0}" Comments="${_x((r['notes'] as String?) ?? '')}" '
         'Rating="${((r['rating'] as int?) ?? 0).clamp(0, 5) * 51}" Tonality="${_x(tonality)}" '
-        'Location="${_x(fileUrl(r['path'] as String))}"/>\n',
+        'Location="${_x(fileUrl(r['path'] as String))}"',
       );
+      // The beatgrid as rekordbox tempo markers: Serato's own when the file
+      // has one, else this app's analysis.
+      final grid = AnalysisStore(cat)
+          .beatgridFor(trackIds[i], r['path'] as String);
+      if (grid == null || grid.markers.isEmpty) {
+        tracks.write('/>\n');
+      } else {
+        tracks.write('>\n');
+        for (final m in grid.markers) {
+          tracks.write(
+            '      <TEMPO Inizio="${(m.ms / 1000).toStringAsFixed(3)}" '
+            'Bpm="${m.bpm.toStringAsFixed(2)}" Metro="4/4" Battito="${m.beat}"/>\n',
+          );
+        }
+        tracks.write('    </TRACK>\n');
+      }
       exported.add(trackIds[i]);
     }
     xml.write(

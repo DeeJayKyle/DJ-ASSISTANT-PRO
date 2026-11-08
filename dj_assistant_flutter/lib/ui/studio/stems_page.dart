@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../../studio/ai_stems.dart' show Cancelled;
 import '../../studio/audio_out.dart';
 import '../../studio/dsp.dart';
 import '../../core/diag_log.dart';
+import '../../core/library.dart' show TrackQuery;
 import '../../studio/engine.dart';
 import '../../studio/stems.dart';
 import '../state.dart';
@@ -108,7 +110,10 @@ class _StemsPageState extends ConsumerState<StemsPage> {
       // AI: Fast stems first (seconds), AI stems swapped in when ready,
       // unless this song's AI stems are already made
       final ai = how == 'ai' && engine.aiModel != null;
-      final behind = ai && l.aiStems == null;
+      final readyAi = ai && await engine.isPrepared(s, 'ai');
+      final behind = ai && l.aiStems == null && !readyAi;
+      final wasPrepared =
+          readyAi || (!ai && await engine.isPrepared(s, 'fast'));
       setState(() => splittingAi = ai && !behind);
       try {
         await engine.separate(
@@ -138,7 +143,9 @@ class _StemsPageState extends ConsumerState<StemsPage> {
           ? ' with AI (${engine.aiDevice == 'gpu' ? 'graphics card' : 'processor'})'
           : '';
       toast(
-        behind
+        wasPrepared && l.prepared.contains(l.stemsBy)
+            ? 'Prepared stems loaded in ${secs.toStringAsFixed(1)} s.'
+            : behind
             ? 'Fast stems ready in ${secs.toStringAsFixed(1)} s. AI stems are on the way; they replace these when done.'
             : 'Split into 4 stems$by in ${secs.toStringAsFixed(1)} s.$note',
         error: note.isNotEmpty,
@@ -561,14 +568,29 @@ class _StemsPageState extends ConsumerState<StemsPage> {
           ? Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(width: 360, child: picker),
+                SizedBox(
+                  width: 360,
+                  child: Column(
+                    children: [
+                      picker,
+                      const SizedBox(height: 12),
+                      PrepareStemsPanel(method: method),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(child: main),
               ],
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [picker, const SizedBox(height: 12), main],
+              children: [
+                picker,
+                const SizedBox(height: 12),
+                main,
+                const SizedBox(height: 12),
+                PrepareStemsPanel(method: method),
+              ],
             ),
     );
   }
@@ -599,4 +621,141 @@ class _Stat extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Prepare stems for a whole crate before a gig: each song is split once
+/// and kept on this computer, so it loads instantly in Stems or on a deck.
+class PrepareStemsPanel extends ConsumerStatefulWidget {
+  const PrepareStemsPanel({super.key, required this.method});
+  final String method;
+  @override
+  ConsumerState<PrepareStemsPanel> createState() => _PrepareStemsPanelState();
+}
+
+class _PrepareStemsPanelState extends ConsumerState<PrepareStemsPanel> {
+  int? crateId;
+  bool running = false, stop = false;
+  int done = 0, total = 0, failed = 0;
+  double part = 0;
+  String? current;
+
+  Future<void> run() async {
+    final s = ref.read(sessionProvider);
+    final id = crateId;
+    if (id == null) return;
+    final engine = applyStudioSettings(ref, ref.read(studioEngineProvider));
+    if (engine.stemsCache == null) {
+      toast('Turn on prepared stems in Settings → Studio first.', error: true);
+      return;
+    }
+    final songs = [
+      for (final r in s.crates.tracks(id, limit: TrackQuery.all).rows)
+        songOf(r),
+    ];
+    setState(() {
+      running = true;
+      stop = false;
+      done = 0;
+      failed = 0;
+      total = songs.length;
+      part = 0;
+    });
+    try {
+      final n = await engine.prepare(
+        songs,
+        method: widget.method,
+        cancelled: () => stop,
+        onProgress: (f) {
+          if (mounted) setState(() => part = f);
+        },
+        onSong: (i, song, err) {
+          if (!mounted) return;
+          setState(() {
+            done = i + 1;
+            part = 0;
+            current = song.title;
+            if (err != null) failed++;
+          });
+          if (err != null) {
+            DiagLog.error('stems', 'preparing ${song.path} failed: $err');
+          } else {
+            ref.read(splitSongsProvider.notifier).mark(song.id);
+          }
+        },
+      );
+      toast(
+        stop
+            ? 'Stopped: $n of $total songs have prepared stems.'
+            : failed == 0
+            ? 'Prepared stems for all $n songs.'
+            : 'Prepared stems for $n songs; $failed could not be split (see the log).',
+        error: failed > 0,
+      );
+    } on Object catch (e) {
+      toast(errText(e), error: true);
+    } finally {
+      if (mounted) setState(() => running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DjTokens.of(context);
+    final s = ref.watch(sessionProvider);
+    final crates = s.crates.list();
+    return StudioPanel(
+      title: 'Prepare stems',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Split a whole crate once, ahead of a gig. The stems are kept on this computer (not beside your music) and load instantly here and on the decks.',
+            style: TextStyle(color: t.faint, fontSize: DjType.small),
+          ),
+          const SizedBox(height: 8),
+          DropdownButton<int>(
+            isExpanded: true,
+            hint: const Text('Choose a crate'),
+            value: crates.any((c) => c.id == crateId) ? crateId : null,
+            items: [
+              for (final c in crates)
+                DropdownMenuItem(
+                  value: c.id,
+                  child: Text(
+                    '${c.name} (${c.trackCount})',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: running ? null : (v) => setState(() => crateId = v),
+          ),
+          const SizedBox(height: 8),
+          if (running) ...[
+            StudioProgress(
+              'Song ${math.min(done + 1, total)} of $total'
+              '${current == null ? '' : ' (last: $current)'}… ${(part * 100).round()}%',
+              total == 0 ? null : (done + part) / total,
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton(
+                onPressed: stop ? null : () => setState(() => stop = true),
+                child: const Text('Stop after this song'),
+              ),
+            ),
+          ] else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: crateId == null ? null : run,
+                icon: const Icon(Icons.layers_outlined),
+                label: Text(
+                  'Prepare with ${widget.method == 'ai' ? 'AI' : 'Fast'}',
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
