@@ -4,7 +4,21 @@
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
 
-## v1.5 (this release)
+## v2.1 (Flutter, in progress)
+
+| Area | Feature | Status |
+|---|---|---|
+| Analysis | Whole-file beatgrid (DP beat tracking): tempo markers, first beat, downbeat; stored per track | Tested (synthetic audio); real music to be checked against Serato |
+| Analysis | BPM range setting (auto, 58–115, 68–135, 78–155, 88–175) | Tested |
+| Analysis | Tuning-aware key; key skipped below 4 kHz sample rate | Tested (synthetic) |
+| Analysis | Serato's own beatgrid and BPM read from file tags (MP3, FLAC), never written | Tested (built tags); not yet on files Serato wrote |
+| Export | rekordbox XML carries each beatgrid as TEMPO markers | Tested; not yet opened in rekordbox |
+| Studio | Prepared stems: split once, kept in app data, size cap; Prepare stems for a crate | Tested (file format, cache); UI needs a hand test on Windows |
+| DJ Decks | New layout: scrolling waveforms with beatgrids, deck panels, mixer, hot cue / loop / stem pads, library strip | Builds; needs a hand test on Windows |
+
+See docs/SERATO_STUDY.md for what was learned from Serato's design and how each feature was built independently.
+
+## v1.5
 
 | Area | Feature | Status |
 |---|---|---|
