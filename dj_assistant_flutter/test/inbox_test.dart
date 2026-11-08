@@ -47,7 +47,10 @@ void main() {
     download('cover.jpg');
     download('.hidden.flac');
     // changed a moment ago: may still be downloading
-    File(fixture).copySync(p.join(downloads.path, 'Just now.flac'));
+    // (copies keep the source's time on Windows, so set it explicitly)
+    File(fixture)
+        .copySync(p.join(downloads.path, 'Just now.flac'))
+        .setLastModifiedSync(DateTime.now());
     expect(
       [for (final f in svc.ready()) p.basename(f.path)],
       ['Track One.flac'],

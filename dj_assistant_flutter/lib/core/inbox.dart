@@ -205,6 +205,16 @@ class InboxService {
     }
   }
 
+  static void _discard(List<(String, String)> made) {
+    for (final (_, path) in made) {
+      try {
+        File(path).deleteSync();
+      } on FileSystemException {
+        // already gone
+      }
+    }
+  }
+
   /// Audio files unpacked from [zip] into [destDir]: (entry, new path).
   static List<(String, String)> _unzip(String zip, String destDir) {
     final input = InputFileStream(zip);
@@ -295,36 +305,67 @@ class InboxService {
       } on FileSystemException {
         continue;
       }
+      // A file still growing (for example copied in by Explorer, which
+      // keeps the original's time) is caught here: if it changed while we
+      // read it, what we made is discarded and it is tried again later.
+      bool changed() {
+        try {
+          final now = f.statSync();
+          return now.size != st.size || now.modified != st.modified;
+        } on FileSystemException {
+          return true;
+        }
+      }
+
+      final made = <(String, String)>[];
       try {
         if (_isZip(f.path)) {
           final sub = p.join(
             destDir,
             safeFileName(p.basenameWithoutExtension(f.path)),
           );
-          final got = _unzip(f.path, sub);
-          for (final (entry, dest) in got) {
-            _record(f, st, 'imported', entry: entry, dest: dest);
-            imported.add(dest);
-          }
-          _record(
-            f,
-            st,
-            got.isEmpty ? 'skipped' : 'imported',
-            message: got.isEmpty ? 'no audio in the ZIP' : null,
-          );
-          if (got.isEmpty) notes.add('${p.basename(f.path)}: no audio inside');
+          made.addAll(_unzip(f.path, sub));
         } else {
           Directory(destDir).createSync(recursive: true);
           final dest = uniquePath(destDir, safeFileName(p.basename(f.path)));
           _verifiedCopy(f.path, dest);
-          _record(f, st, 'imported', dest: dest);
-          imported.add(dest);
+          made.add(('', dest));
         }
       } on Object catch (e) {
+        _discard(made);
+        if (changed()) {
+          notes.add(
+            '${p.basename(f.path)}: still downloading, tried again later',
+          );
+          continue;
+        }
         final msg = e is InboxException ? e.message : '$e';
         _record(f, st, 'error', message: msg);
         notes.add('${p.basename(f.path)}: $msg');
+        continue;
       }
+      if (changed()) {
+        _discard(made);
+        notes.add(
+          '${p.basename(f.path)}: still downloading, tried again later',
+        );
+        continue;
+      }
+      if (_isZip(f.path)) {
+        for (final (entry, dest) in made) {
+          _record(f, st, 'imported', entry: entry, dest: dest);
+        }
+        _record(
+          f,
+          st,
+          made.isEmpty ? 'skipped' : 'imported',
+          message: made.isEmpty ? 'no audio in the ZIP' : null,
+        );
+        if (made.isEmpty) notes.add('${p.basename(f.path)}: no audio inside');
+      } else {
+        _record(f, st, 'imported', dest: made.single.$2);
+      }
+      imported.addAll([for (final (_, dest) in made) dest]);
     }
     progress?.call(files.length, files.length, '');
     return (imported, notes);
