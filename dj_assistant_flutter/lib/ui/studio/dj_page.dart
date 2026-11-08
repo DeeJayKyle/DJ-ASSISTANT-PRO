@@ -343,7 +343,7 @@ class _DjPageState extends ConsumerState<DjPage> {
     final t = DjTokens.of(context);
     return LayoutBuilder(
       builder: (context, box) {
-        final wide = box.maxWidth >= 1100;
+        final wide = box.maxWidth >= 960;
         final deckA = _deckPanel(0), deckB = _deckPanel(1);
         final mixerPanel = _mixer(wide);
         return Column(
@@ -362,17 +362,15 @@ class _DjPageState extends ConsumerState<DjPage> {
             ),
             const SizedBox(height: 10),
             if (wide)
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: deckA),
-                    const SizedBox(width: 10),
-                    SizedBox(width: 250, child: mixerPanel),
-                    const SizedBox(width: 10),
-                    Expanded(child: deckB),
-                  ],
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: deckA),
+                  const SizedBox(width: 10),
+                  SizedBox(width: 200, child: mixerPanel),
+                  const SizedBox(width: 10),
+                  Expanded(child: deckB),
+                ],
               )
             else ...[
               deckA,
@@ -903,76 +901,99 @@ class _DjPageState extends ConsumerState<DjPage> {
     }
   }
 
-  /// EQ, filter and volume for each deck, and the crossfader.
+  /// EQ, filter and volume for each deck, and the crossfader. Side by side
+  /// (wide): a column of knobs per deck. Stacked (narrow): a row per deck.
   Widget _mixer(bool wide) {
     final t = DjTokens.of(context);
-    Widget channel(int i) {
+    String db(double v) => '${v > 0 ? '+' : ''}${v.toStringAsFixed(0)} dB';
+    List<Widget> knobs(int i) {
       final dk = deck(i);
-      return Expanded(
-        child: Column(
-          children: [
-            Text(
-              i == 0 ? 'A' : 'B',
-              style: TextStyle(fontWeight: FontWeight.w800, color: t.muted),
-            ),
-            for (final (band, label) in [
-              ('high', 'High'),
-              ('mid', 'Mid'),
-              ('low', 'Low'),
-            ])
-              GestureDetector(
-                onDoubleTap: () => setState(() => _setEq(dk, band, 0)),
-                child: Knob(
-                  label: label,
-                  value: _eq(dk, band),
-                  min: -24,
-                  max: 6,
-                  width: double.infinity,
-                  format: (v) =>
-                      '${v > 0 ? '+' : ''}${v.toStringAsFixed(0)} dB',
-                  onChanged: (v) => setState(() => _setEq(dk, band, v)),
-                ),
-              ),
-            GestureDetector(
-              onDoubleTap: () => setState(() => dk.strip.filter = 0),
-              child: Knob(
-                label: 'Filter',
-                value: dk.strip.filter,
-                min: -1,
-                max: 1,
-                width: double.infinity,
-                format: (v) => v < -0.02
-                    ? 'low-pass'
-                    : v > 0.02
-                    ? 'high-pass'
-                    : 'off',
-                onChanged: (v) => setState(() => dk.strip.filter = v),
-              ),
-            ),
-            Knob(
-              label: 'Volume',
-              value: dk.volume,
-              min: 0,
-              max: 1.2,
-              width: double.infinity,
-              format: (v) => '${(v * 100).round()}%',
-              onChanged: (v) => setState(() => dk.volume = v),
-            ),
-          ],
+      return [
+        for (final (band, label) in [
+          ('high', 'High'),
+          ('mid', 'Mid'),
+          ('low', 'Low'),
+        ])
+          RotaryKnob(
+            label: label,
+            value: _eq(dk, band),
+            min: -24,
+            max: 6,
+            reset: 0,
+            bipolar: true,
+            format: db,
+            onChanged: (v) => setState(() => _setEq(dk, band, v)),
+          ),
+        RotaryKnob(
+          label: 'Filter',
+          value: dk.strip.filter,
+          min: -1,
+          max: 1,
+          reset: 0,
+          bipolar: true,
+          format: (v) => v < -0.02
+              ? 'low-pass'
+              : v > 0.02
+              ? 'high-pass'
+              : 'off',
+          onChanged: (v) => setState(() => dk.strip.filter = v),
         ),
-      );
+        RotaryKnob(
+          label: 'Volume',
+          value: dk.volume,
+          min: 0,
+          max: 1.2,
+          reset: 0.9,
+          format: (v) => '${(v * 100).round()}%',
+          onChanged: (v) => setState(() => dk.volume = v),
+        ),
+      ];
     }
 
+    Widget letter(int i) => Text(
+      i == 0 ? 'A' : 'B',
+      style: TextStyle(fontWeight: FontWeight.w800, color: t.muted),
+    );
+    final channels = wide
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < 2; i++)
+                Expanded(
+                  child: Column(
+                    children: [
+                      letter(i),
+                      for (final k in knobs(i))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: k,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          )
+        : Column(
+            children: [
+              for (var i = 0; i < 2; i++)
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 22, child: letter(i)),
+                      for (final k in knobs(i)) Expanded(child: k),
+                    ],
+                  ),
+                ),
+            ],
+          );
     return StudioPanel(
       title: 'Mixer',
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [channel(0), const SizedBox(width: 8), channel(1)],
-          ),
+          channels,
           const SizedBox(height: 8),
           Row(
             children: [
@@ -980,20 +1001,17 @@ class _DjPageState extends ConsumerState<DjPage> {
               Expanded(
                 child: Semantics(
                   label: 'Crossfader',
-                  child: Slider(
-                    value: mixer.crossfade,
-                    onChanged: (v) => setState(() => mixer.crossfade = v),
+                  child: GestureDetector(
+                    onDoubleTap: () => setState(() => mixer.crossfade = 0.5),
+                    child: Slider(
+                      value: mixer.crossfade,
+                      onChanged: (v) => setState(() => mixer.crossfade = v),
+                    ),
                   ),
                 ),
               ),
               const Text('B'),
             ],
-          ),
-          Center(
-            child: TextButton(
-              onPressed: () => setState(() => mixer.crossfade = 0.5),
-              child: const Text('Centre'),
-            ),
           ),
         ],
       ),

@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'
+    show KeyDownEvent, KeyRepeatEvent, LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -497,4 +501,157 @@ class StudioProgress extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// A small rotary knob for the mixer: drag up or down (or scroll) to turn,
+/// double-tap to reset to [reset]. Arrow keys work when it has focus.
+class RotaryKnob extends StatelessWidget {
+  const RotaryKnob({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.reset,
+    this.format,
+    this.size = 44,
+    this.bipolar = false,
+  });
+  final String label;
+  final double value, min, max, size;
+  final double? reset;
+  final ValueChanged<double> onChanged;
+  final String Function(double)? format;
+
+  /// Draw the arc from the centre (EQ, filter) rather than from the left.
+  final bool bipolar;
+
+  void _nudge(double frac) =>
+      onChanged((value + frac * (max - min)).clamp(min, max));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DjTokens.of(context);
+    final text = format?.call(value) ?? value.toStringAsFixed(1);
+    return Semantics(
+      label: label,
+      value: text,
+      slider: true,
+      increasedValue: format?.call((value + (max - min) / 20).clamp(min, max)),
+      decreasedValue: format?.call((value - (max - min) / 20).clamp(min, max)),
+      onIncrease: () => _nudge(0.05),
+      onDecrease: () => _nudge(-0.05),
+      child: Focus(
+        onKeyEvent: (_, e) {
+          if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          if (e.logicalKey == LogicalKeyboardKey.arrowUp ||
+              e.logicalKey == LogicalKeyboardKey.arrowRight) {
+            _nudge(0.05);
+            return KeyEventResult.handled;
+          }
+          if (e.logicalKey == LogicalKeyboardKey.arrowDown ||
+              e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            _nudge(-0.05);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Listener(
+          onPointerSignal: (s) {
+            if (s is PointerScrollEvent) _nudge(-s.scrollDelta.dy / 2000);
+          },
+          child: GestureDetector(
+            onVerticalDragUpdate: (d) => _nudge(-d.delta.dy / 160),
+            onDoubleTap: reset == null ? null : () => onChanged(reset!),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: size,
+                  height: size,
+                  child: CustomPaint(
+                    painter: _KnobPainter(
+                      frac: max == min ? 0 : (value - min) / (max - min),
+                      origin: bipolar
+                          ? (((reset ?? 0) - min) / (max - min)).clamp(0, 1)
+                          : 0,
+                      track: t.line,
+                      fill: t.accent,
+                      face: t.panel2,
+                      tick: t.text,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: DjType.caption, color: t.muted),
+                ),
+                Text(
+                  text,
+                  style: TextStyle(fontSize: DjType.caption, color: t.faint),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KnobPainter extends CustomPainter {
+  _KnobPainter({
+    required this.frac,
+    required this.origin,
+    required this.track,
+    required this.fill,
+    required this.face,
+    required this.tick,
+  });
+  final double frac, origin;
+  final Color track, fill, face, tick;
+
+  // 270° of travel, starting at the lower left
+  static const _start = 0.75 * math.pi, _sweep = 1.5 * math.pi;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2 - 3;
+    final rect = Rect.fromCircle(center: c, radius: r);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, _start, _sweep, false, stroke..color = track);
+    final a = _start + origin * _sweep, b = _start + frac * _sweep;
+    canvas.drawArc(
+      rect,
+      math.min(a, b),
+      (b - a).abs(),
+      false,
+      stroke..color = fill,
+    );
+    canvas.drawCircle(c, r - 6, Paint()..color = face);
+    final p = c + Offset(math.cos(b), math.sin(b)) * (r - 9);
+    canvas.drawLine(
+      c,
+      p,
+      Paint()
+        ..color = tick
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_KnobPainter o) =>
+      o.frac != frac ||
+      o.origin != origin ||
+      o.fill != fill ||
+      o.track != track;
 }
