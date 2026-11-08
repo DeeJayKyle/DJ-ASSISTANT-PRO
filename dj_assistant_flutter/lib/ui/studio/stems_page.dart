@@ -35,6 +35,13 @@ class _StemsPageState extends ConsumerState<StemsPage> {
   SongRef? song;
   Loaded? loaded;
   String phase = 'idle'; // idle | loading | splitting | ready
+
+  /// AI stems being made in the background while the Fast ones play
+  /// (null: none on the way).
+  double? aiBehind;
+
+  /// The split in progress runs the AI model (not the Fast method).
+  bool splittingAi = false;
   double progress = 0;
   String error = '';
   final gains = {for (final s in stemNames) s: 1.0};
@@ -78,6 +85,8 @@ class _StemsPageState extends ConsumerState<StemsPage> {
 
   Future<void> pick(SongRef s, [String? how]) async {
     how ??= method;
+    if (aiBehind != null) engine.cancelAi();
+    aiBehind = null;
     player.stop();
     _tick?.cancel();
     setState(() {
@@ -96,13 +105,18 @@ class _StemsPageState extends ConsumerState<StemsPage> {
       setState(() => phase = 'splitting');
       final t0 = DateTime.now();
       var note = '';
+      // AI: Fast stems first (seconds), AI stems swapped in when ready,
+      // unless this song's AI stems are already made
+      final ai = how == 'ai' && engine.aiModel != null;
+      final behind = ai && l.aiStems == null;
+      setState(() => splittingAi = ai && !behind);
       try {
         await engine.separate(
           l,
           onProgress: (f) {
             if (mounted) setState(() => progress = f);
           },
-          method: how == 'ai' && engine.aiModel != null ? 'ai' : 'fast',
+          method: ai && !behind ? 'ai' : 'fast',
         );
       } on StudioException catch (e) {
         if (!e.fallback) rethrow;
@@ -124,9 +138,12 @@ class _StemsPageState extends ConsumerState<StemsPage> {
           ? ' with AI (${engine.aiDevice == 'gpu' ? 'graphics card' : 'processor'})'
           : '';
       toast(
-        'Split into 4 stems$by in ${secs.toStringAsFixed(1)} s.$note',
+        behind
+            ? 'Fast stems ready in ${secs.toStringAsFixed(1)} s. AI stems are on the way; they replace these when done.'
+            : 'Split into 4 stems$by in ${secs.toStringAsFixed(1)} s.$note',
         error: note.isNotEmpty,
       );
+      if (behind) unawaited(_aiBehind(l, s));
     } on Cancelled {
       if (mounted) setState(() => phase = 'idle');
     } on Object catch (e, st) {
@@ -161,6 +178,56 @@ class _StemsPageState extends ConsumerState<StemsPage> {
       setState(() => pos = player.position.clamp(0, l.durationSec));
     });
     setState(() {});
+  }
+
+  /// Makes the AI stems while the Fast ones play, then swaps them in at the
+  /// same position (playback keeps going).
+  Future<void> _aiBehind(Loaded l, SongRef s) async {
+    setState(() => aiBehind = 0);
+    final t0 = DateTime.now();
+    try {
+      await engine.separate(
+        l,
+        method: 'ai',
+        onProgress: (f) {
+          if (mounted && song == s) setState(() => aiBehind = f);
+        },
+      );
+    } on Cancelled {
+      if (mounted && song == s) setState(() => aiBehind = null);
+      return;
+    } on StudioException catch (e) {
+      // the AI couldn't run: the Fast stems stay
+      if (mounted && song == s) {
+        setState(() => aiBehind = null);
+        toast(e.message, error: true);
+      }
+      return;
+    } on Object catch (e, st) {
+      DiagLog.error('stems', 'AI stems for ${s.path} failed: $e', st);
+      if (mounted && song == s) {
+        setState(() => aiBehind = null);
+        toast(errText(e), error: true);
+      }
+      return;
+    }
+    if (!mounted || song != s || l.stemsBy != 'ai') return;
+    final wasPlaying = player.playing, at = player.position;
+    final pk = {for (final st in stemNames) st: overview(l.stems![st]!, 500)};
+    await player.load([
+      for (final st in stemNames) l.stems![st]!,
+    ], l.sampleRate);
+    if (!mounted) return;
+    setState(() {
+      peaks = pk;
+      aiBehind = null;
+      pos = at;
+    });
+    if (wasPlaying) await play(at);
+    final secs = DateTime.now().difference(t0).inMilliseconds / 1000;
+    toast(
+      'AI stems ready (${engine.aiDevice == 'gpu' ? 'graphics card' : 'processor'}, ${secs.toStringAsFixed(0)} s). Now playing the AI stems.',
+    );
   }
 
   void pause() {
@@ -341,12 +408,12 @@ class _StemsPageState extends ConsumerState<StemsPage> {
               const StudioProgress('Reading the song…', null),
             if (phase == 'splitting') ...[
               StudioProgress(
-                method == 'ai' && engine.aiModel != null
-                    ? 'Separating with AI on the processor… ${(progress * 100).round()}%'
+                splittingAi
+                    ? 'Separating with AI… ${(progress * 100).round()}%'
                     : 'Separating stems on ${engine.workers} cores… ${(progress * 100).round()}%',
                 progress,
               ),
-              if (method == 'ai' && engine.aiModel != null)
+              if (splittingAi)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton(
@@ -354,6 +421,19 @@ class _StemsPageState extends ConsumerState<StemsPage> {
                     child: const Text('Stop'),
                   ),
                 ),
+            ],
+            if (phase == 'ready' && aiBehind != null) ...[
+              StudioProgress(
+                'Fast stems ready. Making the AI stems in the background… ${(aiBehind! * 100).round()}%',
+                aiBehind,
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton(
+                  onPressed: engine.cancelAi,
+                  child: const Text('Keep the Fast stems'),
+                ),
+              ),
             ],
             if (phase == 'ready' && l != null && peaks != null) ...[
               const SizedBox(height: 8),

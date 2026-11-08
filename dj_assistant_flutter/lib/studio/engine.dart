@@ -207,6 +207,9 @@ class StudioEngine {
   /// Settings → Studio: cores for the Fast split; null or 0 is automatic.
   int? cores;
 
+  /// Overlap between the segments the AI model processes.
+  static const aiOverlap = 0.1;
+
   /// Length of each part of a Fast split.
   static const partSeconds = 30;
 
@@ -546,6 +549,9 @@ class StudioEngine {
         mix,
         sr,
         m.run,
+        // 10% overlap: about 17% fewer model runs than 1.x's 25%, with a
+        // 0.8 s cross-fade at each join
+        overlapFraction: StudioEngine.aiOverlap,
         onProgress: (d, t) {
           if (cancel.value != 0) throw Cancelled();
           progress(d / t);

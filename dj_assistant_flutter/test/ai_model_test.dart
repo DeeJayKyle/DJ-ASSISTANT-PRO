@@ -124,4 +124,25 @@ void main() {
     skip: skip,
     timeout: const Timeout(Duration(minutes: 10)),
   );
+
+  test(
+    'Fast first, then the AI stems replace them',
+    () async {
+      final engine = StudioEngine(cores: 2)..aiModel = model;
+      final l = Loaded(
+        const SongRef(id: 'f', title: 'f', path: ''),
+        aiSr,
+        clip(),
+      );
+      await engine.separate(l, method: 'fast');
+      expect(l.stemsBy, 'fast');
+      final fast = l.stems;
+      await engine.separate(l, method: 'ai');
+      expect(l.stemsBy, 'ai');
+      expect(identical(l.stems, fast), isFalse);
+      expect(identical(l.fastStems, fast), isTrue, reason: 'Fast stems kept');
+    },
+    skip: skip,
+    timeout: const Timeout(Duration(minutes: 10)),
+  );
 }

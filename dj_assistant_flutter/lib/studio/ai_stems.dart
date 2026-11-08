@@ -180,13 +180,14 @@ Map<String, List<Float32List>> separateAi(
   ModelRun run, {
   void Function(int done, int total)? onProgress,
   bool Function()? cancelled,
+  double overlapFraction = overlap,
 }) {
   final n0 = mix[0].length;
   final n = (n0 * aiSr / sampleRate).round();
   final right = mix.length > 1 ? mix[1] : mix[0];
   final L = sampleRate == aiSr ? mix[0] : resample(mix[0], n);
   final R = sampleRate == aiSr ? right : resample(right, n);
-  final stride = (seg * (1 - overlap)).floor();
+  final stride = (seg * (1 - overlapFraction)).floor();
   final total = math.max(1, (math.max(0, n - seg) / stride).ceil() + 1);
   final out = [
     for (final _ in aiStemNames) [Float32List(n), Float32List(n)],
