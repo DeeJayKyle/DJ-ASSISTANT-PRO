@@ -52,6 +52,7 @@ class SessionNotifier extends Notifier<AppSession> {
         (s.lastScan?.state == 'running');
     ref.onDispose(s.close);
     if (s.watcher.enabled) s.watcher.start();
+    s.inbox.start(); // does nothing unless auto-import is on
     return s;
   }
 

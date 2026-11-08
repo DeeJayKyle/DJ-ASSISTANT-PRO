@@ -1,11 +1,14 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
 import '../analysis/beatgrid.dart' show bpmRanges;
 import '../assistant/ai_config.dart';
 import '../online/lookups.dart';
 import '../online/online.dart';
 import 'autoprep.dart';
 import 'catalogue.dart';
+import 'inbox.dart' show defaultDownloadsFolder, defaultInboxFolder;
 import 'library.dart';
 
 class SettingsException implements Exception {
@@ -43,6 +46,10 @@ class SettingsService {
       'allow_file_changes': _flag('allow_file_changes', false),
       'docs_enabled': _flag('docs_enabled', false),
       'watch_enabled': _flag('watch_enabled', false),
+      'inbox_enabled': _flag('inbox_enabled', false),
+      'inbox_downloads':
+          cat.getSetting('inbox_downloads') ?? defaultDownloadsFolder(),
+      'inbox_folder': cat.getSetting('inbox_folder') ?? defaultInboxFolder(),
       'learning_enabled': _flag('learning_enabled', true),
       'gig_mode': _flag('gig_mode', false),
       'auto_update': _flag('auto_update', true),
@@ -84,6 +91,7 @@ class SettingsService {
     'premium_ui',
     'auto_prep',
     'watch_enabled',
+    'inbox_enabled',
   };
 
   void set(String key, Object? value) {
@@ -116,6 +124,11 @@ class SettingsService {
         final v = value is num ? value.toInt() : int.tryParse('$value');
         if (v == null || v < 0) _bad('cores must be 0 (automatic) or more');
         cat.setSetting(key, '$v');
+      case 'inbox_downloads':
+      case 'inbox_folder':
+        final v = s().trim();
+        if (v.isEmpty || !p.isAbsolute(v)) _bad('choose a full folder path');
+        cat.setSetting(key, v);
       case 'bpm_range':
         choice(
           bpmRanges.keys.toList(),

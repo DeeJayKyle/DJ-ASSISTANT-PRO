@@ -211,6 +211,9 @@ class InboxService {
     try {
       final archive = ZipDecoder().decodeStream(input);
       final files = archive.files.where((f) => f.isFile).toList();
+      if (files.isEmpty) {
+        throw InboxException('the ZIP is empty or damaged');
+      }
       if (files.length > maxZipEntries) {
         throw InboxException('the ZIP has too many files (${files.length})');
       }

@@ -29,6 +29,7 @@ import '../online/credentials.dart';
 import '../online/http_online.dart';
 import '../online/lookups.dart';
 import '../online/online.dart';
+import 'inbox_runner.dart';
 
 /// Builds the online implementation inside a job's isolate (top-level, so it
 /// can be sent there).
@@ -86,6 +87,9 @@ class AppSession {
   late final gigPack = GigPackService(cat);
   late final serato = SeratoService(cat);
   late final watcher = FolderWatcher(cat);
+
+  /// Auto-import of finished downloads (Settings → Auto-import).
+  late final inbox = InboxRunner(this);
 
   /// Starts a background job without waiting for it; errors land in its state.
   Map<String, Object?> _launch(String kind, JobBody body) {
@@ -193,6 +197,7 @@ class AppSession {
   Future<void> close() async {
     await _scanSub?.cancel();
     watcher.stop();
+    inbox.stop();
     scan.cancel();
     await jobs.shutdown();
     cat.close();

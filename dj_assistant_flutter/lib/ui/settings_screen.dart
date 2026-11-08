@@ -1,11 +1,13 @@
 import 'dart:io';
 
+import 'package:file_selector/file_selector.dart' show getDirectoryPath;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../assistant/ai_config.dart';
 import '../assistant/quick_ai.dart';
 import '../core/catalogue.dart';
+import '../core/inbox.dart' show InboxService, inboxCrateName;
 import '../core/diag_log.dart';
 import '../core/limits.dart';
 import '../core/export.dart' show openFolder;
@@ -16,7 +18,7 @@ import '../studio/stems_cache.dart';
 import 'assistant_panel.dart';
 import 'format.dart';
 import 'shortcuts_sheet.dart';
-import 'studio/common.dart' show preparedStemsDir;
+import 'studio/common.dart' show errText, preparedStemsDir;
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -65,6 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final s = ref.read(sessionProvider);
     s.settings.set(k, v);
     if (k == 'watch_enabled') v == true ? s.watcher.start() : s.watcher.stop();
+    if (k.startsWith('inbox_')) s.inbox.start();
   }, bump: ref).then((_) => _loadAi());
 
   @override
@@ -255,6 +258,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          gap,
+          const AutoImportPanel(),
           gap,
           Panel(
             title: 'Studio',
@@ -1003,6 +1008,145 @@ class _LimitsPanelState extends ConsumerState<LimitsPanel> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Settings → Auto-import: finished downloads go straight into the library.
+class AutoImportPanel extends ConsumerStatefulWidget {
+  const AutoImportPanel({super.key});
+  @override
+  ConsumerState<AutoImportPanel> createState() => _AutoImportPanelState();
+}
+
+class _AutoImportPanelState extends ConsumerState<AutoImportPanel> {
+  bool checking = false;
+
+  void _set(String k, Object? v) => guard(() {
+    final s = ref.read(sessionProvider);
+    s.settings.set(k, v);
+    s.inbox.start();
+  }, bump: ref);
+
+  Future<void> _pick(String key, String title) async {
+    final d = await getDirectoryPath(confirmButtonText: title);
+    if (d != null) _set(key, d);
+  }
+
+  Future<void> _check() async {
+    final s = ref.read(sessionProvider);
+    setState(() => checking = true);
+    try {
+      final msg = await s.inbox.runNow();
+      toast(msg);
+      ref.read(versionProvider.notifier).bump();
+    } on Object catch (e) {
+      toast(errText(e), error: true);
+    } finally {
+      if (mounted) setState(() => checking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(sessionProvider);
+    ref.watch(versionProvider);
+    final st = ref.watch(settingsProvider);
+    final t = DjTokens.of(context);
+    final on = st['inbox_enabled'] == true;
+    final recent = InboxService(s.cat).recent(limit: 6);
+    Widget folder(String key, String label, String button, String help) => Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label),
+              Text(
+                '${st[key] ?? ''}',
+                style: TextStyle(color: t.muted, fontSize: DjType.small),
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                help,
+                style: TextStyle(color: t.faint, fontSize: DjType.small),
+              ),
+            ],
+          ),
+        ),
+        TextButton(
+          onPressed: () => _pick(key, button),
+          child: const Text('Change'),
+        ),
+      ],
+    );
+    return Panel(
+      title: 'Auto-import',
+      subtitle: 'Music you buy or download (Beatport, Bandcamp, Juno, promo and record pools) goes straight into your library, analysed and ready to prep.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Import finished downloads automatically'),
+            subtitle: Text(
+              'New audio files and ZIPs are copied into the Inbox folder, scanned, analysed (BPM, key, beatgrid) and added to the "$inboxCrateName" crate. Your downloads folder is only read: nothing there is moved or deleted.',
+              style: TextStyle(color: t.faint, fontSize: DjType.small),
+            ),
+            value: on,
+            onChanged: (v) => _set('inbox_enabled', v),
+          ),
+          folder(
+            'inbox_downloads',
+            'Downloads folder (watched)',
+            'Watch this folder',
+            'Where your browser or store app saves downloads.',
+          ),
+          const SizedBox(height: 6),
+          folder(
+            'inbox_folder',
+            'Inbox folder (in your library)',
+            'Import here',
+            'New tracks are copied here, in a folder per day. Not inside the downloads folder.',
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: !on || checking ? null : _check,
+                icon: const Icon(Icons.download_done_outlined),
+                label: Text(checking ? 'Checking…' : 'Check now'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  s.inbox.lastMessage ??
+                      (on ? 'Watching for finished downloads.' : 'Off.'),
+                  style: TextStyle(color: t.muted, fontSize: DjType.small),
+                ),
+              ),
+            ],
+          ),
+          if (recent.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Recent', style: TextStyle(color: t.muted)),
+            for (final r in recent)
+              Text(
+                '${r['status'] == 'imported'
+                    ? '✓'
+                    : r['status'] == 'error'
+                    ? '✗'
+                    : '–'} ${r['file']}'
+                '${r['message'] == null ? '' : ' (${r['message']})'}',
+                style: TextStyle(
+                  color: r['status'] == 'error' ? t.warn : t.faint,
+                  fontSize: DjType.small,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
         ],
       ),
     );
