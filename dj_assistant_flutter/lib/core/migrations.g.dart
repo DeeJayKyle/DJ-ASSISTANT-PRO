@@ -366,4 +366,7 @@ CREATE TABLE catalog_checked (
     checked_at INTEGER NOT NULL
 );
 ''',
+  r'''
+ALTER TABLE analysis ADD COLUMN beatgrid_json TEXT;
+''',
 ];

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../analysis/analysis.dart' as an;
+import '../analysis/beatgrid.dart';
 import 'catalogue.dart';
 import 'limits.dart';
 import 'jobs.dart';
@@ -19,7 +20,7 @@ class AnalysisStore {
       'SELECT method, version, analysed_at, status, error, bpm, bpm_confidence, bpm_alt, musical_key, camelot, '
       'key_confidence, energy, loudness_lufs, peak_dbfs, clipped_runs, silence_start_ms, silence_end_ms, '
       'intro_end_ms, outro_start_ms, tempo_stable, cues_json, warnings_json, waveform, duration_ms, '
-      'fingerprint_encoded IS NOT NULL AS has_fp FROM analysis WHERE track_id=?',
+      'fingerprint_encoded IS NOT NULL AS has_fp, beatgrid_json FROM analysis WHERE track_id=?',
       [trackId],
     );
     if (rows.isEmpty) return null;
@@ -52,6 +53,9 @@ class AnalysisStore {
       'waveform': (r['waveform'] as List<int>?) ?? const <int>[],
       'duration_ms': r['duration_ms'],
       'has_fingerprint': r['has_fp'] == 1,
+      'beatgrid': r['beatgrid_json'] == null
+          ? null
+          : jsonDecode(r['beatgrid_json'] as String),
     };
   }
 
@@ -69,8 +73,8 @@ class AnalysisStore {
       'INSERT OR REPLACE INTO analysis (track_id, method, version, analysed_at, file_size, file_mtime, status, error, '
       'bpm, bpm_confidence, bpm_alt, musical_key, camelot, key_confidence, energy, loudness_lufs, peak_dbfs, '
       'clipped_runs, silence_start_ms, silence_end_ms, intro_end_ms, outro_start_ms, tempo_stable, cues_json, '
-      'warnings_json, waveform, fingerprint, fingerprint_encoded, duration_ms, energy_raw) '
-      "VALUES (?,?,?,?,?,?,'ok',NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      'warnings_json, waveform, fingerprint, fingerprint_encoded, duration_ms, energy_raw, beatgrid_json) '
+      "VALUES (?,?,?,?,?,?,'ok',NULL,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [
         id, an.method, an.version, nowMs(), size, mtime, //
         a.bpm,
@@ -95,6 +99,7 @@ class AnalysisStore {
         a.fingerprintEncoded,
         a.durationMs,
         a.energyRaw,
+        a.beatgrid == null ? null : jsonEncode(a.beatgrid!.toJson()),
       ],
     );
     _suggest(id, a);
@@ -246,6 +251,9 @@ JobBody analysisJob(String dbPath, {List<int>? only, bool force = false}) =>
         final todo = store.pending(only: only, force: force);
         // Settings → Limits: minutes read per track, or the whole file
         final minutes = limitOf(cat, 'analysis_minutes');
+        // Settings → Library: BPM range (Serato's ranges, or automatic)
+        final range = cat.getSetting('bpm_range');
+        final bpmRange = bpmRanges.containsKey(range) ? range : 'auto';
         ctx.total = todo.length;
         for (final (id, path, size, mtime) in todo) {
           if (await ctx.checkpoint()) break;
@@ -257,6 +265,7 @@ JobBody analysisJob(String dbPath, {List<int>? only, bool force = false}) =>
               an.analyseFile(
                 path,
                 seconds: minutes == null ? null : minutes * 60.0,
+                bpmRange: bpmRange,
               ),
             );
             ctx.tick();

@@ -93,7 +93,10 @@ void main() {
             want.where((o) => o['energy_raw'] == w['energy_raw']).length > 1) {
           continue; // tied raw energy: checked as a group below
         }
-        if (k == 'peak_dbfs' && name == 'Driftwood.aiff') {
+        if (k == 'version') {
+          // 2.1 adds the whole-file beatgrid; everything 1.x stores is unchanged
+          expect(y, 2, reason: '$name version');
+        } else if (k == 'peak_dbfs' && name == 'Driftwood.aiff') {
           expect(
             y,
             -18.1,

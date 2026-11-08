@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../audio/pcm.dart';
+import 'beatgrid.dart';
 import 'chromaprint.dart';
 import 'fft.dart';
 import 'loudness.dart';
@@ -10,7 +11,9 @@ import 'loudness.dart';
 /// *estimate*: shown as such, overridable by the DJ, and stored with [method] and
 /// [version] so it can be regenerated. Files are only opened for reading.
 const method = 'dj-assistant-dsp';
-const version = 1;
+
+/// 2: whole-file beatgrid, BPM range and tuning-aware key (2.1).
+const version = 2;
 
 /// Longest stretch of audio decoded for analysis (keeps very long mixes fast).
 const maxSeconds = 15.0 * 60.0;
@@ -42,6 +45,12 @@ class Analysis {
   final cues = <CuePoint>[];
   Uint8List waveform = Uint8List(0);
   bool? tempoStable;
+
+  /// Whole-file beatgrid (tempo markers and downbeat), when beats were found.
+  BeatGrid? beatgrid;
+
+  /// How far the music is from A = 440 Hz, in cents (key analysis).
+  double? tuningCents;
   final warnings = <String>[];
 
   /// Chromaprint sub-fingerprints of the first two minutes.
@@ -70,6 +79,8 @@ class Analysis {
     'cues': [for (final c in cues) c.toJson()],
     'waveform': waveform.toList(),
     'tempo_stable': tempoStable,
+    'beatgrid': beatgrid?.toJson(),
+    'tuning_cents': tuningCents,
     'warnings': warnings,
   };
 }
@@ -210,10 +221,13 @@ List<Float64List> _spectrogram(Float32List x, int n, int hop, [int? limit]) {
   return out;
 }
 
-(Float64List, double) _onsetEnvelope(Float32List x, double sr) {
+/// Spectral-flux onsets: (envelope, frames per second, low-band envelope).
+/// The low band (below 150 Hz: kick and bass) places the downbeat.
+(Float64List, double, Float64List) _onsetEnvelope(Float32List x, double sr) {
   const hop = 128;
   final spec = _spectrogram(x, 1024, hop);
-  final env = Float64List(spec.length);
+  final env = Float64List(spec.length), lowEnv = Float64List(spec.length);
+  final lowBins = math.max(2, (150 / (sr / 1024)).ceil());
   Float64List? prev;
   for (var f = 0; f < spec.length; f++) {
     final frame = spec[f];
@@ -221,14 +235,18 @@ List<Float64List> _spectrogram(Float32List x, int n, int hop, [int? limit]) {
     for (var k = 0; k < frame.length; k++) {
       lf[k] = math.log(1 + 10 * frame[k]);
     }
-    var flux = 0.0;
+    var flux = 0.0, low = 0.0;
     if (prev != null) {
       for (var k = 0; k < lf.length; k++) {
         final d = lf[k] - prev[k];
-        if (d > 0) flux += d;
+        if (d > 0) {
+          flux += d;
+          if (k < lowBins) low += d;
+        }
       }
     }
     env[f] = flux;
+    lowEnv[f] = low;
     prev = lf;
   }
   // Remove the slow trend.
@@ -241,7 +259,7 @@ List<Float64List> _spectrogram(Float32List x, int n, int hop, [int? limit]) {
     final mean = acc / (math.min(i, w - 1) + 1);
     out[i] = math.max(0, env[i] - mean);
   }
-  return (out, sr / hop);
+  return (out, sr / hop, lowEnv);
 }
 
 /// Tempo from an onset envelope: (bpm, confidence 0..1).
@@ -385,11 +403,41 @@ const _minor = [
   3.17,
 ];
 
-/// Key from chroma and Krumhansl profiles: (name, Camelot, confidence).
-(String, String, double)? _key(Float32List x, double sr) {
+/// How far the music sits from A = 440 Hz, in semitones (−0.5…0.5): the
+/// weighted circular mean of where spectral peaks fall between semitones,
+/// with how consistent they are (0…1).
+(double, double) estimateTuning(List<Float64List> spec, double sr, int n) {
+  var c = 0.0, s = 0.0, w = 0.0;
+  for (final frame in spec) {
+    for (var k = 2; k < frame.length - 1; k++) {
+      final m = frame[k];
+      if (m <= frame[k - 1] || m < frame[k + 1]) continue;
+      final y0 = frame[k - 1], y2 = frame[k + 1];
+      final den = y0 - 2 * m + y2;
+      final kk = den.abs() > 1e-12 ? k + 0.5 * (y0 - y2) / den : k.toDouble();
+      final f = kk * sr / n;
+      if (f < 200 || f > 1760) continue;
+      final midi = 12 * math.log(f / 440) / math.ln2 + 69;
+      final a = 2 * math.pi * (midi - midi.round());
+      c += m * math.cos(a);
+      s += m * math.sin(a);
+      w += m;
+    }
+  }
+  if (w <= 0) return (0, 0);
+  return (math.atan2(s, c) / (2 * math.pi), math.sqrt(c * c + s * s) / w);
+}
+
+/// Key from chroma and Krumhansl profiles: (name, Camelot, confidence,
+/// tuning in cents). Music tuned 20 cents or more away from A = 440 Hz
+/// (pitched vinyl rips, older recordings) is read on its own tuning, so its
+/// notes are not split between neighbouring semitones.
+(String, String, double, double)? _key(Float32List x, double sr) {
   const n = 4096;
   final spec = _spectrogram(x, n, n ~/ 2);
   if (spec.isEmpty) return null;
+  final (tune, strength) = estimateTuning(spec, sr, n);
+  final shift = tune.abs() >= 0.2 && strength >= 0.2 ? tune : 0.0;
   final chroma = Float64List(12);
   final pcs = Int32List(n ~/ 2);
   for (var k = 1; k < n ~/ 2; k++) {
@@ -398,7 +446,7 @@ const _minor = [
       pcs[k] = -1;
       continue;
     }
-    final midi = 12 * math.log(f / 440) / math.ln2 + 69;
+    final midi = 12 * math.log(f / 440) / math.ln2 + 69 - shift;
     pcs[k] = midi.round() % 12;
   }
   for (final frame in spec) {
@@ -440,6 +488,7 @@ const _minor = [
     '${_notes[root]} ${minor ? 'minor' : 'major'}',
     minor ? _camelotMinor[root] : _camelotMajor[root],
     conf.toDouble(),
+    (tune * 1000).round() / 10,
   );
 }
 
@@ -451,8 +500,9 @@ double _rms(Float32List x, int s, int e) {
   return math.sqrt(sum / (e - s));
 }
 
-/// Runs every analysis stage on decoded audio.
-Analysis analyseDecoded(Decoded d) {
+/// Runs every analysis stage on decoded audio. [bpmRange] is one of
+/// [bpmRanges] ('auto' or null keeps this app's own half/double-time rule).
+Analysis analyseDecoded(Decoded d, {String? bpmRange}) {
   final sr = d.sampleRate.toDouble();
   final x = d.mono;
   final a = Analysis()
@@ -568,18 +618,31 @@ Analysis analyseDecoded(Decoded d) {
 
   // Tempo and key on a ~11 kHz mono copy.
   final (low, lsr) = _downsample(x, d.sampleRate);
-  final (oenv, fr) = _onsetEnvelope(low, lsr);
+  final (oenv, fr, lowEnv) = _onsetEnvelope(low, lsr);
   final t = _tempo(oenv, fr);
   if (t != null) {
-    final (bpm, conf) = t;
+    final (detected, conf) = t;
+    final bpm = (foldBpm(detected, bpmRange) * 10).round() / 10;
     a
       ..bpm = bpm
       ..bpmConfidence = (conf * 100).round() / 100;
-    if (bpm < 95 && bpm * 2 <= 200) {
+    if (bpm != detected) {
+      a.bpmAlt = detected;
+    } else if (bpm < 95 && bpm * 2 <= 200) {
       a.bpmAlt = bpm * 2;
     } else if (bpm > 145) {
       a.bpmAlt = (bpm / 2 * 10).round() / 10;
     }
+    a.beatgrid = beatGrid(
+      oenv,
+      fr,
+      bpm,
+      lowEnv: lowEnv,
+      // Flux peaks when an onset is three quarters into the 1024-sample
+      // window (measured: a constant 2 hops after the window centre at every
+      // tempo), the same lag the Studio's beat phase allows for.
+      offsetSec: 768 / lsr,
+    );
     if (oenv.length > (fr * 40).floor()) {
       final mid = oenv.length ~/ 2;
       final h1 = _tempo(Float64List.sublistView(oenv, 0, mid), fr);
@@ -598,12 +661,19 @@ Analysis analyseDecoded(Decoded d) {
     }
     if (conf < 0.2) a.warnings.add('Tempo is uncertain for this track.');
   }
-  final k = _key(low, lsr);
+  // Key needs the notes up to 1.76 kHz, so a sample rate of at least 4 kHz.
+  final k = d.sampleRate < 4000 ? null : _key(low, lsr);
+  if (d.sampleRate < 4000) {
+    a.warnings.add(
+      'Key not analysed: the sample rate (${d.sampleRate} Hz) is too low.',
+    );
+  }
   if (k != null) {
     a
       ..key = k.$1
       ..camelot = k.$2
-      ..keyConfidence = (k.$3 * 100).round() / 100;
+      ..keyConfidence = (k.$3 * 100).round() / 100
+      ..tuningCents = k.$4;
   }
 
   // Energy: a raw 0..1 score from loudness, tempo, percussive punch and brightness.
@@ -706,5 +776,11 @@ class FingerprintTap implements DecodeTap {
 
 /// Decodes and analyses [path], fingerprint included: the first [seconds]
 /// (15 minutes, as 1.x), or with null the whole file.
-Analysis analyseFile(String path, {double? seconds = maxSeconds}) =>
-    analyseDecoded(decode(path, seconds: seconds, tap: FingerprintTap()));
+Analysis analyseFile(
+  String path, {
+  double? seconds = maxSeconds,
+  String? bpmRange,
+}) => analyseDecoded(
+  decode(path, seconds: seconds, tap: FingerprintTap()),
+  bpmRange: bpmRange,
+);
