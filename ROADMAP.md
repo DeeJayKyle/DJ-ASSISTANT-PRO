@@ -14,6 +14,7 @@ Every item still needs **manual testing on a real Windows PC with a real library
 | Analysis | Serato's own beatgrid and BPM read from file tags (MP3, FLAC), never written | Tested (built tags); not yet on files Serato wrote |
 | Export | rekordbox XML carries each beatgrid as TEMPO markers | Tested; not yet opened in rekordbox |
 | Studio | Prepared stems: split once, kept in app data, size cap; Prepare stems for a crate | Tested (file format, cache); UI needs a hand test on Windows |
+| Library | Auto-import: finished downloads (audio and ZIPs) copied into an Inbox folder, scanned, analysed and added to an Inbox crate; downloads never moved or deleted | Tested (service and session); needs a hand test on Windows with real store downloads |
 | DJ Decks | New layout: scrolling waveforms with beatgrids, deck panels, mixer, hot cue / loop / stem pads, library strip | Builds; needs a hand test on Windows |
 
 See docs/SERATO_STUDY.md for what was learned from Serato's design and how each feature was built independently.

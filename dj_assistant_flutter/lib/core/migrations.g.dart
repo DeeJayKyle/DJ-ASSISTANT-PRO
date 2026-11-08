@@ -369,4 +369,18 @@ CREATE TABLE catalog_checked (
   r'''
 ALTER TABLE analysis ADD COLUMN beatgrid_json TEXT;
 ''',
+  r'''
+CREATE TABLE inbox_imports (
+    id INTEGER PRIMARY KEY,
+    source_path TEXT NOT NULL,
+    source_size INTEGER NOT NULL,
+    source_mtime INTEGER NOT NULL,
+    entry TEXT NOT NULL DEFAULT '',
+    dest_path TEXT,
+    status TEXT NOT NULL CHECK (status IN ('imported','skipped','error')),
+    message TEXT,
+    imported_at INTEGER NOT NULL,
+    UNIQUE (source_path, source_size, source_mtime, entry)
+);
+''',
 ];
