@@ -674,6 +674,11 @@ Analysis analyseDecoded(Decoded d, {String? bpmRange}) {
       ..camelot = k.$2
       ..keyConfidence = (k.$3 * 100).round() / 100
       ..tuningCents = k.$4;
+    if (k.$4.abs() >= 20) {
+      a.warnings.add(
+        'Tuned ${k.$4 > 0 ? '+' : ''}${k.$4.round()} cents from A = 440 Hz; the key was read on this tuning.',
+      );
+    }
   }
 
   // Energy: a raw 0..1 score from loudness, tempo, percussive punch and brightness.

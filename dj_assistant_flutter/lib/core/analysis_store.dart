@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../analysis/analysis.dart' as an;
 import '../analysis/beatgrid.dart';
 import 'catalogue.dart';
+import 'serato_tags.dart';
 import 'limits.dart';
 import 'jobs.dart';
 import 'keys.dart';
@@ -103,6 +104,19 @@ class AnalysisStore {
       ],
     );
     _suggest(id, a);
+  }
+
+  /// The best beatgrid for a track: Serato's own (read from the file's tags,
+  /// never written) when the DJ has analysed it in Serato, else this app's.
+  BeatGrid? beatgridFor(int trackId, String path) {
+    final serato = readSeratoAnalysis(path).beatgrid;
+    if (serato != null) return serato;
+    final r = cat.db.select(
+      'SELECT beatgrid_json FROM analysis WHERE track_id=?',
+      [trackId],
+    );
+    final j = r.isEmpty ? null : r.first['beatgrid_json'] as String?;
+    return j == null ? null : BeatGrid.fromJson(jsonDecode(j));
   }
 
   void storeError(int id, int size, int? mtime, String error) {

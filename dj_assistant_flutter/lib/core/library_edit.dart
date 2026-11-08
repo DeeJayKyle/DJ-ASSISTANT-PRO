@@ -1,6 +1,7 @@
 import 'analysis_store.dart';
 import 'catalogue.dart';
 import 'library.dart';
+import 'serato_tags.dart';
 import 'text.dart';
 
 /// Catalogue-only edits and queries (1.x `library.rs`): the DJ's own values,
@@ -314,6 +315,13 @@ extension LibraryEdits on LibraryService {
       ],
       'read_error': t['read_error'],
       'analysis': AnalysisStore(cat).get(id),
+      // Serato's own grid and BPM in the file's tags (read only)
+      'serato': () {
+        final s = readSeratoAnalysis(t['path'] as String);
+        return s.isEmpty
+            ? null
+            : {'bpm': s.bpm, 'beatgrid': s.beatgrid?.toJson()};
+      }(),
       'plays': cat.db.select(
         "SELECT (SELECT COUNT(*) FROM play_history WHERE track_id=?) + (SELECT COUNT(*) FROM gig_events WHERE track_id=? AND kind='played') AS n",
         [id, id],

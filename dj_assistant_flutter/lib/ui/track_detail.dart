@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../analysis/beatgrid.dart';
 import '../core/discovery.dart';
 import '../core/export.dart';
 import '../core/library.dart';
@@ -72,6 +73,8 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
     final file = (d['file'] as Map?)?.cast<String, Object?>() ?? const {};
     final mine = (d['mine'] as Map?)?.cast<String, Object?>() ?? const {};
     final a = (d['analysis'] as Map?)?.cast<String, Object?>();
+    final serato = (d['serato'] as Map?)?.cast<String, Object?>();
+    final grid = BeatGrid.fromJson(serato?['beatgrid'] ?? a?['beatgrid']);
     if (_loadedVersion != version) {
       _loadedVersion = version;
       _fill(mine);
@@ -205,6 +208,23 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                   ],
                 ),
               ),
+              if (grid != null)
+                kv(
+                  'Beatgrid',
+                  Text(
+                    '${fmtBpm(grid.bpm)} BPM · '
+                    '${grid.stable ? 'steady' : '${grid.markers.length} tempo changes'} · '
+                    'first beat ${(grid.firstBeatMs / 1000).toStringAsFixed(2)} s · '
+                    'bar 1 at ${(grid.downbeatMs / 1000).toStringAsFixed(2)} s'
+                    '${grid.source == 'serato'
+                        ? ' · from Serato'
+                        : grid.downbeatConfidence < 0.1
+                        ? ' · bar line uncertain'
+                        : ''}',
+                  ),
+                ),
+              if (serato?['bpm'] != null)
+                kv('Serato BPM', Text(fmtBpm(serato!['bpm'] as num?))),
               kv(
                 'Energy',
                 Wrap(
@@ -247,7 +267,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                   style: TextStyle(color: t.warn, fontSize: DjType.small),
                 ),
               Text(
-                "Estimates from ${a['method']} v${a['version']}. They can be wrong (half/double tempo, modal keys) — your values always win. Serato's own cues and beatgrids are not read or changed.",
+                "Estimates from ${a['method']} v${a['version']}. They can be wrong (half/double tempo, modal keys) — your values always win. Serato's own beatgrid and BPM are read from the file when it has them, never changed.",
                 style: TextStyle(color: t.faint, fontSize: DjType.small),
               ),
             ])

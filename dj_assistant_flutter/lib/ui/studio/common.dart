@@ -13,6 +13,7 @@ import '../../core/library.dart';
 import '../../core/packs.dart';
 import '../../studio/audio_out.dart' show PcmStream;
 import '../../studio/engine.dart';
+import '../../studio/stems_cache.dart';
 import '../state.dart';
 import '../theme.dart';
 
@@ -28,8 +29,19 @@ StudioEngine applyStudioSettings(WidgetRef ref, StudioEngine e) {
   return e
     ..maxMinutes = userLimit(ref, 'studio_minutes')
     ..cores = st['studio_cores'] as int?
-    ..useGpu = st['ai_gpu'] != false;
+    ..useGpu = st['ai_gpu'] != false
+    ..stemsCache = st['stems_cache'] == false
+        ? null
+        : StemsCache(
+            preparedStemsDir(ref),
+            maxBytes:
+                ((st['stems_cache_gb'] as int?) ?? 20) * StemsCache.gigabyte,
+          );
 }
+
+/// Prepared stems are shared by every account on this computer, like packs.
+String preparedStemsDir(WidgetRef ref) =>
+    p.join(ref.read(accountsProvider).base, 'stems-cache');
 
 /// Songs already split this session (shown with a "stems" badge).
 class SplitSongs extends Notifier<Set<String>> {
