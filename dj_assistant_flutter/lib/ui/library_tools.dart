@@ -353,7 +353,8 @@ class ActivityScreen extends ConsumerWidget {
                     );
                     if (r != null) {
                       toast(
-                        'Imported ${r['matched']} plays (${r['unmatched']} not in your library).',
+                        'Imported ${r['matched']} plays (${r['unmatched']} not in your library'
+                        '${(r['likely'] ?? 0) > 0 ? ', ${r['likely']} matched by title and artist' : ''}).',
                       );
                     }
                   },

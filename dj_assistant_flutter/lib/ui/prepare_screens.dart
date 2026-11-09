@@ -8,6 +8,7 @@ import '../core/gigpack.dart';
 import '../core/json.dart';
 import '../core/library.dart';
 import '../core/library_edit.dart';
+import '../core/next_track.dart';
 import '../online/http_online.dart' show appVersion;
 import 'format.dart';
 import 'state.dart';
@@ -580,6 +581,16 @@ class _GigScreenState extends ConsumerState<GigScreen> {
                     ),
                 ],
               ),
+            ),
+          ),
+          SizedBox(
+            width: 520,
+            child: NextUpPanel(
+              played: [
+                for (final p in played)
+                  if (p['track_id'] != null) p['track_id']! as int,
+              ],
+              onPlayed: play,
             ),
           ),
           SizedBox(
@@ -1221,6 +1232,163 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Gig mode "Next up": what mixes in after the last played track, steered
+/// by an energy direction, with the BPM window and key gate on hand.
+class NextUpPanel extends ConsumerStatefulWidget {
+  const NextUpPanel({super.key, required this.played, required this.onPlayed});
+
+  /// Track ids played so far, oldest first.
+  final List<int> played;
+  final void Function(int trackId) onPlayed;
+  @override
+  ConsumerState<NextUpPanel> createState() => _NextUpPanelState();
+}
+
+class _NextUpPanelState extends ConsumerState<NextUpPanel> {
+  var direction = EnergyDirection.hold;
+  var gate = const MixGate();
+
+  static const _windows = <(double?, String)>[
+    (0, 'Same BPM'),
+    (1, '±1 BPM'),
+    (3, '±3 BPM'),
+    (6, '±6 BPM'),
+    (10, '±10 BPM'),
+    (16, '±16 BPM'),
+    (null, 'Any tempo'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(sessionProvider);
+    ref.watch(versionProvider);
+    final t = DjTokens.of(context);
+    final notation = '${ref.watch(settingsProvider)['key_notation']}';
+    final r = NextTrackService(s.gig.cat)
+        .suggest(widget.played, direction: direction, gate: gate);
+    return Panel(
+      title: 'Next up',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<EnergyDirection>(
+            segments: const [
+              ButtonSegment(
+                value: EnergyDirection.cool,
+                icon: Icon(Icons.south_east, size: 16),
+                label: Text('Cool'),
+                tooltip: 'Bring the energy down a step',
+              ),
+              ButtonSegment(
+                value: EnergyDirection.hold,
+                icon: Icon(Icons.east, size: 16),
+                label: Text('Hold'),
+                tooltip: 'Keep the energy where it is',
+              ),
+              ButtonSegment(
+                value: EnergyDirection.lift,
+                icon: Icon(Icons.north_east, size: 16),
+                label: Text('Lift'),
+                tooltip: 'Take the energy up a step',
+              ),
+            ],
+            selected: {direction},
+            onSelectionChanged: (v) => setState(() => direction = v.first),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<double?>(
+                  isExpanded: true,
+                  initialValue: _windows.any((w) => w.$1 == gate.bpmWindow)
+                      ? gate.bpmWindow
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Tempo'),
+                  items: [
+                    for (final (v, l) in _windows)
+                      DropdownMenuItem(value: v, child: Text(l)),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => gate = gate.copyWith(bpmWindow: () => v)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DropdownButtonFormField<KeyGate>(
+                  isExpanded: true,
+                  initialValue: gate.key,
+                  decoration: const InputDecoration(labelText: 'Key'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: KeyGate.strict,
+                      child: Text('Keys that mix'),
+                    ),
+                    DropdownMenuItem(
+                      value: KeyGate.loose,
+                      child: Text('Mix + key changes'),
+                    ),
+                    DropdownMenuItem(
+                      value: KeyGate.off,
+                      child: Text('Any key'),
+                    ),
+                  ],
+                  onChanged: (v) => setState(
+                    () => gate = gate.copyWith(key: v ?? KeyGate.loose),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          HintText(
+            widget.played.isEmpty
+                ? 'Mark a track as played and the tracks that mix in after it appear here.'
+                : '${r.mixable} of ${r.total} tracks mix in'
+                      '${r.targetEnergy == null ? '' : ' · aiming for energy ${r.targetEnergy!.toStringAsFixed(1)}'}.',
+            icon: Icons.queue_music,
+          ),
+          for (final o in r.loosen)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() => gate = o.gate),
+                icon: Icon(
+                  o.clashes ? Icons.warning_amber : Icons.unfold_more,
+                  size: 16,
+                ),
+                label: Text('${o.label} (+${o.opensUp})'),
+              ),
+            ),
+          if (widget.played.isNotEmpty)
+            for (final x in r.suggestions)
+              ListTile(
+                dense: true,
+                title: Text(x.candidate.label, overflow: TextOverflow.ellipsis),
+                subtitle: Text(
+                  [
+                    if (x.candidate.bpm != null)
+                      '${fmtBpm(x.candidate.bpm)} BPM',
+                    if (x.candidate.camelot != null)
+                      fmtKey(x.candidate.camelot, notation),
+                    if (x.candidate.energy != null)
+                      'E${x.candidate.energy!.round()}',
+                    ...x.reasons,
+                  ].join(' · '),
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: x.flagged ? t.warn : null),
+                ),
+                trailing: TextButton(
+                  onPressed: () => widget.onPlayed(x.candidate.id),
+                  child: const Text('Played'),
+                ),
+              ),
         ],
       ),
     );

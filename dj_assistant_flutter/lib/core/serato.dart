@@ -8,6 +8,7 @@ import 'crates.dart';
 import 'paths.dart';
 import 'profile.dart';
 import 'text.dart';
+import 'track_match.dart';
 
 /// Read-only Serato import (1.x `serato.rs`): `_Serato_/Subcrates/*.crate` files
 /// are parsed defensively and copied in as virtual crates; Serato's history CSV
@@ -188,13 +189,35 @@ class SeratoService {
       throw SeratoException('Could not find a title/name column in this CSV.');
     }
     final ciArtist = col(['artist']),
-        ciTime = col(['start time', 'start', 'date', 'time', 'played']);
+        ciTime = col(['start time', 'start', 'date', 'time', 'played']),
+        ciPath = col(['location', 'file', 'path', 'filename', 'file name']),
+        ciLength = col(['length', 'duration', 'time length']);
     final index = <String, int>{
       for (final t in loadProfiles(cat))
         '${baseArtist(t.artist)}|${baseTitle(t.title)}|${t.version ?? versionOf(t.title)}':
             t.id,
     };
-    var matched = 0, unmatched = 0;
+    // fallback when the version-aware key misses: file path or name, then
+    // artist + title, then a likely match on title and artists
+    final matcher = TrackMatcher([
+      for (final r in cat.db.select(
+        'SELECT t.id, t.path, t.duration_ms, COALESCE(u.artist,t.artist) AS artist, '
+        'COALESCE(u.title,t.title) AS title FROM tracks t '
+        'LEFT JOIN track_user u ON u.track_id=t.id WHERE t.removed_at IS NULL',
+      ))
+        MatchTrack(
+          id: r['id'] as int,
+          path: r['path'] as String?,
+          artist: r['artist'] as String?,
+          title: r['title'] as String?,
+          durationSec: (r['duration_ms'] as int?) == null
+              ? null
+              : (r['duration_ms'] as int) / 1000,
+        ),
+    ]);
+    String? field(int? i, List<String> f) =>
+        i != null && i < f.length && f[i].isNotEmpty ? f[i] : null;
+    var matched = 0, unmatched = 0, likely = 0;
     final now = nowMs();
     for (final l in lines.skip(1)) {
       final f = _splitCsv(l);
@@ -202,8 +225,20 @@ class SeratoService {
       if (title.isEmpty) continue;
       final artist = ciArtist != null && ciArtist < f.length ? f[ciArtist] : '';
       final played = ciTime != null && ciTime < f.length ? f[ciTime] : null;
-      final id =
+      var id =
           index['${baseArtist(artist)}|${baseTitle(title)}|${versionOf(title)}'];
+      if (id == null) {
+        final m = matcher.match(
+          MatchEntry(
+            path: field(ciPath, f),
+            artist: artist,
+            title: title,
+            durationSec: parseLength(field(ciLength, f)),
+          ),
+        );
+        id = m?.trackId;
+        if (m != null && !m.sure) likely++;
+      }
       if (id != null) {
         matched++;
       } else {
@@ -220,7 +255,7 @@ class SeratoService {
         ],
       );
     }
-    return {'matched': matched, 'unmatched': unmatched};
+    return {'matched': matched, 'unmatched': unmatched, 'likely': likely};
   }
 
   List<Map<String, Object?>> history({int limit = 500}) => [

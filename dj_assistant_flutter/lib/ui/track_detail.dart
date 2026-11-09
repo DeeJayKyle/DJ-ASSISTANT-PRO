@@ -225,6 +225,36 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                 ),
               if (serato?['bpm'] != null)
                 kv('Serato BPM', Text(fmtBpm(serato!['bpm'] as num?))),
+              if ((serato?['cues'] as List?)?.isNotEmpty ?? false)
+                kv(
+                  'Serato cues',
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final c in (serato!['cues'] as List).cast<Map>())
+                        Chip(
+                          visualDensity: VisualDensity.compact,
+                          avatar: CircleAvatar(
+                            backgroundColor: Color(
+                              0xFF000000 |
+                                  int.parse(
+                                    '${c['color']}'.substring(1),
+                                    radix: 16,
+                                  ),
+                            ),
+                            radius: 6,
+                          ),
+                          label: Text(
+                            '${c['type'] == 'loop' ? 'Loop' : 'Cue'} ${c['slot']} · '
+                            '${fmtCueTime(c['position_ms'] as int)}'
+                            '${c['end_ms'] == null ? '' : '–${fmtCueTime(c['end_ms'] as int)}'}'
+                            '${c['name'] == null ? '' : ' · ${c['name']}'}',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               kv(
                 'Energy',
                 Wrap(

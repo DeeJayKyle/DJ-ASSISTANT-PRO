@@ -184,4 +184,72 @@ void main() {
       accounts.close();
     }, timeout: const Timeout(Duration(minutes: 10)));
   }
+
+  testWidgets('gig mode shows Next up after a played track', (tester) async {
+    final accounts = AccountsService.open(p.join(dir.path, 'data'));
+    final container = ProviderContainer(
+      overrides: [
+        accountsProvider.overrideWithValue(accounts),
+        sessionFactoryProvider.overrideWithValue(
+          (db) => AppSession(
+            dbPath: db,
+            online: NoOnline(),
+            secrets: MemorySecrets(),
+          ),
+        ),
+      ],
+    );
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final session = container.read(sessionProvider);
+    await tester.runAsync(() async {
+      RootsService(session.cat).add(lib.path);
+      await runScan(session.cat);
+    });
+    final ids = [
+      for (final r in session.cat.db.select(
+        'SELECT id FROM tracks ORDER BY id LIMIT 3',
+      ))
+        r['id'] as int,
+    ];
+    for (final (i, id) in ids.indexed) {
+      session.cat.db.execute(
+        'INSERT OR REPLACE INTO track_user(track_id, bpm, musical_key, energy, updated_at) VALUES (?,?,?,?,0)',
+        [id, 124 + i, '8A', 5 + i],
+      );
+    }
+    session.gig.start('Test gig');
+    session.gig.addEvent('played', trackId: ids.first);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const DjAssistantApp(checkUpdates: false),
+      ),
+    );
+    final problems = <String>[];
+    for (final size in sizes.values) {
+      tester.view.physicalSize = size;
+      container.read(viewProvider.notifier).go('gig');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      for (
+        var e = tester.takeException();
+        e != null;
+        e = tester.takeException()
+      ) {
+        problems.add('$size: ${'$e'.split('\n').first}');
+      }
+      expect(find.text('Next up'), findsOneWidget);
+      expect(find.text('Lift'), findsOneWidget);
+    }
+    expect(find.textContaining('Same key'), findsWidgets);
+    session.gig.end();
+    await tester.pumpWidget(const SizedBox());
+    container.dispose();
+    expect(problems, isEmpty, reason: problems.join('\n'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    accounts.close();
+  }, timeout: const Timeout(Duration(minutes: 5)));
 }
