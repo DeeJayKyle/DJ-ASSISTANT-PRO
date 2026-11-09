@@ -20,6 +20,12 @@ Every item still needs **manual testing on a real Windows PC with a real library
 | Serato | Hot cues and saved loops read from Serato Markers2 (MP3, FLAC), shown in track details, never written | Tested (built tags); not yet on files Serato wrote |
 | Export | rekordbox XML carries Serato hot cues (pads A–H) and saved loops (memory loops) | Tested; not yet opened in rekordbox |
 | Serato | History CSV matching falls back to file path/name and likely title + artist matches | Tested |
+| Gig Mode | Follow Serato: plays from Serato DJ 4's history marked as played every 15 s (read from a copy) | Tested (built database); needs a hand test with Serato running |
+| Set Studio | Mix grades and per-slot issues; key mode, half/double time, tempo ramp, artist gap, energy band, opening track | Tested |
+| Import | rekordbox XML playlists → crates of matching tracks | Tested (built XML); not yet on a real rekordbox export |
+| Import | Serato DJ 4 play history from `master.sqlite` (copy), once per session | Tested (built database); not yet on a real Serato database |
+| Discovery | Playlist files (M3U, M3U8, CSV) matched; shopping list CSV with store links | Tested |
+| Library Map | Tempo × energy chart coloured by Camelot key, search, click to open | Tested (unit + screen) |
 
 See docs/SERATO_STUDY.md and docs/DAJENT_STUDY.md for what was learned from other apps' designs and how each feature was built independently.
 

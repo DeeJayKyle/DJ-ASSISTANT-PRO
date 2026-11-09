@@ -17,28 +17,31 @@ NextTrackCandidate c(
 
 void main() {
   group('BPM gate', () {
-    const g = MixGate(bpmWindow: 3);
+    const g = MixRules(bpmWindow: 3);
     test('inside the window passes, outside fails', () {
-      expect(bpmGate(126, 124, g).pass, isTrue);
-      expect(bpmGate(128, 124, g).pass, isFalse);
+      expect(checkTempo(126, 124, g).pass, isTrue);
+      expect(checkTempo(128, 124, g).pass, isFalse);
     });
     test('half and double time pass unless turned off', () {
-      expect(bpmGate(62, 124, g).pass, isTrue);
-      expect(bpmGate(250, 124, g).pass, isTrue);
-      expect(bpmGate(62, 124, g.copyWith(halfDouble: false)).pass, isFalse);
+      expect(checkTempo(62, 124, g).pass, isTrue);
+      expect(checkTempo(250, 124, g).pass, isTrue);
+      expect(checkTempo(62, 124, g.copyWith(halfDouble: false)).pass, isFalse);
     });
     test('window 0 means the same rounded BPM', () {
-      const z = MixGate(bpmWindow: 0);
-      expect(bpmGate(124.4, 123.6, z).pass, isTrue);
-      expect(bpmGate(125, 124, z).pass, isFalse);
+      const z = MixRules(bpmWindow: 0);
+      expect(checkTempo(124.4, 123.6, z).pass, isTrue);
+      expect(checkTempo(125, 124, z).pass, isFalse);
     });
     test(
       'unknown BPM passes but is flagged; no anchor or any tempo passes',
       () {
-        final r = bpmGate(null, 124, g);
+        final r = checkTempo(null, 124, g);
         expect(r.pass && r.flagged, isTrue);
-        expect(bpmGate(90, null, g).pass, isTrue);
-        expect(bpmGate(90, 124, const MixGate(bpmWindow: null)).pass, isTrue);
+        expect(checkTempo(90, null, g).pass, isTrue);
+        expect(
+          checkTempo(90, 124, const MixRules(bpmWindow: null)).pass,
+          isTrue,
+        );
       },
     );
   });
@@ -46,25 +49,25 @@ void main() {
   group('key gate', () {
     test('same, adjacent and relative keys mix', () {
       for (final k in ['8A', '7A', '9A', '8B', 'Am', 'C']) {
-        expect(keyGate(k, '8A', KeyGate.strict).pass, isTrue, reason: k);
+        expect(checkKey(k, '8A', KeyGate.strict).pass, isTrue, reason: k);
       }
-      expect(keyGate('10A', '8A', KeyGate.strict).pass, isFalse);
-      expect(keyGate('9B', '8A', KeyGate.strict).pass, isFalse);
+      expect(checkKey('10A', '8A', KeyGate.strict).pass, isFalse);
+      expect(checkKey('9B', '8A', KeyGate.strict).pass, isFalse);
     });
     test('wheel wraps round from 12 to 1', () {
-      expect(keyGate('1A', '12A', KeyGate.strict).pass, isTrue);
+      expect(checkKey('1A', '12A', KeyGate.strict).pass, isTrue);
     });
     test('loose lets a one-semitone lift through, marked', () {
       // 8A (Am) → 3A (Bbm) is seven steps round the wheel
-      expect(keyGate('3A', '8A', KeyGate.strict).pass, isFalse);
-      final r = keyGate('3A', '8A', KeyGate.loose);
+      expect(checkKey('3A', '8A', KeyGate.strict).pass, isFalse);
+      final r = checkKey('3A', '8A', KeyGate.loose);
       expect(r.pass && r.keyChange, isTrue);
     });
     test('off and unknown keys', () {
-      expect(keyGate('3B', '8A', KeyGate.off).pass, isTrue);
-      final r = keyGate(null, '8A', KeyGate.strict);
+      expect(checkKey('3B', '8A', KeyGate.off).pass, isTrue);
+      final r = checkKey(null, '8A', KeyGate.strict);
       expect(r.pass && r.flagged, isTrue);
-      expect(keyGate('3B', null, KeyGate.strict).pass, isTrue);
+      expect(checkKey('3B', null, KeyGate.strict).pass, isTrue);
     });
   });
 
@@ -147,7 +150,7 @@ void main() {
         ],
         anchor: c(1, bpm: 124, key: '8A'),
         playedEnergies: const [],
-        gate: const MixGate(bpmWindow: 3, key: KeyGate.strict),
+        gate: const MixRules(bpmWindow: 3, key: KeyGate.strict),
       );
       expect(r.suggestions, isEmpty);
       // tempo alone does not help (the key still clashes)
@@ -156,7 +159,7 @@ void main() {
         library: [c(2, bpm: 135, key: '8A')],
         anchor: c(1, bpm: 124, key: '8A'),
         playedEnergies: const [],
-        gate: const MixGate(bpmWindow: 3, key: KeyGate.strict),
+        gate: const MixRules(bpmWindow: 3, key: KeyGate.strict),
       );
       expect(r2.loosen.single.label, 'Any tempo');
       expect(r2.loosen.single.opensUp, 1);
@@ -164,7 +167,7 @@ void main() {
         library: [c(2, bpm: 124, key: '3B')],
         anchor: c(1, bpm: 124, key: '8A'),
         playedEnergies: const [],
-        gate: const MixGate(key: KeyGate.strict),
+        gate: const MixRules(key: KeyGate.strict),
       );
       expect(r3.loosen.map((o) => o.label), ['Any key']);
       expect(r3.loosen.single.clashes, isTrue);

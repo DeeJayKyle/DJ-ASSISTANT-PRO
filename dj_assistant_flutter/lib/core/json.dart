@@ -140,4 +140,12 @@ SetParams setParamsFromJson(Map<String, Object?> j) => SetParams(
   crateId: (j['crate_id'] as num?)?.toInt(),
   harmonic: j['harmonic'] as bool?,
   minTrackSeconds: (j['min_track_seconds'] as num?)?.toInt(),
+  keyMode: j['key_mode'] as String?,
+  halfDouble: j['half_double'] != false,
+  startBpm: _num(j['start_bpm']),
+  endBpm: _num(j['end_bpm']),
+  openingTrackId: (j['opening_track_id'] as num?)?.toInt(),
+  artistGapMin: (j['artist_gap_min'] as num?)?.toInt() ?? 20,
+  energyFloor: _num(j['energy_floor']),
+  energyCeiling: _num(j['energy_ceiling']),
 );

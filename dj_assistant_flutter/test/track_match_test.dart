@@ -103,9 +103,9 @@ void main() {
     expect(parseLength('4:05'), 245);
     expect(parseLength('1:02:03'), 3723);
     expect(parseLength('x'), isNull);
-    expect(artistRelation('A & B', 'b a'), ArtistRelation.same);
-    expect(artistRelation('A', 'A feat. C'), ArtistRelation.subset);
-    expect(artistRelation('A B', 'B C'), ArtistRelation.overlap);
+    expect(compareArtists('A & B', 'b a'), ArtistOverlap.same);
+    expect(compareArtists('A', 'A feat. C'), ArtistOverlap.subset);
+    expect(compareArtists('A B', 'B C'), ArtistOverlap.overlap);
     expect(matchKey('Señor (Remix)!'), 'senorremix');
   });
 }

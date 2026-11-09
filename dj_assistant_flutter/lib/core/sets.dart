@@ -5,7 +5,9 @@ import 'crates.dart';
 import 'keys.dart';
 import 'library.dart';
 import 'library_edit.dart';
+import 'next_track.dart' show KeyGate;
 import 'profile.dart';
+import 'set_check.dart';
 import 'text.dart';
 
 /// Set Studio (1.x `sets.rs`): an editable running order for an event, length
@@ -38,6 +40,14 @@ class SetParams {
     this.crateId,
     this.harmonic,
     this.minTrackSeconds,
+    this.keyMode,
+    this.halfDouble = true,
+    this.startBpm,
+    this.endBpm,
+    this.openingTrackId,
+    this.artistGapMin = 20,
+    this.energyFloor,
+    this.energyCeiling,
   });
   final int durationMin;
   final String? name, eventType, audience, curve;
@@ -48,6 +58,45 @@ class SetParams {
   final double? bpmMin, bpmMax;
   final int? crateId, minTrackSeconds;
   final bool? harmonic;
+
+  /// 'off', 'loose' or 'strict'; null follows [harmonic] (off when false).
+  final String? keyMode;
+  final bool halfDouble;
+
+  /// A tempo ramp: the set starts near [startBpm] and ends near [endBpm].
+  final double? startBpm, endBpm;
+
+  /// Played first when it is in the library.
+  final int? openingTrackId;
+
+  /// Minutes before the same artist plays again.
+  final int artistGapMin;
+
+  /// The curve is squeezed between these energies (1–10) when set.
+  final double? energyFloor, energyCeiling;
+
+  KeyGate get keyRule => switch (keyMode) {
+    'off' => KeyGate.off,
+    'strict' => KeyGate.strict,
+    'loose' => KeyGate.loose,
+    _ => harmonic == false ? KeyGate.off : KeyGate.loose,
+  };
+
+  SetRules get rules => SetRules(
+    key: keyRule,
+    halfDouble: halfDouble,
+    artistGapMin: artistGapMin,
+    startBpm: startBpm,
+    endBpm: endBpm,
+  );
+
+  /// The curve's value at [t], scaled into the floor–ceiling band.
+  double energyAt(List<double> pts, double t) {
+    final v = _targetAt(pts, t);
+    final lo = energyFloor, hi = energyCeiling;
+    if (lo == null || hi == null || hi <= lo) return v;
+    return lo + (v - 1) / 9 * (hi - lo);
+  }
 
   Map<String, Object?> toJson() => {
     'name': name,
@@ -66,6 +115,14 @@ class SetParams {
     'crate_id': crateId,
     'harmonic': harmonic,
     'min_track_seconds': minTrackSeconds,
+    'key_mode': keyRule.name,
+    'half_double': halfDouble,
+    'start_bpm': startBpm,
+    'end_bpm': endBpm,
+    'opening_track_id': openingTrackId,
+    'artist_gap_min': artistGapMin,
+    'energy_floor': energyFloor,
+    'energy_ceiling': energyCeiling,
   };
 }
 
@@ -197,7 +254,13 @@ class SetsService {
     }
     final points = curvePoints(p);
     final totalMs = p.durationMin * 60000;
-    final harmonic = p.harmonic ?? true;
+    final rules = p.rules;
+    final harmonic = rules.key != KeyGate.off;
+    final artistStart = <String, int>{}; // artist → last start (ms)
+    final opening = p.openingTrackId == null ? null : byId[p.openingTrackId];
+    if (p.openingTrackId != null && opening == null) {
+      warnings.add('The opening track is not available.');
+    }
     final used = <int>{};
     final slots = <Map<String, Object?>>[];
     var elapsed = 0;
@@ -214,7 +277,8 @@ class SetsService {
         ((t.durationMs ?? 240000) * 0.7).floor().clamp(150000, 420000);
 
     while (elapsed < totalMs) {
-      final target = _targetAt(points, elapsed / totalMs);
+      final target = p.energyAt(points, elapsed / totalMs);
+      final wantBpm = rules.bpmAt(elapsed / totalMs);
       final prev = slots.isEmpty ? null : byId[slots.last['track_id']];
       final recent = [
         for (final s in slots.reversed.take(4)) ?byId[s['track_id']],
@@ -222,7 +286,14 @@ class SetsService {
       final remaining = totalMs - elapsed;
       final mustLeft = must.fold<int>(0, (a, m) => a + playedLen(m));
       final scored = <(double, Tp, List<String>, List<String>)>[];
-      for (final c in [...pool, ...must]) {
+      for (final c in [
+        if (slots.isEmpty && opening != null)
+          opening
+        else ...[
+          ...pool,
+          ...must,
+        ],
+      ]) {
         if (used.contains(c.id)) continue;
         final isMust = must.any((m) => m.id == c.id);
         var s = 0.0;
@@ -242,11 +313,29 @@ class SetsService {
           if (r >= 4) why.add('Rated $r★');
         }
         s -= (c.plays < 10 ? c.plays : 10) * 0.05;
-        if (recent.contains(baseArtist(c.artist))) s -= 2.5;
+        if (recent.contains(baseArtist(c.artist))) s -= 1.0;
+        final lastStart = artistStart[baseArtist(c.artist)];
+        if (lastStart != null &&
+            elapsed - lastStart < rules.artistGapMin * 60000) {
+          s -= 2.5;
+        }
+        if (wantBpm != null && c.bpm != null) {
+          final off =
+              tempoChange(wantBpm, c.bpm!, halfDouble: rules.halfDouble) *
+              wantBpm;
+          s -= (off / rules.bpmPathTolerance).clamp(0.0, 3.0);
+          if (off <= rules.bpmPathTolerance) {
+            why.add('On the tempo path (${wantBpm.toStringAsFixed(0)} BPM)');
+          }
+        }
         var trans = <String>[];
         if (prev != null) {
           final (ts, notes) = transitionNotes(prev, c);
           s += harmonic ? ts : (ts < 2 ? ts : 2);
+          if (rules.key == KeyGate.strict &&
+              (keyMoveCost(prev.key, c.key, rules.key) ?? 0) >= 2) {
+            s -= 2;
+          }
           trans = notes;
           if (prev.genreFold == c.genreFold && c.genre != null) s += 0.5;
         }
@@ -289,6 +378,7 @@ class SetsService {
           },
       ];
       used.add(pick.id);
+      artistStart[baseArtist(pick.artist)] = elapsed;
       must.removeWhere((m) => m.id == pick.id);
       slots.add({
         'track_id': pick.id,
@@ -315,6 +405,18 @@ class SetsService {
           final r = (b.rating ?? 0).compareTo(a.rating ?? 0);
           return r != 0 ? r : (b.energy ?? 0).compareTo(a.energy ?? 0);
         });
+    final checks = checkSet(
+      [for (final x in slots) byId[x['track_id']]],
+      rules,
+      startMs: [for (final x in slots) x['start_ms']! as int],
+      targets: [
+        for (final x in slots) (x['target_energy'] as num?)?.toDouble(),
+      ],
+    );
+    for (var i = 0; i < slots.length; i++) {
+      slots[i]['grade'] = checks[i].grade?.name;
+      slots[i]['issues'] = checks[i].issues;
+    }
     final rough = slots
         .where(
           (s) => (s['transition'] as List<String>).any(
@@ -342,6 +444,7 @@ class SetsService {
           },
       ],
       'warnings': warnings,
+      'grades': gradeCounts(checks),
       'planned_ms': elapsed,
       'note': 'This is a suggested running order. Tempo and key notes describe compatibility on paper only; always trust your ears.',
     };
@@ -419,8 +522,12 @@ class SetsService {
   ];
 
   /// Re-evaluates transitions after the DJ reorders or swaps tracks.
-  List<Map<String, Object?>> review(List<int> ids) {
+  List<Map<String, Object?>> review(
+    List<int> ids, {
+    SetRules rules = const SetRules(),
+  }) {
     final byId = {for (final t in loadProfiles(cat)) t.id: t};
+    final checks = checkSet([for (final id in ids) byId[id]], rules);
     final out = <Map<String, Object?>>[];
     for (var i = 0; i + 1 < ids.length; i++) {
       final a = byId[ids[i]], b = byId[ids[i + 1]];
@@ -439,6 +546,8 @@ class SetsService {
         'to': ids[i + 1],
         'score': score,
         'notes': notes,
+        'grade': checks[i + 1].grade?.name,
+        'issues': checks[i + 1].issues,
       });
     }
     return out;

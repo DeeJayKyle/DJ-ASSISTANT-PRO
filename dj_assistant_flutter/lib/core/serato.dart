@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
+import 'package:sqlite3/sqlite3.dart' as sql;
 
 import 'catalogue.dart';
 import 'crates.dart';
@@ -199,22 +200,7 @@ class SeratoService {
     };
     // fallback when the version-aware key misses: file path or name, then
     // artist + title, then a likely match on title and artists
-    final matcher = TrackMatcher([
-      for (final r in cat.db.select(
-        'SELECT t.id, t.path, t.duration_ms, COALESCE(u.artist,t.artist) AS artist, '
-        'COALESCE(u.title,t.title) AS title FROM tracks t '
-        'LEFT JOIN track_user u ON u.track_id=t.id WHERE t.removed_at IS NULL',
-      ))
-        MatchTrack(
-          id: r['id'] as int,
-          path: r['path'] as String?,
-          artist: r['artist'] as String?,
-          title: r['title'] as String?,
-          durationSec: (r['duration_ms'] as int?) == null
-              ? null
-              : (r['duration_ms'] as int) / 1000,
-        ),
-    ]);
+    final matcher = TrackMatcher(libraryMatchTracks(cat));
     String? field(int? i, List<String> f) =>
         i != null && i < f.length && f[i].isNotEmpty ? f[i] : null;
     var matched = 0, unmatched = 0, likely = 0;
@@ -258,6 +244,208 @@ class SeratoService {
     return {'matched': matched, 'unmatched': unmatched, 'likely': likely};
   }
 
+  /// Where Serato DJ 4 keeps its library database (with play history) on
+  /// this computer, or null when there is none.
+  static String? defaultLibraryDb() {
+    final env = Platform.environment;
+    final dir = Platform.isWindows
+        ? p.join(env['APPDATA'] ?? '', 'Serato', 'Library')
+        : p.join(
+            env['HOME'] ?? '',
+            'Library',
+            'Application Support',
+            'Serato',
+            'Library',
+          );
+    final f = File(p.join(dir, 'master.sqlite'));
+    return f.existsSync() ? f.path : null;
+  }
+
+  /// Imports the play history Serato DJ 4 keeps in its library database
+  /// (`Serato/Library/master.sqlite`). The database is copied to a temporary
+  /// folder and the copy is read, so Serato's file is never opened for
+  /// writing, even while Serato runs. Sessions already imported are skipped.
+  Map<String, int> importSeratoDbHistory(String dbPath) {
+    final src = File(dbPath);
+    if (!src.existsSync()) {
+      throw SeratoException('Serato library database not found.');
+    }
+    final tmp = Directory.systemTemp.createTempSync('dja-serato-history-');
+    try {
+      final copy = p.join(tmp.path, 'master.sqlite');
+      src.copySync(copy);
+      for (final side in ['-wal', '-shm']) {
+        final f = File('$dbPath$side');
+        if (f.existsSync()) f.copySync('$copy$side');
+      }
+      final sql.Database db;
+      try {
+        db = sql.sqlite3.open(copy);
+      } on sql.SqliteException {
+        throw SeratoException(
+          'This is not a readable Serato library database.',
+        );
+      }
+      try {
+        Set<String> cols(String table) => {
+          for (final r in db.select('PRAGMA table_info("$table")'))
+            r['name'] as String,
+        };
+        final ec = cols('history_entry'), sc = cols('history_session');
+        if (ec.isEmpty || sc.isEmpty || !ec.contains('session_id')) {
+          throw SeratoException(
+            'This Serato database has no play history (Serato DJ 4 or later keeps it there).',
+          );
+        }
+        String col(Set<String> have, String name) =>
+            have.contains(name) ? name : 'NULL';
+        final sessions = db.select(
+          'SELECT id, ${col(sc, 'start_time')} AS start FROM history_session ORDER BY id',
+        );
+        final done = {
+          for (final r in cat.db.select(
+            "SELECT DISTINCT session FROM play_history WHERE source='serato'",
+          ))
+            r['session'] as String?,
+        };
+        final matcher = TrackMatcher(libraryMatchTracks(cat));
+        var imported = 0, matched = 0, unmatched = 0, skipped = 0;
+        final now = nowMs();
+        int? ms(Object? v) {
+          final n = (v as num?)?.toInt();
+          if (n == null || n <= 0) return null;
+          return n > 100000000000 ? n : n * 1000; // seconds or milliseconds
+        }
+
+        for (final s in sessions) {
+          final start = ms(s['start']);
+          final when = start == null
+              ? ''
+              : ' · ${DateTime.fromMillisecondsSinceEpoch(start).toIso8601String().substring(0, 16).replaceFirst('T', ' ')}';
+          final label = 'Serato session ${s['id']}$when';
+          if (done.contains(label)) {
+            skipped++;
+            continue;
+          }
+          final rows = db.select(
+            'SELECT ${col(ec, 'file_name')} AS file, ${col(ec, 'artist')} AS artist, '
+            '${col(ec, 'name')} AS title, ${col(ec, 'start_time')} AS start, '
+            '${col(ec, 'length_ms')} AS len, ${col(ec, 'played')} AS played '
+            'FROM history_entry WHERE session_id=? ORDER BY ${col(ec, 'start_time')}, id',
+            [s['id']],
+          );
+          var any = false;
+          for (final r in rows) {
+            if (r['played'] != null && r['played'] == 0) continue;
+            final m = matcher.match(
+              MatchEntry(
+                path: r['file'] as String?,
+                artist: r['artist'] as String?,
+                title: r['title'] as String?,
+                durationSec: (r['len'] as num?) == null
+                    ? null
+                    : (r['len'] as num) / 1000,
+              ),
+            );
+            if (m == null) {
+              unmatched++;
+            } else {
+              matched++;
+            }
+            cat.db.execute(
+              "INSERT INTO play_history(source, session, track_id, artist, title, played_at, imported_at) VALUES ('serato', ?, ?, ?, ?, ?, ?)",
+              [
+                label,
+                m?.trackId,
+                r['artist'],
+                (r['title'] as String?) ??
+                    p.basename('${r['file'] ?? ''}'.replaceAll('\\', '/')),
+                ms(r['start']),
+                now,
+              ],
+            );
+            any = true;
+          }
+          if (any) imported++;
+        }
+        return {
+          'sessions': imported,
+          'skipped': skipped,
+          'matched': matched,
+          'unmatched': unmatched,
+        };
+      } finally {
+        db.close();
+      }
+    } finally {
+      tmp.deleteSync(recursive: true);
+    }
+  }
+
+  /// Tracks Serato DJ 4 marked as played since [sinceMs], oldest first, from
+  /// a temporary copy of its library database (used by Gig Mode's "Follow
+  /// Serato"). Empty when the database has no history.
+  List<SeratoPlay> seratoPlaysSince(String dbPath, int sinceMs) {
+    final src = File(dbPath);
+    if (!src.existsSync()) return const [];
+    final tmp = Directory.systemTemp.createTempSync('dja-serato-follow-');
+    try {
+      final copy = p.join(tmp.path, 'master.sqlite');
+      src.copySync(copy);
+      for (final side in ['-wal', '-shm']) {
+        final f = File('$dbPath$side');
+        if (f.existsSync()) f.copySync('$copy$side');
+      }
+      final db = sql.sqlite3.open(copy);
+      try {
+        final cols = {
+          for (final r in db.select('PRAGMA table_info("history_entry")'))
+            r['name'] as String,
+        };
+        if (!cols.contains('start_time')) return const [];
+        String col(String n) => cols.contains(n) ? n : 'NULL';
+        // start_time is seconds in the databases seen so far; accept ms too
+        final newest =
+            (db
+                        .select(
+                          'SELECT MAX(start_time) AS m FROM history_entry',
+                        )
+                        .first['m']
+                    as num?)
+                ?.toInt() ??
+            0;
+        final inMs = newest > 100000000000;
+        final rows = db.select(
+          'SELECT ${col('file_name')} AS file, ${col('artist')} AS artist, '
+          '${col('name')} AS title, start_time AS start, ${col('played')} AS played '
+          'FROM history_entry WHERE start_time >= ? ORDER BY start_time, id',
+          [inMs ? sinceMs : (sinceMs + 999) ~/ 1000],
+        );
+        return [
+          for (final r in rows)
+            if (r['played'] == null || r['played'] != 0)
+              SeratoPlay(
+                path: r['file'] as String?,
+                artist: r['artist'] as String?,
+                title: r['title'] as String?,
+                atMs: () {
+                  final n = (r['start'] as num).toInt();
+                  return n > 100000000000 ? n : n * 1000;
+                }(),
+              ),
+        ];
+      } on sql.SqliteException {
+        return const [];
+      } finally {
+        db.close();
+      }
+    } on FileSystemException {
+      return const [];
+    } finally {
+      tmp.deleteSync(recursive: true);
+    }
+  }
+
   List<Map<String, Object?>> history({int limit = 500}) => [
     for (final r in cat.db.select(
       'SELECT id, source, session, track_id, artist, title, imported_at FROM play_history ORDER BY id DESC LIMIT ?',
@@ -270,4 +458,10 @@ class SeratoService {
     cat.db.execute('DELETE FROM play_history');
     return cat.db.updatedRows;
   }
+}
+
+class SeratoPlay {
+  const SeratoPlay({this.path, this.artist, this.title, required this.atMs});
+  final String? path, artist, title;
+  final int atMs;
 }

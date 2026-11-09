@@ -30,6 +30,7 @@ const pages = [
   'organize',
   'set-studio',
   'discovery',
+  'map',
   'gig',
   'gig-pack',
   'files',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'crates_screen.dart';
 import 'files_screens.dart';
+import 'library_map.dart';
 import 'library_screen.dart';
 import 'library_tools.dart';
 import 'prepare_screens.dart';
@@ -27,6 +28,7 @@ Widget screenFor(AppView v) => switch (v.id) {
   'organize' => const OrganiseScreen(),
   'set-studio' => SetStudioScreen(params: v.params),
   'discovery' => const DiscoveryScreen(),
+  'map' => const LibraryMapScreen(),
   'suggestions' => const SuggestionsScreen(),
   'gig' => const GigScreen(),
   'gig-pack' => const GigPackScreen(),
