@@ -4,6 +4,16 @@ import 'package:unorm_dart/unorm_dart.dart' as unorm;
 /// 1.x `text::fold`: Unicode NFD, combining marks removed, lower-cased.
 /// `fold("Beyoncé") == "beyonce"`.
 String fold(String s) {
+  // Plain ASCII has nothing to decompose or strip: lower-casing gives the
+  // same result as the full Unicode path, many times faster.
+  var ascii = true;
+  for (var i = 0; i < s.length; i++) {
+    if (s.codeUnitAt(i) > 0x7f) {
+      ascii = false;
+      break;
+    }
+  }
+  if (ascii) return s.toLowerCase();
   final d = unorm.nfd(s);
   final out = StringBuffer();
   for (final r in d.runes) {

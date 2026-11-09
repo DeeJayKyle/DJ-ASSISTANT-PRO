@@ -195,12 +195,11 @@ class SeratoService {
         ciLength = col(['length', 'duration', 'time length']);
     final index = <String, int>{
       for (final t in loadProfiles(cat))
-        '${baseArtist(t.artist)}|${baseTitle(t.title)}|${t.version ?? versionOf(t.title)}':
-            t.id,
+        '${t.artistKey}|${t.titleKey}|${t.version ?? versionOf(t.title)}': t.id,
     };
     // fallback when the version-aware key misses: file path or name, then
     // artist + title, then a likely match on title and artists
-    final matcher = TrackMatcher(libraryMatchTracks(cat));
+    final matcher = libraryMatcher(cat);
     String? field(int? i, List<String> f) =>
         i != null && i < f.length && f[i].isNotEmpty ? f[i] : null;
     var matched = 0, unmatched = 0, likely = 0;
@@ -308,7 +307,7 @@ class SeratoService {
           ))
             r['session'] as String?,
         };
-        final matcher = TrackMatcher(libraryMatchTracks(cat));
+        final matcher = libraryMatcher(cat);
         var imported = 0, matched = 0, unmatched = 0, skipped = 0;
         final now = nowMs();
         int? ms(Object? v) {

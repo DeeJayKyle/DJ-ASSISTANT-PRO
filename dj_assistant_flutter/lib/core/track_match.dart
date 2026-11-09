@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
 
 import 'catalogue.dart';
+import 'snapshot.dart';
 import 'text.dart';
 
 /// Matches tracks listed by other DJ software (a history export, a crate, a
@@ -210,7 +211,18 @@ class TrackMatcher {
 
 /// Every library track (not removed) as a [MatchTrack]; your own artist and
 /// title win over the file's tags.
-List<MatchTrack> libraryMatchTracks(Catalogue cat) => [
+List<MatchTrack> libraryMatchTracks(Catalogue cat) => snapshot(
+  cat,
+  'match-tracks',
+  () => List<MatchTrack>.unmodifiable(_libraryMatchTracks(cat)),
+);
+
+/// A matcher over the whole library (default options), cached until the
+/// catalogue changes.
+TrackMatcher libraryMatcher(Catalogue cat) =>
+    snapshot(cat, 'matcher', () => TrackMatcher(libraryMatchTracks(cat)));
+
+List<MatchTrack> _libraryMatchTracks(Catalogue cat) => [
   for (final r in cat.db.select(
     'SELECT t.id, t.path, t.duration_ms, COALESCE(u.artist,t.artist) AS artist, '
     'COALESCE(u.title,t.title) AS title FROM tracks t '

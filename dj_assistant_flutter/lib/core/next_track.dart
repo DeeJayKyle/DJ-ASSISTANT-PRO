@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'catalogue.dart';
 import 'keys.dart';
+import 'snapshot.dart';
 
 /// "Next up" for gig mode: given what has just been played, rank the library
 /// by what mixes in next.
@@ -455,7 +456,14 @@ class NextTrackService {
   NextTrackService(this.cat);
   final Catalogue cat;
 
-  List<NextTrackCandidate> candidates({int max = 100000}) => [
+  /// Cached until the catalogue changes (read-only).
+  List<NextTrackCandidate> candidates({int max = 100000}) => snapshot(
+    cat,
+    'next-candidates-$max',
+    () => List<NextTrackCandidate>.unmodifiable(_candidates(max)),
+  );
+
+  List<NextTrackCandidate> _candidates(int max) => [
     for (final r in cat.db.select(
       'SELECT t.id, COALESCE(u.bpm, a.bpm, t.bpm_tag) AS bpm, '
       'COALESCE(u.musical_key, a.camelot, a.musical_key, t.key_tag) AS k, '
@@ -489,6 +497,24 @@ class NextTrackService {
     MixRules gate = const MixRules(),
     int limit = 12,
   }) {
+    // the same question on an unchanged catalogue (a redraw) is answered
+    // from the last result
+    final ask =
+        '${played.join(',')}|${direction.name}|${gate.bpmWindow}|'
+        '${gate.halfDouble}|${gate.key.name}|$limit';
+    final last = peekSnapshot(cat, 'next-up');
+    if (last is (String, NextTrackResult) && last.$1 == ask) return last.$2;
+    final r = _rank(played, direction, gate, limit);
+    rememberSnapshot(cat, 'next-up', (ask, r));
+    return r;
+  }
+
+  NextTrackResult _rank(
+    List<int> played,
+    EnergyDirection direction,
+    MixRules gate,
+    int limit,
+  ) {
     final lib = candidates();
     final byId = {for (final c in lib) c.id: c};
     return rankNextTracks(
