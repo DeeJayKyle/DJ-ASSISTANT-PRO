@@ -17,6 +17,7 @@ import 'theme.dart';
 import 'track_detail.dart';
 import 'widgets.dart';
 import 'crates_screen.dart';
+import 'remove_dialog.dart';
 import 'write_dialog.dart';
 
 /// Joins WHERE fragments with AND.
@@ -96,7 +97,229 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final selected = <int>{};
   int? focus, _anchor;
   final _search = TextEditingController();
+  final _searchFocus = FocusNode(debugLabel: 'library search');
+  final _tableFocus = FocusNode(debugLabel: 'library table');
+  final _scroll = ScrollController();
   final _quick = <String, QuickOption?>{};
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    _tableFocus.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Every track id in the current view, in the shown order.
+  List<int> _allIds(AppSession s, LibraryQuery eff) => s.library.trackIds(
+    libraryTrackQuery(
+      s,
+      eff,
+      crateId: widget.crateId,
+      rootId: widget.rootId,
+      limit: TrackQuery.all,
+    ),
+  );
+
+  void _selectAll(AppSession s, LibraryQuery eff) =>
+      setState(() => selected.addAll(_allIds(s, eff)));
+
+  void _invert(AppSession s, LibraryQuery eff) => setState(() {
+    final all = _allIds(s, eff);
+    final next = {
+      for (final id in all)
+        if (!selected.contains(id)) id,
+    };
+    selected
+      ..clear()
+      ..addAll(next);
+  });
+
+  /// Keyboard move to row [i]; with [extend] the range from the anchor is
+  /// selected, otherwise the row alone.
+  void _moveTo(AppSession s, LibraryQuery eff, int i, {bool extend = false}) {
+    final total = _total ?? 0;
+    if (total == 0) return;
+    final to = i.clamp(0, total - 1);
+    final r = rowAt(s, eff, to);
+    if (r == null) return;
+    setState(() {
+      if (extend && _anchor != null) {
+        selected.clear();
+        final a = _anchor!.clamp(0, total - 1);
+        for (var k = a < to ? a : to; k <= (a < to ? to : a); k++) {
+          final x = rowAt(s, eff, k);
+          if (x != null) selected.add(x.id);
+        }
+        _cursor = to;
+      } else {
+        selected
+          ..clear()
+          ..add(r.id);
+        _anchor = to;
+        _cursor = to;
+      }
+    });
+    // keep the row in view
+    if (_scroll.hasClients) {
+      const h = 34.0;
+      final top = to * h, view = _scroll.position.viewportDimension;
+      if (top < _scroll.offset) {
+        _scroll.jumpTo(top);
+      } else if (top + h > _scroll.offset + view) {
+        _scroll.jumpTo(top + h - view);
+      }
+    }
+  }
+
+  int? _cursor;
+
+  Map<ShortcutActivator, VoidCallback> _tableKeys(
+    BuildContext context,
+    AppSession s,
+    LibraryQuery eff,
+  ) {
+    final at = _cursor ?? _anchor ?? -1;
+    final pageRows = _scroll.hasClients
+        ? (_scroll.position.viewportDimension / 34).floor().clamp(1, 100)
+        : 20;
+    return {
+      const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+          _moveTo(s, eff, at + 1),
+      const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+          _moveTo(s, eff, at - 1),
+      const SingleActivator(LogicalKeyboardKey.arrowDown, shift: true): () =>
+          _moveTo(s, eff, at + 1, extend: true),
+      const SingleActivator(LogicalKeyboardKey.arrowUp, shift: true): () =>
+          _moveTo(s, eff, at - 1, extend: true),
+      const SingleActivator(LogicalKeyboardKey.pageDown): () =>
+          _moveTo(s, eff, at + pageRows),
+      const SingleActivator(LogicalKeyboardKey.pageUp): () =>
+          _moveTo(s, eff, at - pageRows),
+      const SingleActivator(LogicalKeyboardKey.home): () => _moveTo(s, eff, 0),
+      const SingleActivator(LogicalKeyboardKey.end): () =>
+          _moveTo(s, eff, (_total ?? 1) - 1),
+      const SingleActivator(LogicalKeyboardKey.home, shift: true): () =>
+          _moveTo(s, eff, 0, extend: true),
+      const SingleActivator(LogicalKeyboardKey.end, shift: true): () =>
+          _moveTo(s, eff, (_total ?? 1) - 1, extend: true),
+      const SingleActivator(LogicalKeyboardKey.keyA, control: true): () =>
+          _selectAll(s, eff),
+      const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () =>
+          _selectAll(s, eff),
+      const SingleActivator(LogicalKeyboardKey.keyI, control: true): () =>
+          _invert(s, eff),
+      const SingleActivator(LogicalKeyboardKey.escape): () =>
+          setState(selected.clear),
+      const SingleActivator(LogicalKeyboardKey.enter): () {
+        if (selected.length == 1) setState(() => focus = selected.first);
+      },
+      const SingleActivator(LogicalKeyboardKey.delete): () =>
+          _delete(context, selected.toList()),
+      const SingleActivator(LogicalKeyboardKey.backspace, meta: true): () =>
+          _delete(context, selected.toList()),
+      const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
+          _searchFocus.requestFocus(),
+    };
+  }
+
+  Future<void> _delete(BuildContext context, List<int> ids) async {
+    if (ids.isEmpty) return;
+    if (await showRemoveDialog(context, ref, ids)) {
+      setState(() {
+        selected.removeAll(ids);
+        if (ids.contains(focus)) focus = null;
+      });
+    }
+  }
+
+  Future<void> _rowMenu(
+    BuildContext context,
+    AppSession s,
+    LibraryQuery eff,
+    TrackRow r,
+    int i,
+    Offset at,
+  ) async {
+    if (!selected.contains(r.id)) {
+      setState(() {
+        selected
+          ..clear()
+          ..add(r.id);
+        _anchor = i;
+        _cursor = i;
+      });
+    }
+    final ids = selected.toList();
+    final crates = ref
+        .read(cratesProvider)
+        .where((c) => c.kind != 'folder' && c.id != widget.crateId)
+        .toList();
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final pick = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        at & const Size(1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        if (ids.length == 1)
+          const PopupMenuItem(value: 'open', child: Text('Open details')),
+        PopupMenuItem(
+          enabled: crates.isNotEmpty,
+          value: 'crate',
+          child: Text('Add ${plural(ids.length, 'track')} to a crate…'),
+        ),
+        const PopupMenuItem(value: 'all', child: Text('Select all')),
+        const PopupMenuItem(value: 'invert', child: Text('Invert selection')),
+        const PopupMenuItem(
+          value: 'write',
+          child: Text('Write tags to files…'),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'delete',
+          child: Text('Delete ${plural(ids.length, 'song')}…'),
+        ),
+      ],
+    );
+    if (!context.mounted) return;
+    switch (pick) {
+      case 'open':
+        setState(() => focus = r.id);
+      case 'crate':
+        final c = await showDialog<int>(
+          context: context,
+          builder: (d) => SimpleDialog(
+            title: const Text('Add to crate'),
+            children: [
+              for (final c in crates)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.pop(d, c.id),
+                  child: Text(c.name),
+                ),
+            ],
+          ),
+        );
+        if (c != null) {
+          await guard(
+            () => s.crates.addTracks(c, ids),
+            done: 'Added ${plural(ids.length, 'track')} to the crate.',
+            bump: ref,
+          );
+        }
+      case 'all':
+        _selectAll(s, eff);
+      case 'invert':
+        _invert(s, eff);
+      case 'write':
+        await showWriteDialog(context, ref, ids);
+      case 'delete':
+        await _delete(context, ids);
+    }
+  }
+
   LibraryQuery _sub = const LibraryQuery();
   String _key = '';
 
@@ -290,6 +513,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       message: error ?? 'Unknown values (for example energy you haven\'t rated yet) never count as a match.',
                     )
                   : ListView.builder(
+                      controller: _scroll,
                       itemCount: _total,
                       itemExtent: 34,
                       itemBuilder: (c, i) {
@@ -340,6 +564,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextField(
+                  focusNode: _searchFocus,
                   controller: _search,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
@@ -427,11 +652,17 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 if (selected.length > 1 ||
                     (selected.length == 1 && !selected.contains(focus))) ...[
                   const SizedBox(height: 10),
-                  _bulkBar(context, s, crate, crates),
+                  _bulkBar(context, s, crate, crates, eff),
                 ],
                 const SizedBox(height: 10),
                 Expanded(
-                  child: Card(clipBehavior: Clip.antiAlias, child: table),
+                  child: CallbackShortcuts(
+                    bindings: _tableKeys(context, s, eff),
+                    child: Focus(
+                      focusNode: _tableFocus,
+                      child: Card(clipBehavior: Clip.antiAlias, child: table),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -569,8 +800,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ? t.accent.withValues(alpha: 0.13)
           : (i.isOdd ? t.panel2.withValues(alpha: 0.35) : Colors.transparent),
       child: InkWell(
+        onSecondaryTapUp: (d) =>
+            _rowMenu(context, s, eff, r, i, d.globalPosition),
         onTap: () {
+          _tableFocus.requestFocus();
           final keys = HardwareKeyboard.instance;
+          _cursor = i;
           setState(() {
             if (keys.isShiftPressed && _anchor != null) {
               final a = _anchor!.clamp(0, _total! - 1), b = i;
@@ -592,7 +827,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             }
           });
         },
-        onDoubleTap: () => setState(() => focus = r.id),
+        onDoubleTap: () => setState(() {
+          focus = r.id;
+          selected
+            ..clear()
+            ..add(r.id);
+        }),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(children: [for (final c in cols) _cell(c, content(c))]),
@@ -660,6 +900,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     AppSession s,
     Crate? crate,
     List<Crate> crates,
+    LibraryQuery eff,
   ) {
     final ids = selected.toList();
     void act(void Function() f, String msg) => guard(f, done: msg, bump: ref);
@@ -763,6 +1004,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   child: const Text('Spreadsheet (CSV)…'),
                 ),
               ],
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _delete(context, ids),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Delete…'),
+            ),
+            TextButton(
+              onPressed: () => _selectAll(s, eff),
+              child: Text('Select all ${_total ?? ''}'),
+            ),
+            TextButton(
+              onPressed: () => _invert(s, eff),
+              child: const Text('Invert'),
             ),
             TextButton(
               onPressed: () => setState(selected.clear),

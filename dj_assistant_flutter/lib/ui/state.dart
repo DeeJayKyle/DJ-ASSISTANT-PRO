@@ -95,14 +95,45 @@ class AppView {
 }
 
 class ViewNotifier extends Notifier<AppView> {
+  final _back = <AppView>[], _forward = <AppView>[];
+  static const _limit = 50;
+
   @override
   AppView build() => const AppView('library');
+
+  bool get canGoBack => _back.isNotEmpty;
+  bool get canGoForward => _forward.isNotEmpty;
+
   void go(
     String id, {
     int? crateId,
     int? rootId,
     Map<String, Object?>? params,
-  }) => state = AppView(id, crateId: crateId, rootId: rootId, params: params);
+  }) {
+    final next = AppView(id, crateId: crateId, rootId: rootId, params: params);
+    if (next == state) {
+      state = next; // same page: refresh its parameters only
+      return;
+    }
+    _back.add(state);
+    if (_back.length > _limit) _back.removeAt(0);
+    _forward.clear();
+    state = next;
+  }
+
+  /// The previous page (Alt+Left, the mouse's back button).
+  void back() {
+    if (_back.isEmpty) return;
+    _forward.add(state);
+    state = _back.removeLast();
+  }
+
+  /// The page left by [back] (Alt+Right, the mouse's forward button).
+  void forward() {
+    if (_forward.isEmpty) return;
+    _back.add(state);
+    state = _forward.removeLast();
+  }
 }
 
 final viewProvider = NotifierProvider<ViewNotifier, AppView>(ViewNotifier.new);

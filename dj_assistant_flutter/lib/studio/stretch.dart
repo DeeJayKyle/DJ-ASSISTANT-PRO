@@ -63,11 +63,11 @@ List<Float32List> timeStretch(List<Float32List> ch, double ratio) {
   for (var o = 0; o < outLen; o += _hop) {
     final want = (o / ratio).round();
     final src = o == 0 ? 0 : _bestOffset(g, want, prevIn + _hop);
+    final i0 = math.max(0, -src), i1 = math.min(_frame, n - src);
     for (var c = 0; c < ch.length; c++) {
       final x = ch[c], y = out[c];
-      for (var i = 0; i < _frame; i++) {
-        final j = src + i;
-        if (j >= 0 && j < n) y[o + i] += x[j] * _hann[i];
+      for (var i = i0; i < i1; i++) {
+        y[o + i] += x[src + i] * _hann[i];
       }
     }
     for (var i = 0; i < _frame; i++) {
