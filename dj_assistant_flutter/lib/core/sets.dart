@@ -146,6 +146,31 @@ double _targetAt(List<double> pts, double t) {
 
 String _signed(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}';
 
+final _keyCompat = <String, bool>{};
+
+/// The score part of [transitionNotes] without building any text; the key
+/// check is remembered per pair of keys. Used to rank thousands of
+/// candidates quickly; [transitionNotes] is then called for the pick only.
+double transitionScore(Tp a, Tp b) {
+  var s = 0.0;
+  final x = a.bpm, y = b.bpm;
+  if (x != null && y != null) {
+    final d = bpmDistance(y, x);
+    s += d <= 0.03 ? 2 : (d <= 0.06 ? 1 : -3);
+  }
+  final ka = a.key, kb = b.key;
+  if (ka != null && kb != null) {
+    if (_keyCompat.length > 4096) _keyCompat.clear();
+    if (_keyCompat.putIfAbsent(
+      '$ka|$kb',
+      () => camelotCompatible(ka, kb) != null,
+    )) {
+      s += 1.5;
+    }
+  }
+  return s;
+}
+
 (double, List<String>) transitionNotes(Tp a, Tp b) {
   var s = 0.0;
   final notes = <String>[];
@@ -282,39 +307,42 @@ class SetsService {
       final prev = slots.isEmpty ? null : byId[slots.last['track_id']];
       final recent = [
         for (final s in slots.reversed.take(4)) ?byId[s['track_id']],
-      ].map((x) => baseArtist(x.artist)).toList();
+      ].map((x) => x.artistKey).toSet();
       final remaining = totalMs - elapsed;
       final mustLeft = must.fold<int>(0, (a, m) => a + playedLen(m));
-      final scored = <(double, Tp, List<String>, List<String>)>[];
-      for (final c in [
-        if (slots.isEmpty && opening != null)
-          opening
-        else ...[
-          ...pool,
-          ...must,
-        ],
-      ]) {
-        if (used.contains(c.id)) continue;
-        final isMust = must.any((m) => m.id == c.id);
-        var s = 0.0;
+      final mustIds = {for (final m in must) m.id};
+      // reasons are text: built only for the tracks that are shown
+      List<String> reasonsFor(Tp c) {
         final why = <String>[];
-        final e = (c.energy ?? 5).toDouble();
-        s += 3 - (e - target).abs();
+        if (mustIds.contains(c.id)) why.add('Must-play');
         if (c.energy != null) {
           why.add(
             'Energy ${c.energy} for a target of ${target.toStringAsFixed(1)}',
           );
-        } else {
-          s -= 0.7;
         }
         final r = c.rating;
-        if (r != null) {
-          s += (r - 3) * 0.4;
-          if (r >= 4) why.add('Rated $r★');
+        if (r != null && r >= 4) why.add('Rated $r★');
+        if (wantBpm != null && c.bpm != null) {
+          final off =
+              tempoChange(wantBpm, c.bpm!, halfDouble: rules.halfDouble) *
+              wantBpm;
+          if (off <= rules.bpmPathTolerance) {
+            why.add('On the tempo path (${wantBpm.toStringAsFixed(0)} BPM)');
+          }
         }
+        return why;
+      }
+
+      double scoreOf(Tp c) {
+        var s = 0.0;
+        final e = (c.energy ?? 5).toDouble();
+        s += 3 - (e - target).abs();
+        if (c.energy == null) s -= 0.7;
+        final r = c.rating;
+        if (r != null) s += (r - 3) * 0.4;
         s -= (c.plays < 10 ? c.plays : 10) * 0.05;
-        if (recent.contains(baseArtist(c.artist))) s -= 1.0;
-        final lastStart = artistStart[baseArtist(c.artist)];
+        if (recent.contains(c.artistKey)) s -= 1.0;
+        final lastStart = artistStart[c.artistKey];
         if (lastStart != null &&
             elapsed - lastStart < rules.artistGapMin * 60000) {
           s -= 2.5;
@@ -324,61 +352,79 @@ class SetsService {
               tempoChange(wantBpm, c.bpm!, halfDouble: rules.halfDouble) *
               wantBpm;
           s -= (off / rules.bpmPathTolerance).clamp(0.0, 3.0);
-          if (off <= rules.bpmPathTolerance) {
-            why.add('On the tempo path (${wantBpm.toStringAsFixed(0)} BPM)');
-          }
         }
-        var trans = <String>[];
         if (prev != null) {
-          final (ts, notes) = transitionNotes(prev, c);
+          final ts = transitionScore(prev, c);
           s += harmonic ? ts : (ts < 2 ? ts : 2);
           if (rules.key == KeyGate.strict &&
               (keyMoveCost(prev.key, c.key, rules.key) ?? 0) >= 2) {
             s -= 2;
           }
-          trans = notes;
           if (prev.genreFold == c.genreFold && c.genre != null) s += 0.5;
         }
-        if (isMust) {
+        if (mustIds.contains(c.id)) {
           s += 1.5;
-          why.insert(0, 'Must-play');
           if (mustLeft >= remaining - playedLen(c)) {
             s += 20; // every must-play must fit
           }
         }
-        scored.add((s, c, why, trans));
+        return s;
       }
-      if (scored.isEmpty) {
+
+      // The best few, highest score first and equal scores in pool order
+      // (as a stable sort would give), without sorting every candidate.
+      final keep = 4 + mustIds.length;
+      final top = <(double, int, Tp)>[];
+      var n = 0;
+      void consider(Tp c) {
+        if (used.contains(c.id)) return;
+        final sc = scoreOf(c);
+        final idx = n++;
+        if (top.length == keep && sc <= top.last.$1) return;
+        var at = top.length;
+        while (at > 0 && top[at - 1].$1 < sc) {
+          at--;
+        }
+        top.insert(at, (sc, idx, c));
+        if (top.length > keep) top.removeLast();
+      }
+
+      if (slots.isEmpty && opening != null) {
+        consider(opening);
+      } else {
+        for (final c in pool) {
+          consider(c);
+        }
+        for (final c in must) {
+          consider(c);
+        }
+      }
+      if (top.isEmpty) {
         warnings.add(
           'Ran out of suitable tracks before reaching the requested length.',
         );
         break;
       }
-      // Stable, highest first (1.x sort_by keeps equal scores in pool order).
-      final order = List.generate(scored.length, (i) => i)
-        ..sort((a, b) {
-          final c = scored[b].$1.compareTo(scored[a].$1);
-          return c != 0 ? c : a.compareTo(b);
-        });
-      final (_, pick, why, trans) = scored[order.first];
+      final pick = top.first.$3;
+      final why = reasonsFor(pick);
+      final trans = prev == null
+          ? const <String>[]
+          : transitionNotes(prev, pick).$2;
       final alternatives = [
-        for (final i
-            in order
-                .skip(1)
-                .where((i) => !must.any((m) => m.id == scored[i].$2.id))
-                .take(3))
+        for (final x
+            in top.skip(1).where((x) => !mustIds.contains(x.$3.id)).take(3))
           {
-            'track_id': scored[i].$2.id,
-            'track': scored[i].$2.label,
-            'energy': scored[i].$2.energy, //
-            'bpm': scored[i].$2.bpm,
-            'key': scored[i].$2.key,
-            'score': (scored[i].$1 * 10).round() / 10,
-            'reasons': scored[i].$3,
+            'track_id': x.$3.id,
+            'track': x.$3.label,
+            'energy': x.$3.energy, //
+            'bpm': x.$3.bpm,
+            'key': x.$3.key,
+            'score': (x.$1 * 10).round() / 10,
+            'reasons': reasonsFor(x.$3),
           },
       ];
       used.add(pick.id);
-      artistStart[baseArtist(pick.artist)] = elapsed;
+      artistStart[pick.artistKey] = elapsed;
       must.removeWhere((m) => m.id == pick.id);
       slots.add({
         'track_id': pick.id,

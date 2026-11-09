@@ -150,7 +150,7 @@ class DiscoveryService {
     for (final t in members) {
       if (t.genre != null) genres[t.genreFold] = (genres[t.genreFold] ?? 0) + 1;
       if (t.artist.isNotEmpty) {
-        final a = baseArtist(t.artist);
+        final a = t.artistKey;
         artists[a] = (artists[a] ?? 0) + 1;
       }
       if (t.bpm != null) bpms.add(t.bpm!);
@@ -182,7 +182,7 @@ class DiscoveryService {
           'Genre ${t.genre ?? ''} (${(share * 100).toStringAsFixed(0)}% of the crate)',
         );
       }
-      if (artists[baseArtist(t.artist)] case final c?) {
+      if (artists[t.artistKey] case final c?) {
         score += 1.5;
         reasons.add('Artist ${t.artist} already has $c track(s) in the crate');
       }
@@ -240,7 +240,7 @@ class DiscoveryService {
     final byArtist = <String, (String, int, int)>{};
     for (final t in tps) {
       if (t.artist.isEmpty) continue;
-      final k = baseArtist(t.artist);
+      final k = t.artistKey;
       final e = byArtist[k] ?? (t.artist, 0, 0);
       byArtist[k] = (e.$1, e.$2 + 1, e.$3 + (ids.contains(t.id) ? 1 : 0));
     }
@@ -339,13 +339,8 @@ class DiscoveryService {
     final tps = loadProfiles(cat);
     final exact = <String, List<Tp>>{}, byTitle = <String, List<Tp>>{};
     for (final t in tps) {
-      exact
-          .putIfAbsent(
-            '${baseArtist(t.artist)}|${baseTitle(t.title)}',
-            () => [],
-          )
-          .add(t);
-      byTitle.putIfAbsent(baseTitle(t.title), () => []).add(t);
+      exact.putIfAbsent('${t.artistKey}|${t.titleKey}', () => []).add(t);
+      byTitle.putIfAbsent(t.titleKey, () => []).add(t);
     }
     final lines = <Map<String, Object?>>[];
     var owned = 0, possible = 0, missing = 0, unknown = 0;
@@ -401,7 +396,7 @@ class DiscoveryService {
               .where(
                 (m) =>
                     fold(m.artist).contains(baseArtist(a)) ||
-                    baseArtist(a).contains(baseArtist(m.artist)),
+                    baseArtist(a).contains(m.artistKey),
               )
               .firstOrNull
           case final c?) {
@@ -434,7 +429,7 @@ class DiscoveryService {
   /// matched like a pasted tracklist.
   Map<String, Object?> matchPlaylistFile(String text) {
     final entries = playlistFileEntries(text);
-    final matcher = TrackMatcher(libraryMatchTracks(cat));
+    final matcher = libraryMatcher(cat);
     final byPath = <int, Map<String, Object?>>{};
     final rest = <String>[];
     final restIndex = <int>[];
@@ -504,26 +499,17 @@ class DiscoveryService {
   (String, int?) _ownership(List<Tp> tps, String artist, String? title) {
     final a = baseArtist(artist);
     if (title == null) {
-      final m = tps.where((x) => baseArtist(x.artist) == a).firstOrNull;
+      final m = tps.where((x) => x.artistKey == a).firstOrNull;
       return m == null ? ('missing', null) : ('owned', m.id);
     }
     final bt = baseTitle(title), want = versionOf(title);
     for (final (status, test) in <(String, bool Function(Tp))>[
       (
         'owned',
-        (x) =>
-            baseArtist(x.artist) == a &&
-            baseTitle(x.title) == bt &&
-            _tpVersion(x) == want,
+        (x) => x.artistKey == a && x.titleKey == bt && _tpVersion(x) == want,
       ),
-      (
-        'possibly_owned',
-        (x) => baseArtist(x.artist) == a && baseTitle(x.title) == bt,
-      ),
-      (
-        'possibly_owned',
-        (x) => baseTitle(x.title) == bt && fold(x.artist).contains(a),
-      ),
+      ('possibly_owned', (x) => x.artistKey == a && x.titleKey == bt),
+      ('possibly_owned', (x) => x.titleKey == bt && fold(x.artist).contains(a)),
     ]) {
       final m = tps.where(test).firstOrNull;
       if (m != null) return (status, m.id);
@@ -584,7 +570,7 @@ class DiscoveryService {
     for (final t in tps.where(
       (t) => ids.contains(t.id) && t.artist.isNotEmpty,
     )) {
-      final k = baseArtist(t.artist);
+      final k = t.artistKey;
       final e = counts[k] ?? (t.artist, 0);
       counts[k] = (e.$1, e.$2 + 1);
     }
@@ -628,11 +614,7 @@ class DiscoveryService {
     if (t == null) throw DiscoveryException('track not found');
     final List<SimilarItem> sims;
     try {
-      sims = await online.lastfmSimilarTracks(
-        key,
-        t.artist,
-        baseTitle(t.title),
-      );
+      sims = await online.lastfmSimilarTracks(key, t.artist, t.titleKey);
     } on OnlineException catch (e) {
       throw DiscoveryException(e.message);
     }

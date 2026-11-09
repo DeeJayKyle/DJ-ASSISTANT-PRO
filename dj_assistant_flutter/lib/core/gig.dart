@@ -129,7 +129,7 @@ class GigService {
     final since = last == null ? r.first['started_at'] as int : last + 1;
     final plays = SeratoService(cat).seratoPlaysSince(dbPath, since);
     if (plays.isEmpty) return const [];
-    final matcher = TrackMatcher(libraryMatchTracks(cat));
+    final matcher = libraryMatcher(cat);
     final logged = <int>[];
     for (final pl in plays) {
       final m = matcher.match(

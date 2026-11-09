@@ -1,4 +1,5 @@
 import 'catalogue.dart';
+import 'snapshot.dart';
 import 'text.dart';
 
 /// A compact view of each playable track for discovery, the set planner and
@@ -27,11 +28,22 @@ class Tp {
   final double? bpm;
   final List<String> tags;
 
-  String get genreFold => genre == null ? '' : fold(genre!);
-  String get label => '$artist — $title';
+  late final String genreFold = genre == null ? '' : fold(genre!);
+  late final String label = '$artist — $title';
+
+  /// The main artist, folded (see [baseArtist]); worked out once.
+  late final String artistKey = baseArtist(artist);
+
+  /// The title without bracketed mix/version text, folded; worked out once.
+  late final String titleKey = baseTitle(title);
 }
 
-List<Tp> loadProfiles(Catalogue cat) => cat.db
+/// Every playable track's profile, cached until the catalogue changes
+/// (read-only: do not modify the list).
+List<Tp> loadProfiles(Catalogue cat) =>
+    snapshot(cat, 'profiles', () => List<Tp>.unmodifiable(_loadProfiles(cat)));
+
+List<Tp> _loadProfiles(Catalogue cat) => cat.db
     .select(
       "SELECT t.id, COALESCE(u.artist, t.artist, '') AS artist, COALESCE(u.title, t.title, t.file_name) AS title, "
       'COALESCE(u.genre, t.genre) AS genre, COALESCE(u.year, t.year) AS year, COALESCE(u.bpm, t.bpm_tag, a.bpm) AS bpm, '

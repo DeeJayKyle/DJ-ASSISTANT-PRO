@@ -72,6 +72,14 @@ class Catalogue {
         rethrow;
       }
     }
+    // Speed-only indexes, created outside the numbered migrations so the
+    // schema version stays the one 1.x knows (it ignores extra indexes).
+    db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_gig_events_track ON gig_events(track_id, kind)',
+    );
+    db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_gig_events_gig ON gig_events(gig_id, kind, at)',
+    );
     // A scan still marked running belongs to a session that was interrupted (crash,
     // power loss): say so honestly.
     db.execute(

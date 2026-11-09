@@ -172,7 +172,7 @@ class RekordboxImportService {
       throw RekordboxImportException('file is too large');
     }
     final lib = parseRekordboxXml(xml);
-    final matcher = TrackMatcher(libraryMatchTracks(cat));
+    final matcher = libraryMatcher(cat);
     final idFor = <String, TrackMatch?>{};
     TrackMatch? matchTrack(RbTrack t) => idFor.putIfAbsent(
       t.id,
