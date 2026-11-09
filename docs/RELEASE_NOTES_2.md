@@ -1,14 +1,12 @@
-DJ Assistant 2.2.0
+DJ Assistant 2.2.1
 
-**rekordbox and Serato history in, a Library Map, smarter set building, and Gig Mode that follows Serato.**
+**Faster, especially with big libraries.**
 
-- **Follow Serato (Gig Mode).** Turn it on in the Next up panel and tracks are marked as played as Serato plays them (checked every 15 seconds), so Next up always starts from what's on the decks. Serato's files are only read.
-- **Set Studio rules.** Every mix in a running order gets a grade (smooth, good, workable or clash), and each slot lists what to check: key clash, tempo jump, same artist too soon, off the tempo path, energy off the curve, BPM or key unknown. New options: key mixing (strict, loose or off), half/double time, a tempo ramp from a start BPM to an end BPM, an artist gap in minutes, an energy band, and a track to open with.
-- **Import rekordbox XML.** Library → Scan Activity tools: your rekordbox playlists and folders become crates holding the matching tracks from your library, with a count of what's missing.
-- **Import Serato play history.** Reads the play history Serato DJ 4 keeps, one entry per session, matched to your library. Sessions already imported are skipped.
-- **Library Map.** A new page under Prepare: every analysed track by tempo and energy, coloured by key on the Camelot wheel. Search lights up matches; click a dot to open the track.
-- **Playlist files and a shopping list.** Discovery can open an M3U, M3U8 or CSV playlist from another app and show what you own, might own or are missing, then save the missing tracks as a shopping list with store search links.
+- **Set Studio plans in about a second.** A two-hour running order from a 50,000-track library used to take over 40 seconds; it now takes about one. The plan itself is the same.
+- **Next up answers at once.** In Gig Mode, the suggestions are worked out once per played track and reused, so the panel no longer recalculates every time the screen redraws or Follow Serato checks in.
+- **Faster matching.** Tracklists, playlist files, rekordbox XML and Serato history are matched against your library several times faster, and repeat matches are instant until the library changes.
+- **Faster search and Library Map.** Searching plain-English titles and artists is quicker everywhere, and the Library Map draws a large library faster.
 
-Everything from 2.1.2 is included: Next up, Serato cues in track details and rekordbox exports, auto-import, whole-file beatgrids, prepared stems and the new DJ Decks.
+Everything from 2.2.0 is included: Follow Serato, Set Studio rules, rekordbox XML and Serato history import, the Library Map and playlist files with a shopping list.
 
 **Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning.
