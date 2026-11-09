@@ -1,8 +1,8 @@
-# DaJent 1.0.11-a: design study for gig-time track picking, Serato cues and library matching
+# DaJent 1.0.11-a: design study
 
 A record of a static look at the DaJent 1.0.11-a Windows installer (with REA and
-standard unpacking tools), and how DJ Assistant 2.1.2 answers the parts that
-fit a local-first app **with its own code**.
+standard unpacking tools), and how DJ Assistant 2.1.2 and 2.2.0 answer the parts
+that fit a local-first app **with its own code**.
 
 **Ground rules.** Nothing from DaJent is in DJ Assistant: no code, no strings,
 no artwork, no keys or endpoints. Nothing was run; the installer was only
@@ -129,8 +129,51 @@ lengths within 5 s; same length; or no artist at all). Each row is used once.
 | **Cues in rekordbox XML** | `lib/core/dj_export.dart` | Hot cues → `POSITION_MARK` Type 0 on pads A–H with colour; saved loops → memory loops (Type 4, Num −1), since rekordbox shares its pads. |
 | **Better history matching** | `lib/core/track_match.dart`, `SeratoService.importHistoryCsv` | Falls back to file path/name, artist+title and likely title+artist matches; reports how many were likely. A history may repeat a track, so tracks are not "used up". |
 
-Not brought over, and why: USB export to rekordbox's own database (needs the
-SQLCipher key and a large binary writer — the XML route stays), writing to
-Serato's database or tags (against DJ Assistant's safety rules), anything that
-needs DaJent's backend, accounts, billing, stores or AI services, and Serato's
-private remote-control protocol.
+### 2.2.0 additions
+
+| Feature | Where | Notes |
+|---|---|---|
+| **rekordbox XML import** | `lib/core/rekordbox_import.dart`, Library tools | Playlists and folders become crates of matching tracks (by path, file name, artist + title, or likely). Stands in for DaJent's direct `master.db` import, which needs rekordbox's database key. |
+| **Serato play history** | `SeratoService.importSeratoDbHistory` | Reads Serato DJ 4's `Library/master.sqlite` from a temporary copy; each session once. |
+| **Follow Serato (Gig Mode)** | `GigService.followSerato`, Next up panel | Every 15 s, plays Serato logged since the gig started are marked as played, so Next up follows the decks — DaJent's Live does this through Serato's history and remote protocol. |
+| **Playlist files and shopping list** | `DiscoveryService.matchPlaylistFile`, Discovery | M3U/M3U8/CSV/text; owned, possibly owned, missing; missing tracks saved as a CSV with store search links. Stands in for DaJent's streaming-service import and store carts. |
+| **Library Map** | `lib/ui/library_map.dart` | Tempo across, energy up, colour by Camelot key, search lights up matches. DaJent's "galaxy" places tracks by a server-side audio model; DJ Assistant uses its own analysis. |
+| **Set Studio rules** | `lib/core/set_check.dart`, `sets.dart` | Mix grades (smooth / good / workable / clash), per-slot issues (key clash, tempo jump, same artist within N minutes, off the tempo path, energy off the curve, BPM/key unknown), key mode (strict / loose / off), half/double time, tempo ramp (start → end BPM), opening track, energy band. |
+
+## Code similarity check (before the 2.2.0 release)
+
+Measured MOSS-style: identifiers, numbers and strings normalised, 12-token
+fingerprints winnowed, then the share of DJ Assistant's fingerprints found in
+the reference ("containment") and the longest common run of normalised
+tokens. Two DJ Assistant files written before DaJent was looked at give the
+noise floor.
+
+| DJ Assistant file | vs DaJent `main.js` | vs DaJent Live / ranking | vs uploaded set-builder | longest run (tokens) |
+|---|---|---|---|---|
+| next_track.dart | 7.4 % | 4.3 % / 7.4 % | 0.9 % | 31 |
+| set_check.dart | 5.4 % | 1.9 % / 3.5 % | 1.2 % | 21 |
+| serato_cues.dart | 6.3 % | 1.3 % / 1.3 % | 0.0 % | 20 |
+| track_match.dart | 9.8 % | 2.7 % / 4.4 % | 1.0 % | 31 |
+| rekordbox_import.dart | 7.2 % | 1.2 % / 2.7 % | 0.9 % | 31 |
+| library_map.dart | 5.3 % | 1.9 % / 2.4 % | 0.8 % | 21 |
+| *baseline* health.dart | 6.1 % | 2.8 % / 2.8 % | 0.3 % | 28 |
+| *baseline* crates.dart | 6.7 % | 0.7 % / 3.2 % | 0.4 % | 23 |
+
+The new code sits at the noise floor (common Dart/JS boilerplate such as
+`for … length`, `import`, `String`); no run longer than 31 normalised tokens
+is shared. Three function names that happened to match DaJent's
+(`bpmGate`, `keyGate`, `artistRelation`) and one type (`MixGate`) were
+renamed before release so that even names are distinct.
+
+## Gaps that remain, and why
+
+| DaJent feature | Status in DJ Assistant | Why |
+|---|---|---|
+| USB export to rekordbox's own device database (`export.pdb`, OneLibrary) | Not built; rekordbox XML instead | Needs rekordbox's database key and a binary writer that can only be trusted after testing on real CDJs; a bad USB fails at the gig. |
+| rekordbox `master.db` import and library sync | rekordbox XML import instead | `master.db` is encrypted by rekordbox. |
+| Writing to Serato's database, crates in place, or cue/BPM tags | Not built | DJ Assistant's rule since 1.0: Serato's files are never written. |
+| Serato remote-control pairing | Not built | Serato's private protocol; Follow Serato reads history instead. |
+| Store carts (Beatport, Bandcamp sign-in) | Store search links and a shopping list | Driving store accounts through embedded logins. |
+| Spotify / Apple Music / TIDAL / SoundCloud / YouTube playlist import | Playlist files (M3U/CSV) | Needs registered developer apps and a server. |
+| "Vibe" axes, taste magnet, galaxy layout | Energy, loudness, key and BPM | Come from DaJent's server-side audio models. |
+| Crew (AI set chat), Coach (fitness routines), accounts, billing, cloud sync, analytics | Not built | DJ Assistant already has its own AI assistant and local accounts; the rest needs DaJent's backend and goes against local-first. |

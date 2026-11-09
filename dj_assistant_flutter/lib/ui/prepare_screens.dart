@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/session.dart';
 import '../core/limits.dart' show upTo;
+import '../core/discovery.dart' show DiscoveryService;
 import '../core/gigpack.dart';
+import '../core/serato.dart' show SeratoService;
 import '../core/json.dart';
 import '../core/library.dart';
 import '../core/library_edit.dart';
@@ -46,10 +50,17 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
   );
   final bpmMin = TextEditingController(),
       bpmMax = TextEditingController(),
-      minSec = TextEditingController(text: '30');
+      minSec = TextEditingController(text: '30'),
+      startBpm = TextEditingController(),
+      endBpm = TextEditingController(),
+      artistGap = TextEditingController(text: '20');
+  String keyMode = 'loose';
+  bool halfDouble = true;
+  RangeValues energyBand = const RangeValues(1, 10);
+  int? openingId;
+  String? openingLabel;
   late String curve = '${widget.params?['curve'] ?? 'journey'}';
   late bool clean = widget.params?['clean_only'] == true;
-  bool harmonic = true;
   int? crateId, savedId;
   Map<String, Object?>? plan;
 
@@ -66,7 +77,17 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
     'bpm_min': double.tryParse(bpmMin.text),
     'bpm_max': double.tryParse(bpmMax.text),
     'crate_id': crateId,
-    'harmonic': harmonic,
+    'harmonic': keyMode != 'off',
+    'key_mode': keyMode,
+    'half_double': halfDouble,
+    'start_bpm': double.tryParse(startBpm.text),
+    'end_bpm': double.tryParse(endBpm.text),
+    'opening_track_id': openingId,
+    'artist_gap_min': int.tryParse(artistGap.text) ?? 20,
+    if (energyBand.start > 1 || energyBand.end < 10) ...{
+      'energy_floor': energyBand.start,
+      'energy_ceiling': energyBand.end,
+    },
     'min_track_seconds': int.tryParse(minSec.text),
   };
 
@@ -193,12 +214,119 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                         onChanged: (v) => setState(() => clean = v),
                         title: const Text('Clean versions only'),
                       ),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: keyMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Key mixing',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'strict',
+                            child: Text('Strict: same key, ±1 or relative'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'loose',
+                            child: Text('Loose: also ±2 and semitone lifts'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'off',
+                            child: Text('Off: ignore keys'),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => keyMode = v ?? 'loose'),
+                      ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        value: harmonic,
-                        onChanged: (v) => setState(() => harmonic = v),
-                        title: const Text('Prefer harmonic mixes'),
+                        value: halfDouble,
+                        onChanged: (v) => setState(() => halfDouble = v),
+                        title: const Text('Count half and double time'),
                       ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: startBpm,
+                              decoration: const InputDecoration(
+                                labelText: 'Start at BPM',
+                                hintText: 'optional',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: endBpm,
+                              decoration: const InputDecoration(
+                                labelText: 'End at BPM',
+                                hintText: 'optional',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: artistGap,
+                              decoration: const InputDecoration(
+                                labelText: 'Artist gap (min)',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Energy band ${energyBand.start.round()}–${energyBand.end.round()}',
+                        style: TextStyle(color: t.muted),
+                      ),
+                      RangeSlider(
+                        values: energyBand,
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        labels: RangeLabels(
+                          '${energyBand.start.round()}',
+                          '${energyBand.end.round()}',
+                        ),
+                        onChanged: (v) => setState(() => energyBand = v),
+                      ),
+                      Autocomplete<TrackRow>(
+                        displayStringForOption: (r) =>
+                            '${r.artist ?? unknown} — ${r.title ?? r.fileName}',
+                        optionsBuilder: (v) => v.text.trim().length < 2
+                            ? const <TrackRow>[]
+                            : s.library
+                                  .search(
+                                    TrackQuery(text: v.text.trim(), limit: 8),
+                                  )
+                                  .rows,
+                        onSelected: (r) => setState(() {
+                          openingId = r.id;
+                          openingLabel =
+                              '${r.artist ?? unknown} — ${r.title ?? r.fileName}';
+                        }),
+                        fieldViewBuilder: (c, ctl, focus, submit) => TextField(
+                          controller: ctl,
+                          focusNode: focus,
+                          decoration: InputDecoration(
+                            labelText: 'Open with (optional)',
+                            hintText: 'Search for the first track',
+                            suffixIcon: openingId == null
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear',
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () => setState(() {
+                                      openingId = null;
+                                      openingLabel = null;
+                                      ctl.clear();
+                                    }),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       FilledButton(
                         onPressed: () => guard(
                           () => setState(() {
@@ -319,6 +447,14 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                             for (final w
                                 in (plan!['warnings'] as List?) ?? const [])
                               HintText('$w', icon: Icons.info_outline),
+                            if ((plan!['grades'] as Map?)?.isNotEmpty ?? false)
+                              HintText(
+                                'Mixes: ${[
+                                  for (final g in ['smooth', 'good', 'workable', 'clash', 'unknown'])
+                                    if (((plan!['grades'] as Map)[g] ?? 0) > 0) '${(plan!['grades'] as Map)[g]} $g',
+                                ].join(' · ')}',
+                                icon: Icons.multiline_chart,
+                              ),
                             for (var i = 0; i < slots.length; i++)
                               ListTile(
                                 dense: true,
@@ -329,12 +465,24 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                                 title: Text('${slots[i]['track']}'),
                                 subtitle: Text(
                                   [
+                                    if (slots[i]['grade'] != null)
+                                      'Mix: ${slots[i]['grade']}',
                                     'energy ${slots[i]['energy'] ?? '?'} (target ${(slots[i]['target_energy'] as num?)?.toStringAsFixed(1) ?? '?'})',
                                     'BPM ${fmtBpm(slots[i]['bpm'] as num?)}',
                                     'key ${fmtKey(slots[i]['key'] as String?, notation)}',
                                     if (slots[i]['transition'] != null)
                                       '${slots[i]['transition']}',
+                                    ...((slots[i]['issues'] as List?) ??
+                                            const [])
+                                        .map((x) => '⚠ $x'),
                                   ].join(' · '),
+                                  style: TextStyle(
+                                    color: switch (slots[i]['grade']) {
+                                      'clash' => t.danger,
+                                      'workable' => t.warn,
+                                      _ => null,
+                                    },
+                                  ),
                                 ),
                                 trailing: IconButton(
                                   tooltip: 'Remove from the plan',
@@ -1078,7 +1226,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
             width: 460,
             child: Panel(
               title: 'Paste a tracklist',
-              subtitle: 'From a radio show, a DJ mix or a festival set. One track per line, “Artist - Title”. “ID - ID” stays as unknown.',
+              subtitle: 'From a radio show, a DJ mix or a festival set. One track per line, “Artist - Title”. “ID - ID” stays as unknown. Or open a playlist file (M3U, M3U8, CSV) exported from another app.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1090,18 +1238,66 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton(
-                      onPressed: () => guard(
-                        () => setState(
-                          () => matched = s.discovery.matchTracklist(
-                            tracklist.text,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton(
+                        onPressed: () => guard(
+                          () => setState(
+                            () => matched = s.discovery.matchTracklist(
+                              tracklist.text,
+                            ),
                           ),
                         ),
+                        child: const Text('Match against my library'),
                       ),
-                      child: const Text('Match against my library'),
-                    ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final f = await openFile(
+                            acceptedTypeGroups: const [
+                              XTypeGroup(
+                                label: 'Playlists',
+                                extensions: ['m3u', 'm3u8', 'csv', 'txt'],
+                              ),
+                            ],
+                          );
+                          if (f == null) return;
+                          final text = await f.readAsString();
+                          await guard(
+                            () => setState(
+                              () =>
+                                  matched = s.discovery.matchPlaylistFile(text),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.playlist_add_check, size: 18),
+                        label: const Text('Open a playlist file…'),
+                      ),
+                      if (matched != null &&
+                          ((matched!['missing'] as int) > 0 ||
+                              (matched!['possibly_owned'] as int) > 0))
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final loc = await getSaveLocation(
+                              suggestedName: 'Shopping list.csv',
+                              acceptedTypeGroups: const [
+                                XTypeGroup(label: 'CSV', extensions: ['csv']),
+                              ],
+                            );
+                            if (loc == null) return;
+                            await guard(
+                              () => s.exports.writeText(
+                                loc.path,
+                                DiscoveryService.shoppingListCsv(matched!),
+                              ),
+                              done: 'Shopping list saved.',
+                            );
+                          },
+                          icon: const Icon(Icons.add_shopping_cart, size: 18),
+                          label: const Text('Save shopping list…'),
+                        ),
+                    ],
                   ),
                   if (matched != null) ...[
                     const SizedBox(height: 8),
@@ -1252,7 +1448,40 @@ class NextUpPanel extends ConsumerStatefulWidget {
 
 class _NextUpPanelState extends ConsumerState<NextUpPanel> {
   var direction = EnergyDirection.hold;
-  var gate = const MixGate();
+  var gate = const MixRules();
+  Timer? _follow;
+
+  @override
+  void dispose() {
+    _follow?.cancel();
+    super.dispose();
+  }
+
+  void _setFollow(bool on) {
+    _follow?.cancel();
+    _follow = null;
+    if (on) {
+      final db = SeratoService.defaultLibraryDb();
+      if (db == null) {
+        toast(
+          "Serato DJ's library wasn't found on this computer (Serato DJ 4 or later is needed).",
+        );
+        setState(() {});
+        return;
+      }
+      void poll() {
+        final s = ref.read(sessionProvider);
+        final got = s.gig.followSerato(db);
+        if (got.isNotEmpty && mounted) {
+          ref.read(versionProvider.notifier).bump();
+        }
+      }
+
+      poll();
+      _follow = Timer.periodic(const Duration(seconds: 15), (_) => poll());
+    }
+    setState(() {});
+  }
 
   static const _windows = <(double?, String)>[
     (0, 'Same BPM'),
@@ -1277,6 +1506,16 @@ class _NextUpPanelState extends ConsumerState<NextUpPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: _follow != null,
+            onChanged: _setFollow,
+            title: const Text('Follow Serato'),
+            subtitle: const Text(
+              'Marks tracks as played when Serato plays them (checked every 15 s, read only).',
+            ),
+          ),
           SegmentedButton<EnergyDirection>(
             segments: const [
               ButtonSegment(

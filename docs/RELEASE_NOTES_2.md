@@ -1,12 +1,14 @@
-DJ Assistant 2.1.2
+DJ Assistant 2.2.0
 
-**Next up in Gig Mode, Serato cues, and cues in rekordbox exports.**
+**rekordbox and Serato history in, a Library Map, smarter set building, and Gig Mode that follows Serato.**
 
-- **Next up (Gig Mode).** After each track you mark as played, a ranked list of what mixes in next. Pick **Cool**, **Hold** or **Lift** to bring the energy down a step, keep it, or take it up. Set the **Tempo** window (same BPM up to ±16, half and double time included, or any tempo) and the **Key** gate (keys that mix on the Camelot wheel, also allowing a one-semitone lift, or any key). Each suggestion says why: same key, ±BPM, lifts energy… When nothing fits, one click widens the tempo or relaxes the key, showing how many tracks it opens up.
-- **Serato cues in track details.** The hot cues and saved loops Serato stored in an MP3 or FLAC appear as coloured chips with their times and names. They are only read, never changed.
-- **Cues in rekordbox XML.** Exported crates now carry Serato's hot cues onto rekordbox's pads A–H (with their colours) and saved loops as memory loops, alongside the beatgrid.
-- **Smarter Serato history import.** Plays that don't match by artist and title now also match by file path or name, or by title with matching artists; the summary says how many were likely matches.
+- **Follow Serato (Gig Mode).** Turn it on in the Next up panel and tracks are marked as played as Serato plays them (checked every 15 seconds), so Next up always starts from what's on the decks. Serato's files are only read.
+- **Set Studio rules.** Every mix in a running order gets a grade (smooth, good, workable or clash), and each slot lists what to check: key clash, tempo jump, same artist too soon, off the tempo path, energy off the curve, BPM or key unknown. New options: key mixing (strict, loose or off), half/double time, a tempo ramp from a start BPM to an end BPM, an artist gap in minutes, an energy band, and a track to open with.
+- **Import rekordbox XML.** Library → Scan Activity tools: your rekordbox playlists and folders become crates holding the matching tracks from your library, with a count of what's missing.
+- **Import Serato play history.** Reads the play history Serato DJ 4 keeps, one entry per session, matched to your library. Sessions already imported are skipped.
+- **Library Map.** A new page under Prepare: every analysed track by tempo and energy, coloured by key on the Camelot wheel. Search lights up matches; click a dot to open the track.
+- **Playlist files and a shopping list.** Discovery can open an M3U, M3U8 or CSV playlist from another app and show what you own, might own or are missing, then save the missing tracks as a shopping list with store search links.
 
-Everything from 2.1.1 is included: auto-import, whole-file beatgrids, BPM range, prepared stems, Serato grid import and the new DJ Decks.
+Everything from 2.1.2 is included: Next up, Serato cues in track details and rekordbox exports, auto-import, whole-file beatgrids, prepared stems and the new DJ Decks.
 
 **Please note:** the installer is signed for automatic updates, but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning.

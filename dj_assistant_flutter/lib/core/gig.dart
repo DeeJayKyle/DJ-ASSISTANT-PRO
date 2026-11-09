@@ -1,5 +1,7 @@
 import 'catalogue.dart';
 import 'jobs.dart';
+import 'serato.dart';
+import 'track_match.dart';
 
 /// Gig mode (1.x `gig.rs`): an offline-first session with a request queue, notes
 /// and a play log, then a recap. While a gig runs, background work is paused.
@@ -106,6 +108,41 @@ class GigService {
               as int?;
       if (t != null) addEvent('played', trackId: t, text: 'Request');
     }
+  }
+
+  /// Logs as played, in order, each track Serato played since the gig
+  /// started (or since the last one logged this way) that is in the
+  /// library. Returns the ids logged. Serato's database is only read, from
+  /// a copy.
+  List<int> followSerato(String dbPath) {
+    final r = cat.db.select(
+      'SELECT id, started_at FROM gigs WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1',
+    );
+    if (r.isEmpty) return const [];
+    final gig = r.first['id'] as int;
+    final last =
+        cat.db.select(
+              "SELECT MAX(at) AS at FROM gig_events WHERE gig_id=? AND kind='played' AND text='Serato'",
+              [gig],
+            ).first['at']
+            as int?;
+    final since = last == null ? r.first['started_at'] as int : last + 1;
+    final plays = SeratoService(cat).seratoPlaysSince(dbPath, since);
+    if (plays.isEmpty) return const [];
+    final matcher = TrackMatcher(libraryMatchTracks(cat));
+    final logged = <int>[];
+    for (final pl in plays) {
+      final m = matcher.match(
+        MatchEntry(path: pl.path, artist: pl.artist, title: pl.title),
+      );
+      if (m == null) continue;
+      cat.db.execute(
+        "INSERT INTO gig_events(gig_id, kind, track_id, text, status, at) VALUES (?, 'played', ?, 'Serato', NULL, ?)",
+        [gig, m.trackId, pl.atMs < since ? since : pl.atMs],
+      );
+      logged.add(m.trackId);
+    }
+    return logged;
   }
 
   void deleteEvent(int id) =>

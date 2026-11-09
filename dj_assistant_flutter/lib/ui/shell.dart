@@ -42,6 +42,7 @@ const _create = [
 const _prepare = [
   _Nav('set-studio', 'Set Studio', Icons.queue_music_outlined),
   _Nav('discovery', 'Discovery', Icons.explore_outlined),
+  _Nav('map', 'Library Map', Icons.scatter_plot_outlined),
   _Nav('suggestions', 'Suggestions', Icons.auto_fix_high_outlined),
   _Nav('gig', 'Gig Mode', Icons.sensors),
   _Nav('gig-pack', 'Gig Pack', Icons.usb_outlined),

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:path/path.dart' as p;
+
 import '../online/lookups.dart';
 import '../online/online.dart';
 import 'catalogue.dart';
@@ -10,6 +12,7 @@ import 'library.dart';
 import 'library_edit.dart';
 import 'profile.dart';
 import 'text.dart';
+import 'track_match.dart';
 
 class DiscoveryException implements Exception {
   DiscoveryException(this.message);
@@ -425,6 +428,79 @@ class DiscoveryService {
     };
   }
 
+  /// Matches a playlist file (M3U/M3U8, CSV with artist and title columns,
+  /// or plain "Artist - Title" lines) against the library. Entries whose
+  /// file is in the library count as owned straight away; the rest are
+  /// matched like a pasted tracklist.
+  Map<String, Object?> matchPlaylistFile(String text) {
+    final entries = playlistFileEntries(text);
+    final matcher = TrackMatcher(libraryMatchTracks(cat));
+    final byPath = <int, Map<String, Object?>>{};
+    final rest = <String>[];
+    final restIndex = <int>[];
+    for (var i = 0; i < entries.length; i++) {
+      final e = entries[i];
+      if (e.path != null) {
+        final m = matcher.match(MatchEntry(path: e.path));
+        if (m != null &&
+            (m.kind == MatchKind.path || m.kind == MatchKind.fileName)) {
+          final row = cat.db.select(
+            "SELECT COALESCE(u.artist,t.artist,'') || ' — ' || COALESCE(u.title,t.title,t.file_name) AS label "
+            'FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id WHERE t.id=?',
+            [m.trackId],
+          );
+          byPath[i] = {
+            'line': i + 1,
+            'text': e.display,
+            'status': 'owned',
+            'track_id': m.trackId,
+            'match': row.isEmpty ? null : row.first['label'],
+          };
+          continue;
+        }
+      }
+      rest.add(e.display);
+      restIndex.add(i);
+    }
+    final r = matchTracklist(rest.join('\n'));
+    final lines = List<Map<String, Object?>?>.filled(entries.length, null);
+    byPath.forEach((i, l) => lines[i] = l);
+    for (final l in (r['lines'] as List).cast<Map<String, Object?>>()) {
+      final i = restIndex[(l['line'] as int) - 1];
+      lines[i] = {...l, 'line': i + 1};
+    }
+    return {
+      ...r,
+      'lines': lines.whereType<Map<String, Object?>>().toList(),
+      'owned': (r['owned'] as int) + byPath.length,
+    };
+  }
+
+  /// A CSV of the missing (and possibly owned) tracks from a match, with
+  /// store search links, for a shopping list.
+  static String shoppingListCsv(Map<String, Object?> matched) {
+    String q(Object? v) => '"${'${v ?? ''}'.replaceAll('"', '""')}"';
+    final out = StringBuffer(
+      'Status,Artist,Title,Beatport,Bandcamp,Traxsource\n',
+    );
+    for (final l in (matched['lines'] as List).cast<Map>()) {
+      if (l['status'] != 'missing' && l['status'] != 'possibly_owned') continue;
+      final a = '${l['artist'] ?? ''}', t = '${l['title'] ?? l['text'] ?? ''}';
+      final links = {for (final x in storeLinks(a, t)) x['store']: x['url']};
+      out.writeln(
+        [
+          q(l['status'] == 'missing' ? 'Missing' : 'Check version'),
+          q(a),
+          q(t),
+          q(links['Beatport']),
+          q(links['Bandcamp']),
+          q(links['Traxsource']),
+        ].join(','),
+      );
+    }
+    return out.toString();
+  }
+
   (String, int?) _ownership(List<Tp> tps, String artist, String? title) {
     final a = baseArtist(artist);
     if (title == null) {
@@ -715,4 +791,90 @@ void _stableSort<T>(List<T> l, int Function(T, T) cmp) {
   for (var i = 0; i < idx.length; i++) {
     l[i] = copy[idx[i]];
   }
+}
+
+class PlaylistEntry {
+  const PlaylistEntry(this.display, {this.path});
+
+  /// "Artist - Title" (or the file name when nothing better is known).
+  final String display;
+  final String? path;
+}
+
+/// Entries of an M3U/M3U8 playlist, a CSV with artist/title columns, or a
+/// plain list of "Artist - Title" lines.
+List<PlaylistEntry> playlistFileEntries(String text) {
+  final lines = const LineSplitter()
+      .convert(text.startsWith('\uFEFF') ? text.substring(1) : text)
+      .where((l) => l.trim().isNotEmpty)
+      .toList();
+  if (lines.isEmpty) return const [];
+  final out = <PlaylistEntry>[];
+  if (lines.first.trim().toUpperCase().startsWith('#EXTM3U') ||
+      lines.any((l) => l.trim().toUpperCase().startsWith('#EXTINF'))) {
+    String? info;
+    for (final raw in lines) {
+      final l = raw.trim();
+      if (l.toUpperCase().startsWith('#EXTINF')) {
+        final c = l.indexOf(',');
+        info = c < 0 ? null : l.substring(c + 1).trim();
+      } else if (l.startsWith('#')) {
+        continue;
+      } else {
+        final name = p.basenameWithoutExtension(l.replaceAll('\\', '/'));
+        out.add(
+          PlaylistEntry(info != null && info.isNotEmpty ? info : name, path: l),
+        );
+        info = null;
+      }
+    }
+    return out;
+  }
+  final header = _csvFields(lines.first).map(fold).toList();
+  final ai = header.indexWhere((h) => h == 'artist' || h == 'artists');
+  final ti = header.indexWhere(
+    (h) => ['title', 'name', 'track', 'track name', 'song'].contains(h),
+  );
+  if (ti >= 0) {
+    for (final l in lines.skip(1)) {
+      final f = _csvFields(l);
+      final t = ti < f.length ? f[ti] : '';
+      if (t.isEmpty) continue;
+      final a = ai >= 0 && ai < f.length ? f[ai] : '';
+      out.add(PlaylistEntry(a.isEmpty ? t : '$a - $t'));
+    }
+    return out;
+  }
+  return [for (final l in lines) PlaylistEntry(l.trim())];
+}
+
+List<String> _csvFields(String line) {
+  final out = <String>[];
+  final cur = StringBuffer();
+  var quoted = false;
+  final sep = line.contains('\t') && !line.contains(',') ? '\t' : ',';
+  for (var i = 0; i < line.length; i++) {
+    final c = line[i];
+    if (quoted) {
+      if (c == '"') {
+        if (i + 1 < line.length && line[i + 1] == '"') {
+          cur.write('"');
+          i++;
+        } else {
+          quoted = false;
+        }
+      } else {
+        cur.write(c);
+      }
+    } else if (c == '"') {
+      quoted = true;
+    } else if (c == sep) {
+      out.add(cur.toString().trim());
+      cur.clear();
+    } else {
+      cur.write(c);
+    }
+  }
+  out.add(cur.toString().trim());
+  return out;
 }

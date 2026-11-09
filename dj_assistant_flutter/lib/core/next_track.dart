@@ -36,8 +36,8 @@ const maxBpmWindow = 16.0;
 /// How many recent plays set the target energy.
 const energyTrailLength = 10;
 
-class MixGate {
-  const MixGate({
+class MixRules {
+  const MixRules({
     this.bpmWindow = defaultBpmWindow,
     this.halfDouble = true,
     this.key = KeyGate.loose,
@@ -48,11 +48,11 @@ class MixGate {
   final bool halfDouble;
   final KeyGate key;
 
-  MixGate copyWith({
+  MixRules copyWith({
     double? Function()? bpmWindow,
     bool? halfDouble,
     KeyGate? key,
-  }) => MixGate(
+  }) => MixRules(
     bpmWindow: bpmWindow == null ? this.bpmWindow : bpmWindow(),
     halfDouble: halfDouble ?? this.halfDouble,
     key: key ?? this.key,
@@ -120,7 +120,7 @@ class LoosenOption {
   });
   final String label;
   final int opensUp;
-  final MixGate gate;
+  final MixRules gate;
 
   /// Loosening the key gate lets key clashes through.
   final bool clashes;
@@ -163,7 +163,7 @@ bool _harmonic((int, bool) a, (int, bool) b) =>
 
 // --- Gates ---------------------------------------------------------------
 
-GateResult bpmGate(double? candidate, double? anchor, MixGate g) {
+GateResult checkTempo(double? candidate, double? anchor, MixRules g) {
   final w = g.bpmWindow;
   if (w == null || anchor == null || anchor <= 0) return const GateResult(true);
   if (candidate == null || candidate <= 0) {
@@ -177,7 +177,7 @@ GateResult bpmGate(double? candidate, double? anchor, MixGate g) {
   );
 }
 
-GateResult keyGate(String? candidate, String? anchor, KeyGate mode) {
+GateResult checkKey(String? candidate, String? anchor, KeyGate mode) {
   if (mode == KeyGate.off) return const GateResult(true);
   final a = camelotParts(anchor);
   if (a == null) return const GateResult(true);
@@ -195,10 +195,10 @@ GateResult keyGate(String? candidate, String? anchor, KeyGate mode) {
 GateResult mixGate(
   NextTrackCandidate c,
   NextTrackCandidate? anchor,
-  MixGate g,
+  MixRules g,
 ) {
-  final b = bpmGate(c.bpm, anchor?.bpm, g);
-  final k = keyGate(c.camelot, anchor?.camelot, g.key);
+  final b = checkTempo(c.bpm, anchor?.bpm, g);
+  final k = checkKey(c.camelot, anchor?.camelot, g.key);
   return GateResult(
     b.pass && k.pass,
     flagged: b.flagged || k.flagged,
@@ -209,13 +209,13 @@ GateResult mixGate(
 int _mixableCount(
   List<NextTrackCandidate> pool,
   NextTrackCandidate? anchor,
-  MixGate g,
+  MixRules g,
 ) => pool.where((c) => mixGate(c, anchor, g).pass).length;
 
 List<LoosenOption> loosenOptions(
   List<NextTrackCandidate> pool,
   NextTrackCandidate? anchor,
-  MixGate g,
+  MixRules g,
 ) {
   final now = _mixableCount(pool, anchor, g);
   final out = <LoosenOption>[];
@@ -322,7 +322,7 @@ NextTrackResult rankNextTracks({
   required List<double?> playedEnergies,
   Set<int> exclude = const {},
   EnergyDirection direction = EnergyDirection.hold,
-  MixGate gate = const MixGate(),
+  MixRules gate = const MixRules(),
   int limit = 12,
 }) {
   final pool = [
@@ -486,7 +486,7 @@ class NextTrackService {
   NextTrackResult suggest(
     List<int> played, {
     EnergyDirection direction = EnergyDirection.hold,
-    MixGate gate = const MixGate(),
+    MixRules gate = const MixRules(),
     int limit = 12,
   }) {
     final lib = candidates();

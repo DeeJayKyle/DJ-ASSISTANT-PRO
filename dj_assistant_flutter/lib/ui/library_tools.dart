@@ -7,7 +7,9 @@ import '../core/limits.dart' show upTo;
 import '../core/json.dart';
 import '../core/library.dart';
 import '../core/library_edit.dart';
+import '../core/rekordbox_import.dart';
 import '../core/scanner.dart';
+import '../core/serato.dart' show SeratoService;
 import 'format.dart';
 import 'library_screen.dart' show addMusicFolders;
 import 'player.dart';
@@ -360,6 +362,70 @@ class ActivityScreen extends ConsumerWidget {
                   },
                   icon: const Icon(Icons.history, size: 18),
                   label: const Text('Import Serato history CSV…'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    var db = SeratoService.defaultLibraryDb();
+                    if (db == null) {
+                      final f = await openFile(
+                        acceptedTypeGroups: const [
+                          XTypeGroup(
+                            label: 'Serato library database',
+                            extensions: ['sqlite'],
+                          ),
+                        ],
+                      );
+                      db = f?.path;
+                    }
+                    if (db == null) return;
+                    final path = db;
+                    final r = await guard(
+                      () => s.serato.importSeratoDbHistory(path),
+                      bump: ref,
+                    );
+                    if (r != null) {
+                      toast(
+                        'Imported ${r['sessions']} Serato sessions: ${r['matched']} plays matched, '
+                        '${r['unmatched']} not in your library'
+                        '${(r['skipped'] ?? 0) > 0 ? ' (${r['skipped']} sessions already imported)' : ''}.',
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.history_toggle_off, size: 18),
+                  label: const Text('Import Serato play history'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final f = await openFile(
+                      acceptedTypeGroups: const [
+                        XTypeGroup(label: 'rekordbox XML', extensions: ['xml']),
+                      ],
+                    );
+                    if (f == null) return;
+                    final text = await f.readAsString();
+                    final r = await guard(
+                      () =>
+                          RekordboxImportService(s.cat)
+                              .importXml(text, label: f.name),
+                      bump: ref,
+                    );
+                    if (r != null) {
+                      final pls = (r['playlists'] as List).cast<Map>();
+                      final got = pls.fold<int>(
+                        0,
+                        (n, x) => n + (x['matched'] as int),
+                      );
+                      final miss = pls.fold<int>(
+                        0,
+                        (n, x) => n + (x['missing'] as int),
+                      );
+                      toast(
+                        'Imported ${pls.length} rekordbox playlists as crates: $got tracks matched, $miss not in your library.',
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.library_music_outlined, size: 18),
+                  label: const Text('Import rekordbox XML…'),
                 ),
               ],
             ),

@@ -1,5 +1,6 @@
 import 'package:path/path.dart' as p;
 
+import 'catalogue.dart';
 import 'text.dart';
 
 /// Matches tracks listed by other DJ software (a history export, a crate, a
@@ -71,15 +72,15 @@ List<String> artistWords(String? s) => s == null
           .where((w) => w.isNotEmpty)
           .toList();
 
-enum ArtistRelation { none, overlap, subset, same }
+enum ArtistOverlap { none, overlap, subset, same }
 
-ArtistRelation artistRelation(String? a, String? b) {
+ArtistOverlap compareArtists(String? a, String? b) {
   final x = artistWords(a).toSet(), y = artistWords(b).toSet();
-  if (x.isEmpty || y.isEmpty) return ArtistRelation.none;
-  if (x.length == y.length && x.containsAll(y)) return ArtistRelation.same;
-  if (x.containsAll(y) || y.containsAll(x)) return ArtistRelation.subset;
-  if (x.any(y.contains)) return ArtistRelation.overlap;
-  return ArtistRelation.none;
+  if (x.isEmpty || y.isEmpty) return ArtistOverlap.none;
+  if (x.length == y.length && x.containsAll(y)) return ArtistOverlap.same;
+  if (x.containsAll(y) || y.containsAll(x)) return ArtistOverlap.subset;
+  if (x.any(y.contains)) return ArtistOverlap.overlap;
+  return ArtistOverlap.none;
 }
 
 /// "4:05", "1:02:03" or "245" → seconds.
@@ -179,17 +180,17 @@ class TrackMatcher {
     final noArtist = artistWords(e.artist).isEmpty;
     for (final t in same) {
       if (options.claimOnce && _claimed.contains(t.id)) continue;
-      final rel = artistRelation(e.artist, t.artist);
+      final rel = compareArtists(e.artist, t.artist);
       final agree = _lengthsAgree(e, t);
       final (score, why) = switch (rel) {
-        ArtistRelation.same ||
-        ArtistRelation.subset => (4, 'Same title; the artists match'),
-        ArtistRelation.overlap => (
+        ArtistOverlap.same ||
+        ArtistOverlap.subset => (4, 'Same title; the artists match'),
+        ArtistOverlap.overlap => (
           agree ? 3 : 2,
           'Same title; the artists partly match',
         ),
-        ArtistRelation.none when agree => (2, 'Same title and length'),
-        ArtistRelation.none when noArtist => (1, 'Same title'),
+        ArtistOverlap.none when agree => (2, 'Same title and length'),
+        ArtistOverlap.none when noArtist => (1, 'Same title'),
         _ => (0, ''),
       };
       if (score > 0 && (best == null || score > best.$2)) {
@@ -206,3 +207,22 @@ class TrackMatcher {
     return m;
   }
 }
+
+/// Every library track (not removed) as a [MatchTrack]; your own artist and
+/// title win over the file's tags.
+List<MatchTrack> libraryMatchTracks(Catalogue cat) => [
+  for (final r in cat.db.select(
+    'SELECT t.id, t.path, t.duration_ms, COALESCE(u.artist,t.artist) AS artist, '
+    'COALESCE(u.title,t.title) AS title FROM tracks t '
+    'LEFT JOIN track_user u ON u.track_id=t.id WHERE t.removed_at IS NULL',
+  ))
+    MatchTrack(
+      id: r['id'] as int,
+      path: r['path'] as String?,
+      artist: r['artist'] as String?,
+      title: r['title'] as String?,
+      durationSec: (r['duration_ms'] as int?) == null
+          ? null
+          : (r['duration_ms'] as int) / 1000,
+    ),
+];
