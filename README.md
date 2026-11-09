@@ -52,9 +52,9 @@ Every path exports as a **verified copy in a new folder**, **one ZIP**, or **pla
 
 **Set Studio** — event, audience, length, genres, must-plays, exclusions, clean-only, BPM range, energy journey (journey, warm-up, peak, wedding, lounge) → an editable running order with tempo/key transition notes, alternatives per slot, reordering, emergency floor-fillers; save, export M3U8, save as crate.
 
-**Gig Mode & Gig Pack** — offline set list, request queue, DJ notes and play log with background work paused; post-gig recap. Gig packs copy a crate or set to a USB drive into a new folder, verify every copy by hash, and write a manifest, playlist and missing-file report.
+**Gig Mode & Gig Pack** — offline set list, request queue, DJ notes and play log with background work paused; **Next up** ranks what mixes in after the last play (Cool / Hold / Lift energy, tempo window with half/double time, Camelot key gate, one-click loosening); post-gig recap. Gig packs copy a crate or set to a USB drive into a new folder, verify every copy by hash, and write a manifest, playlist and missing-file report.
 
-**Serato & history** — read-only import of Serato crates and Serato history CSV exports.
+**Serato & history** — read-only import of Serato crates and Serato history CSV exports (matched by artist and title, file path or name, or a likely title-and-artist match); Serato's hot cues and saved loops shown in track details and carried into rekordbox XML exports.
 
 **Safe tag writing (opt-in, off by default; also used by Organise Files)** — write catalogue values to MP3/FLAC/M4A tags with an exact preview, change detection, a verified backup, checks that the audio data and every other tag frame (including Serato’s cue/beatgrid frames) are preserved, a change log and exact-byte rollback.
 

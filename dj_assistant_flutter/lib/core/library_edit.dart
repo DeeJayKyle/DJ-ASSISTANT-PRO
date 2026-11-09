@@ -1,6 +1,7 @@
 import 'analysis_store.dart';
 import 'catalogue.dart';
 import 'library.dart';
+import 'serato_cues.dart';
 import 'serato_tags.dart';
 import 'text.dart';
 
@@ -315,12 +316,21 @@ extension LibraryEdits on LibraryService {
       ],
       'read_error': t['read_error'],
       'analysis': AnalysisStore(cat).get(id),
-      // Serato's own grid and BPM in the file's tags (read only)
+      // Serato's own grid, BPM, hot cues and loops in the file's tags (read only)
       'serato': () {
-        final s = readSeratoAnalysis(t['path'] as String);
-        return s.isEmpty
+        final geob = readSeratoGeobs(t['path'] as String);
+        final s = seratoAnalysisFrom(geob);
+        final m = geob['Serato Markers2'] == null
+            ? const SeratoMarkers()
+            : parseSeratoMarkers2Tag(geob['Serato Markers2']!);
+        return s.isEmpty && m.isEmpty
             ? null
-            : {'bpm': s.bpm, 'beatgrid': s.beatgrid?.toJson()};
+            : {
+                'bpm': s.bpm,
+                'beatgrid': s.beatgrid?.toJson(),
+                'cues': [for (final c in m.all) c.toJson()],
+                'bpm_locked': m.bpmLocked,
+              };
       }(),
       'plays': cat.db.select(
         "SELECT (SELECT COUNT(*) FROM play_history WHERE track_id=?) + (SELECT COUNT(*) FROM gig_events WHERE track_id=? AND kind='played') AS n",

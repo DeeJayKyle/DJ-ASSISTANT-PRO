@@ -88,3 +88,10 @@ String resLabel(int? height) {
   if (height >= 1400) return '1440p';
   return '${height}p';
 }
+
+/// 83450 ms → "1:23.4".
+String fmtCueTime(int ms) {
+  final tenths = ms ~/ 100;
+  final m = tenths ~/ 600, sec = (tenths % 600) / 10;
+  return '$m:${sec.toStringAsFixed(1).padLeft(4, '0')}';
+}

@@ -12,12 +12,14 @@ import 'package:dj_assistant/core/library_edit.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
 import 'package:dj_assistant/core/serato.dart';
+import 'package:dj_assistant/core/serato_cues.dart';
 import 'package:dj_assistant/core/tag_writer.dart';
 import 'package:dj_assistant/core/templates.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'scanner_test.dart' show copyLibrary, hashes;
+import 'serato_tags_test.dart' show geob, mp3;
 
 /// Ports of 1.x `crate_templates_labels_and_hygiene`, `exports_write_only_the_chosen_file`,
 /// `gig_pack_copies_verifies_and_never_overwrites` and
@@ -336,9 +338,82 @@ void main() {
       'name,artist,start time\n"Sunrise Groove (feat. Ada)",Lagos Lights,21:00\nSunrise Groove (Live),Lagos Lights,21:04\nUnknown,Nobody,21:08\n',
       'Friday',
     );
-    expect(r, {'matched': 2, 'unmatched': 1});
+    expect(r, {'matched': 2, 'unmatched': 1, 'likely': 0});
     expect(SeratoService(cat).history().length, 3);
     expect(SeratoService(cat).clearHistory(), 3);
+  });
+
+  test('Serato history CSV falls back to file names and likely matches', () {
+    final r = SeratoService(cat).importHistoryCsv(
+      'name,artist,location,length\n'
+          'Some Other Name,Someone,/Volumes/USB/Mirrorball.ogg,0:10\n'
+          'Warehouse 94,The Tenant Collective,,\n',
+      'Saturday',
+    );
+    expect(r, {'matched': 2, 'unmatched': 0, 'likely': 1});
+    final ids = [for (final h in SeratoService(cat).history()) h['track_id']];
+    expect(
+      ids,
+      containsAll([
+        idOf('Mirrorball.ogg'),
+        idOf('Deep Tenant - Warehouse 94.mp3'),
+      ]),
+    );
+  });
+
+  test('rekordbox XML carries Serato hot cues and saved loops', () async {
+    final f = File(p.join(music.path, 'Cued.mp3'))
+      ..writeAsBytesSync(
+        mp3([
+          ('TIT2', [0, ...ascii.encode('Cued')]),
+          (
+            'GEOB',
+            geob(
+              'Serato Markers2',
+              encodeSeratoMarkers2Tag(
+                const SeratoMarkers(
+                  cues: [
+                    SeratoCue(
+                      slot: 2,
+                      positionMs: 1500,
+                      color: 0xCC0000,
+                      name: 'In',
+                    ),
+                  ],
+                  loops: [
+                    SeratoCue(
+                      slot: 1,
+                      positionMs: 4000,
+                      endMs: 8000,
+                      color: 0x27AAE1,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ]),
+      );
+    await runScan(cat);
+    final crates = CratesService(cat);
+    final c = crates.create(const CrateInput(name: 'Cued', kind: 'manual'));
+    crates.addTracks(c.id, [idOf('Cued.mp3')]);
+    final xmlPath = p.join(out.path, 'cued.xml');
+    DjExportService(cat).exportRekordbox(xmlPath, crateIds: [c.id]);
+    final xml = File(xmlPath).readAsStringSync();
+    expect(
+      xml,
+      contains(
+        '<POSITION_MARK Name="In" Type="0" Start="1.500" Num="1" Red="204" Green="0" Blue="0"/>',
+      ),
+    );
+    expect(
+      xml,
+      contains(
+        '<POSITION_MARK Name="" Type="4" Start="4.000" End="8.000" Num="-1"/>',
+      ),
+    );
+    f.deleteSync();
   });
 
   test('Studio files: new folders and files only, never replacing a WAV', () {

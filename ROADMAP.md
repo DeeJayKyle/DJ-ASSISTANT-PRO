@@ -16,8 +16,12 @@ Every item still needs **manual testing on a real Windows PC with a real library
 | Studio | Prepared stems: split once, kept in app data, size cap; Prepare stems for a crate | Tested (file format, cache); UI needs a hand test on Windows |
 | Library | Auto-import: finished downloads (audio and ZIPs) copied into an Inbox folder, scanned, analysed and added to an Inbox crate; downloads never moved or deleted | Tested (service and session); needs a hand test on Windows with real store downloads |
 | DJ Decks | New layout: scrolling waveforms with beatgrids, deck panels, mixer, hot cue / loop / stem pads, library strip | Builds; needs a hand test on Windows |
+| Gig Mode | Next up: ranked next tracks after the last play; Cool / Hold / Lift energy direction; tempo window with half/double time; Camelot key gate (strict, semitone lift, off); loosen hints | Tested (unit + screen) |
+| Serato | Hot cues and saved loops read from Serato Markers2 (MP3, FLAC), shown in track details, never written | Tested (built tags); not yet on files Serato wrote |
+| Export | rekordbox XML carries Serato hot cues (pads A–H) and saved loops (memory loops) | Tested; not yet opened in rekordbox |
+| Serato | History CSV matching falls back to file path/name and likely title + artist matches | Tested |
 
-See docs/SERATO_STUDY.md for what was learned from Serato's design and how each feature was built independently.
+See docs/SERATO_STUDY.md and docs/DAJENT_STUDY.md for what was learned from other apps' designs and how each feature was built independently.
 
 ## v1.5
 

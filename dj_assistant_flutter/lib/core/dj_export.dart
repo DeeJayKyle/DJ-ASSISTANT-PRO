@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
+import '../analysis/beatgrid.dart';
 import 'analysis_store.dart';
 import 'catalogue.dart';
 import 'crates.dart';
@@ -13,6 +14,7 @@ import 'keys.dart';
 import 'library.dart';
 import 'library_edit.dart';
 import 'organize.dart';
+import 'serato_cues.dart';
 
 /// Crates to other DJ software (1.x `dj_export.rs`).
 ///
@@ -278,17 +280,33 @@ class DjExportService {
       // has one, else this app's analysis.
       final grid = AnalysisStore(cat)
           .beatgridFor(trackIds[i], r['path'] as String);
-      if (grid == null || grid.markers.isEmpty) {
+      // Serato's hot cues as rekordbox hot cues A–H, and its saved loops as
+      // memory loops (rekordbox shares its pads between cues and loops)
+      final marks = readSeratoMarkers(r['path'] as String);
+      final children = StringBuffer();
+      for (final m in grid?.markers ?? const <GridMarker>[]) {
+        children.write(
+          '      <TEMPO Inizio="${(m.ms / 1000).toStringAsFixed(3)}" '
+          'Bpm="${m.bpm.toStringAsFixed(2)}" Metro="4/4" Battito="${m.beat}"/>\n',
+        );
+      }
+      for (final c in marks.all) {
+        final rgb =
+            'Red="${(c.color >> 16) & 0xff}" Green="${(c.color >> 8) & 0xff}" Blue="${c.color & 0xff}"';
+        children.write(
+          c.isLoop
+              ? '      <POSITION_MARK Name="${_x(c.name)}" Type="4" '
+                    'Start="${(c.positionMs / 1000).toStringAsFixed(3)}" '
+                    'End="${(c.endMs! / 1000).toStringAsFixed(3)}" Num="-1"/>\n'
+              : '      <POSITION_MARK Name="${_x(c.name)}" Type="0" '
+                    'Start="${(c.positionMs / 1000).toStringAsFixed(3)}" '
+                    'Num="${c.slot - 1}" $rgb/>\n',
+        );
+      }
+      if (children.isEmpty) {
         tracks.write('/>\n');
       } else {
-        tracks.write('>\n');
-        for (final m in grid.markers) {
-          tracks.write(
-            '      <TEMPO Inizio="${(m.ms / 1000).toStringAsFixed(3)}" '
-            'Bpm="${m.bpm.toStringAsFixed(2)}" Metro="4/4" Battito="${m.beat}"/>\n',
-          );
-        }
-        tracks.write('    </TRACK>\n');
+        tracks.write('>\n$children    </TRACK>\n');
       }
       exported.add(trackIds[i]);
     }

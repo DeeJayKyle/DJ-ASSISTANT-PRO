@@ -106,7 +106,17 @@ double? parseSeratoAutotagsBpm(Uint8List d) {
 
 /// Reads Serato's analysis from [path] (MP3 or FLAC); empty when there is
 /// none or the file can't be read.
-SeratoAnalysis readSeratoAnalysis(String path) {
+SeratoAnalysis readSeratoAnalysis(String path) =>
+    seratoAnalysisFrom(readSeratoGeobs(path));
+
+/// Serato's grid and BPM from data objects [readSeratoGeobs] returned.
+SeratoAnalysis seratoAnalysisFrom(Map<String, Uint8List> geob) => _from(geob);
+
+/// The Serato data objects in [path]'s tags, by name ("Serato BeatGrid",
+/// "Serato Autotags", "Serato Markers2"...): ID3 `GEOB` frames in an MP3, or
+/// the matching `SERATO_*` Vorbis comments in a FLAC. Empty when there are
+/// none or the file can't be read. The file is only read.
+Map<String, Uint8List> readSeratoGeobs(String path) {
   RandomAccessFile? f;
   try {
     f = File(path).openSync();
@@ -124,7 +134,7 @@ SeratoAnalysis readSeratoAnalysis(String path) {
   } finally {
     f?.closeSync();
   }
-  return const SeratoAnalysis();
+  return const {};
 }
 
 SeratoAnalysis _from(Map<String, Uint8List> geob) {
@@ -138,14 +148,14 @@ SeratoAnalysis _from(Map<String, Uint8List> geob) {
 int _syncsafe(List<int> b, int o) =>
     (b[o] << 21) | (b[o + 1] << 14) | (b[o + 2] << 7) | b[o + 3];
 
-SeratoAnalysis _id3(RandomAccessFile f, Uint8List head) {
+Map<String, Uint8List> _id3(RandomAccessFile f, Uint8List head) {
   final major = head[3], flags = head[5];
   // whole-tag unsynchronisation and ID3v2.2 aren't used by Serato
   if ((major != 3 && major != 4) || flags & 0x80 != 0) {
-    return const SeratoAnalysis();
+    return const {};
   }
   final size = _syncsafe(head, 6);
-  if (size <= 0 || size > _maxTagBytes) return const SeratoAnalysis();
+  if (size <= 0 || size > _maxTagBytes) return const {};
   final tag = f.readSync(size);
   var o = 0;
   if (flags & 0x40 != 0 && tag.length >= 4) {
@@ -171,7 +181,7 @@ SeratoAnalysis _id3(RandomAccessFile f, Uint8List head) {
     }
     o = end;
   }
-  return _from(geob);
+  return geob;
 }
 
 /// (description, data) of a GEOB frame body.
@@ -215,7 +225,7 @@ SeratoAnalysis _id3(RandomAccessFile f, Uint8List head) {
   return (desc, b.sublist(descEnd + (wide ? 2 : 1)));
 }
 
-SeratoAnalysis _flac(RandomAccessFile f) {
+Map<String, Uint8List> _flac(RandomAccessFile f) {
   final geob = <String, Uint8List>{};
   var last = false;
   var budget = _maxTagBytes;
@@ -248,7 +258,7 @@ SeratoAnalysis _flac(RandomAccessFile f) {
       final eq = c.indexOf('=');
       if (eq < 0) continue;
       final k = c.substring(0, eq).toUpperCase();
-      if (k != 'SERATO_BEATGRID' && k != 'SERATO_AUTOTAGS') continue;
+      if (!k.startsWith('SERATO_')) continue;
       final payload = _unbase64(c.substring(eq + 1));
       if (payload == null) continue;
       // application/octet-stream \0 \0 <name> \0 <data>
@@ -261,7 +271,7 @@ SeratoAnalysis _flac(RandomAccessFile f) {
       geob[name] = payload.sublist(nameEnd + 1);
     }
   }
-  return _from(geob);
+  return geob;
 }
 
 Uint8List? _unbase64(String s) {
