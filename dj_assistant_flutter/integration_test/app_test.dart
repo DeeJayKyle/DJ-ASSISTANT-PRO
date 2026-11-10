@@ -106,7 +106,6 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 40));
         await tester.pump();
       } while (DateTime.now().isBefore(end));
-      await WidgetsBinding.instance.endOfFrame;
     }
 
     Future<bool> until(bool Function() ok, {int seconds = 120}) async {
