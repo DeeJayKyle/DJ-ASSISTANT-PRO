@@ -97,9 +97,16 @@ void main() {
       f.writeAsBytesSync(png!.buffer.asUint8List());
     }
 
+    // Renders frames for [ms] (not just one), so animations and page
+    // transitions finish and a screenshot shows the page, not the frame
+    // before it.
     Future<void> wait(int ms) async {
-      await Future<void>.delayed(Duration(milliseconds: ms));
-      await tester.pump();
+      final end = DateTime.now().add(Duration(milliseconds: ms));
+      do {
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        await tester.pump();
+      } while (DateTime.now().isBefore(end));
+      await WidgetsBinding.instance.endOfFrame;
     }
 
     Future<bool> until(bool Function() ok, {int seconds = 120}) async {
@@ -113,7 +120,7 @@ void main() {
 
     for (final page in pages) {
       container.read(viewProvider.notifier).go(page);
-      await wait(500);
+      await wait(800);
       expect(tester.takeException(), isNull, reason: page);
       await shot(page.replaceAll(':', '-'));
     }

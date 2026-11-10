@@ -14,6 +14,7 @@ import '../../studio/engine.dart';
 import '../../studio/stems.dart';
 import '../state.dart';
 import '../theme.dart';
+import '../widgets.dart' show EmptyState;
 import 'common.dart';
 
 const stemLabels = {
@@ -359,15 +360,11 @@ class _StemsPageState extends ConsumerState<StemsPage> {
     );
     final Widget main;
     if (song == null) {
-      main = StudioPanel(
-        child: SizedBox(
-          height: 200,
-          child: Center(
-            child: Text(
-              'Choose a song to split it into stems.',
-              style: TextStyle(color: t.faint),
-            ),
-          ),
+      main = const StudioPanel(
+        child: EmptyState(
+          icon: Icons.layers_outlined,
+          title: 'Choose a song to split it into stems',
+          message: 'Pick one from the list. You get vocals, drums, bass and melodies to play, mute and download, plus its key, tempo and chords.',
         ),
       );
     } else {

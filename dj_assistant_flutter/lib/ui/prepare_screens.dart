@@ -215,6 +215,7 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                         title: const Text('Clean versions only'),
                       ),
                       DropdownButtonFormField<String>(
+                        style: Theme.of(context).textTheme.bodyMedium,
                         isExpanded: true,
                         initialValue: keyMode,
                         decoration: const InputDecoration(
@@ -264,16 +265,15 @@ class _SetStudioScreenState extends ConsumerState<SetStudioScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: artistGap,
-                              decoration: const InputDecoration(
-                                labelText: 'Artist gap (min)',
-                              ),
-                            ),
-                          ),
                         ],
+                      ),
+                      const SizedBox(height: 8),
+                      // its own row: three fields side by side cut their labels off
+                      TextField(
+                        controller: artistGap,
+                        decoration: const InputDecoration(
+                          labelText: 'Minutes before the same artist again',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -1545,6 +1545,7 @@ class _NextUpPanelState extends ConsumerState<NextUpPanel> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<double?>(
+                  style: Theme.of(context).textTheme.bodyMedium,
                   isExpanded: true,
                   initialValue: _windows.any((w) => w.$1 == gate.bpmWindow)
                       ? gate.bpmWindow
@@ -1561,6 +1562,7 @@ class _NextUpPanelState extends ConsumerState<NextUpPanel> {
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<KeyGate>(
+                  style: Theme.of(context).textTheme.bodyMedium,
                   isExpanded: true,
                   initialValue: gate.key,
                   decoration: const InputDecoration(labelText: 'Key'),

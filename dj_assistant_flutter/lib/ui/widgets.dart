@@ -198,15 +198,42 @@ class AutoGrid extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       final w = box.maxWidth;
+      final n = children.length;
       final fit = ((w + spacing) / (minWidth + spacing)).floor();
-      final cols = fit
-          .clamp(1, maxColumns)
-          .clamp(1, children.isEmpty ? 1 : children.length);
-      final itemW = ((w - spacing * (cols - 1)) / cols).floorToDouble();
-      return Wrap(
-        spacing: spacing,
-        runSpacing: spacing,
-        children: [for (final c in children) SizedBox(width: itemW, child: c)],
+      var cols = fit.clamp(1, maxColumns).clamp(1, n == 0 ? 1 : n);
+      // no lone card on the last row (4 cards on 3 columns become 2 × 2)
+      while (cols > 2 && n > cols && n % cols == 1) {
+        cols--;
+      }
+      final rows = <Widget>[];
+      for (var i = 0; i < n; i += cols) {
+        final row = children.sublist(i, i + cols > n ? n : i + cols);
+        rows.add(
+          // cards in a row share one height
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var k = 0; k < cols; k++) ...[
+                  if (k > 0) SizedBox(width: spacing),
+                  Expanded(
+                    child: k < row.length ? row[k] : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) SizedBox(height: spacing),
+            rows[i],
+          ],
+        ],
       );
     },
   );

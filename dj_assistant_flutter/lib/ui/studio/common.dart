@@ -320,13 +320,34 @@ class _SongPickerState extends ConsumerState<SongPicker> {
                     style: TextStyle(color: t.faint),
                   ),
                 )
-              : ListView.builder(
+              : ListView.separated(
                   itemCount: rows.length,
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, thickness: 1, color: t.line),
                   itemBuilder: (_, i) {
                     final r = rows[i];
                     final song = songOf(r);
                     return ListTile(
                       dense: true,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(Radii.sm),
+                      ),
+                      leading: Icon(
+                        Icons.music_note_outlined,
+                        size: 18,
+                        color: t.faint,
+                      ),
+                      minLeadingWidth: 20,
+                      subtitleTextStyle: TextStyle(
+                        fontFamily: DjType.family,
+                        color: t.muted,
+                        fontSize: DjType.small,
+                      ),
+                      trailing: Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: t.faint,
+                      ),
                       title: Row(
                         children: [
                           Flexible(
@@ -453,7 +474,11 @@ class _WavePainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: label,
-          style: TextStyle(color: mark, fontSize: DjType.caption),
+          style: TextStyle(
+            fontFamily: DjType.family,
+            color: mark,
+            fontSize: DjType.caption,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

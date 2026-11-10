@@ -1076,7 +1076,11 @@ class _ScrollPainter extends CustomPainter {
       final tp = TextPainter(
         text: TextSpan(
           text: empty,
-          style: TextStyle(color: t.faint, fontSize: DjType.small),
+          style: TextStyle(
+            fontFamily: DjType.family,
+            color: t.faint,
+            fontSize: DjType.small,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout(maxWidth: w - 20);
@@ -1172,6 +1176,7 @@ class _ScrollPainter extends CustomPainter {
         text: TextSpan(
           text: '${n + 1}',
           style: TextStyle(
+            fontFamily: DjType.family,
             color: t.onAccent,
             fontSize: DjType.caption,
             fontWeight: FontWeight.w800,

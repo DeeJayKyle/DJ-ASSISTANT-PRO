@@ -214,7 +214,7 @@ class _MapPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: s,
-        style: TextStyle(color: text, fontSize: 11),
+        style: TextStyle(fontFamily: DjType.family, color: text, fontSize: 11),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -262,7 +262,11 @@ class _MapPainter extends CustomPainter {
         text: TextSpan(
           text:
               '${sel.c.label} · ${fmtBpm(sel.c.bpm)} BPM · ${sel.c.camelot ?? '?'}',
-          style: TextStyle(color: text, fontSize: 12),
+          style: TextStyle(
+            fontFamily: DjType.family,
+            color: text,
+            fontSize: 12,
+          ),
         ),
         textDirection: TextDirection.ltr,
         maxLines: 1,

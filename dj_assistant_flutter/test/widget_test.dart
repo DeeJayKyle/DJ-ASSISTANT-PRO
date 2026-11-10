@@ -101,7 +101,7 @@ void main() {
     );
     await tester.pump();
     for (final (id, title, text) in [
-      ('stems', 'Stems', 'Choose a song to split it into stems.'),
+      ('stems', 'Stems', 'Choose a song to split it into stems'),
       ('remix', 'Remix', 'Export remix (WAV)'),
       ('dj', 'DJ Decks', 'Empty deck'),
       ('synth', 'Synth Lab', 'Describe an instrument'),
