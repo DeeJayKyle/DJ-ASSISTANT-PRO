@@ -28,6 +28,15 @@ final Float64List _win = () {
   return w;
 }();
 
+/// _win[i] / _n and _win[i]², worked out once (the same values the loops
+/// used to compute per sample).
+final Float64List _winOverN = Float64List.fromList([
+  for (var i = 0; i < _n; i++) _win[i] / _n,
+]);
+final Float64List _win2 = Float64List.fromList([
+  for (var i = 0; i < _n; i++) _win[i] * _win[i],
+]);
+
 int frameCount(int len) => ((len + _n) / _hop).ceil() + 1;
 
 class PartPlan {
@@ -115,11 +124,22 @@ Part separatePart(
   var ringStart = 0, ringLen = 0;
   final zr = Float64List(_n), zi = Float64List(_n);
   void analyse(int start, _Frame f) {
-    for (var i = 0; i < _n; i++) {
-      final j = start + i, q = j - inStart;
-      final inside = j >= 0 && j < len && q >= 0 && q < l.length;
-      zr[i] = inside ? l[q] * _win[i] : 0;
-      zi[i] = inside ? r[q] * _win[i] : 0;
+    // samples inside both the signal and the channels held: [a, b)
+    final a = math.max(math.max(0, -start), inStart - start);
+    final b = math.min(math.min(_n, len - start), l.length + inStart - start);
+    if (a > 0) {
+      zr.fillRange(0, math.min(a, _n), 0);
+      zi.fillRange(0, math.min(a, _n), 0);
+    }
+    for (var i = a; i < b; i++) {
+      final q = start + i - inStart;
+      zr[i] = l[q] * _win[i];
+      zi[i] = r[q] * _win[i];
+    }
+    final from = math.max(a, b);
+    if (from < _n) {
+      zr.fillRange(math.max(0, from), _n, 0);
+      zi.fillRange(math.max(0, from), _n, 0);
     }
     fft(zr, zi);
     for (var k = 0; k < bins; k++) {
@@ -164,25 +184,32 @@ Part separatePart(
       }
       fft(sre, sim);
       final dl = out[stemNames[s]]![0], dr = out[stemNames[s]]![1];
-      for (var i = 0; i < _n; i++) {
-        final j = f.start + i - spanStart;
-        if (j < 0 || j >= span) continue;
-        final w = _win[i] / _n;
+      final off = f.start - spanStart;
+      final i0 = math.max(0, -off), i1 = math.min(_n, span - off);
+      for (var i = i0; i < i1; i++) {
+        final j = off + i;
+        final w = _winOverN[i];
         dl[j] += sre[i] * w;
         dr[j] -= sim[i] * w;
       }
     }
     final ml = out['melodies']![0], mr = out['melodies']![1];
-    for (var i = 0; i < _n; i++) {
-      final j = f.start + i - spanStart;
-      if (j < 0 || j >= span) continue;
-      final w2 = _win[i] * _win[i];
-      norm[j] += w2;
+    final off = f.start - spanStart;
+    final i0 = math.max(0, -off), i1 = math.min(_n, span - off);
+    // samples also inside the channels held and the signal
+    final q0 = math.max(i0, inStart - f.start),
+        q1 = math.min(
+          i1,
+          math.min(l.length + inStart - f.start, len - f.start),
+        );
+    for (var i = i0; i < i1; i++) {
+      norm[off + i] += _win2[i];
+    }
+    for (var i = q0; i < q1; i++) {
+      final w2 = _win2[i];
       final q = f.start + i - inStart;
-      if (q >= 0 && q < l.length && f.start + i < len) {
-        ml[j] += l[q] * w2;
-        mr[j] += r[q] * w2;
-      }
+      ml[off + i] += l[q] * w2;
+      mr[off + i] += r[q] * w2;
     }
   }
 

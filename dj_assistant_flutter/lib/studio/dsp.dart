@@ -114,7 +114,10 @@ class Onsets {
   final double rate;
 }
 
-Onsets onsetEnvelope(Float32List mono, int sampleRate) {
+Onsets onsetEnvelope(Float32List mono, int sampleRate) =>
+    _onsetEnvelope(mono, sampleRate);
+
+Onsets _onsetEnvelope(Float32List mono, int sampleRate) {
   const target = 11025, frame = 1024, hop = 128;
   final factor = math.max(1, (sampleRate / target).round());
   final x = downsample(mono, factor);
@@ -179,8 +182,9 @@ TempoResult detectTempo(
   int sampleRate, {
   double min = 60,
   double max = 200,
+  Onsets? onsets,
 }) {
-  final o = onsetEnvelope(mono, sampleRate);
+  final o = onsets ?? onsetEnvelope(mono, sampleRate);
   if (o.env.length < o.rate * 4) return TempoResult(0, 0);
   const beatsInComb = 8;
   final maxLag = ((60 / min) * o.rate * beatsInComb).ceil();
@@ -463,8 +467,13 @@ class Rhythm {
 }
 
 /// Time of the first beat: the phase whose grid lines up best with the onsets.
-double beatPhase(Float32List mono, int sampleRate, double bpm) {
-  final o = onsetEnvelope(mono, sampleRate);
+double beatPhase(
+  Float32List mono,
+  int sampleRate,
+  double bpm, {
+  Onsets? onsets,
+}) {
+  final o = onsets ?? onsetEnvelope(mono, sampleRate);
   if (bpm == 0 || o.env.isEmpty) return 0;
   final period = (60 / bpm) * o.rate;
   var best = 0.0, bestScore = -1.0;
@@ -486,12 +495,14 @@ double beatPhase(Float32List mono, int sampleRate, double bpm) {
 }
 
 Rhythm rhythm(Float32List mono, int sampleRate, [double? knownBpm]) {
+  // tempo and beat phase read the same onset envelope: work it out once
+  final o = onsetEnvelope(mono, sampleRate);
   final bpm = knownBpm != null && knownBpm > 0
       ? knownBpm
-      : detectTempo(mono, sampleRate).bpm;
+      : detectTempo(mono, sampleRate, onsets: o).bpm;
   return Rhythm(
     bpm,
-    beatPhase(mono, sampleRate, bpm),
+    beatPhase(mono, sampleRate, bpm, onsets: o),
     detectKey(mono, sampleRate),
   );
 }

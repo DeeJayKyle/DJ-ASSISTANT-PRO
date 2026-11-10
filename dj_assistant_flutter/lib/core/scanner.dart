@@ -298,6 +298,12 @@ Future<void> _scanRoot(_Scan s, int rootId, String rootPath) async {
     );
   }
 
+  // Songs the DJ removed from the library stay out.
+  final hidden = {
+    for (final r in db.select('SELECT path_key FROM hidden_tracks'))
+      r['path_key'] as String,
+  };
+
   // Phase 1: discover files (file-system metadata only, no file contents).
   final toRead = <_Candidate>[];
   final unchangedIds = <int>[];
@@ -336,7 +342,7 @@ Future<void> _scanRoot(_Scan s, int rootId, String rootPath) async {
         continue;
       }
       final key = pathKey(path);
-      if (!seen.add(key)) continue;
+      if (!seen.add(key) || hidden.contains(key)) continue;
       final FileStat st;
       try {
         st = e.statSync();

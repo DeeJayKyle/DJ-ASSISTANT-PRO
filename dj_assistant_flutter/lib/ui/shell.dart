@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/gestures.dart'
+    show kBackMouseButton, kForwardMouseButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -48,6 +51,79 @@ const _prepare = [
   _Nav('gig-pack', 'Gig Pack', Icons.usb_outlined),
 ];
 
+class NavPage {
+  const NavPage(this.id, this.label, this.icon);
+  final String id, label;
+  final IconData icon;
+}
+
+/// Every page in sidebar order (Ctrl+1…9 opens the first nine).
+final allPages = [
+  for (final n in [..._main, ..._create, ..._prepare])
+    NavPage(n.id, n.label, n.icon),
+  const NavPage('settings', 'Settings', Icons.settings_outlined),
+];
+
+/// Ctrl+K: type part of a page's name and press Enter to go there.
+Future<void> showGoTo(BuildContext context, WidgetRef ref) async {
+  final pick = await showDialog<String>(
+    context: context,
+    builder: (c) {
+      var q = '';
+      return StatefulBuilder(
+        builder: (c, set) {
+          final hits = [
+            for (final p in allPages)
+              if (p.label.toLowerCase().contains(q.toLowerCase())) p,
+          ];
+          return AlertDialog(
+            title: const Text('Go to'),
+            content: SizedBox(
+              width: 420,
+              height: 380,
+              child: Column(
+                children: [
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: 'Page name',
+                    ),
+                    onChanged: (v) => set(() => q = v),
+                    onSubmitted: (_) {
+                      if (hits.isNotEmpty) Navigator.pop(c, hits.first.id);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        for (final (i, p) in hits.indexed)
+                          ListTile(
+                            dense: true,
+                            leading: Icon(p.icon, size: 18),
+                            title: Text(p.label),
+                            trailing: i == 0
+                                ? const Text('Enter')
+                                : (allPages.indexOf(p) < 9
+                                      ? Text('Ctrl+${allPages.indexOf(p) + 1}')
+                                      : null),
+                            onTap: () => Navigator.pop(c, p.id),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+  if (pick != null) ref.read(viewProvider.notifier).go(pick);
+}
+
 class Shell extends ConsumerStatefulWidget {
   const Shell({super.key});
   @override
@@ -55,6 +131,19 @@ class Shell extends ConsumerStatefulWidget {
 }
 
 class _ShellState extends ConsumerState<Shell> {
+  bool _dragging = false;
+
+  Future<void> _dropped(List<String> paths) async {
+    setState(() => _dragging = false);
+    if (paths.isEmpty) return;
+    toast('Adding ${paths.length == 1 ? '1 item' : '${paths.length} items'}…');
+    final msg = await guard(
+      () => ref.read(sessionProvider).importMusic(paths),
+      bump: ref,
+    );
+    if (msg != null) toast(msg);
+  }
+
   Timer? _poll;
   final _prev = <String, String>{};
   String _prevScan = 'idle';
@@ -133,48 +222,99 @@ class _ShellState extends ConsumerState<Shell> {
         const SingleActivator(LogicalKeyboardKey.keyJ, control: true): () => ref
             .read(chatModeProvider.notifier)
             .set(chat == 'hidden' ? 'open' : 'hidden'),
+        // navigation
+        const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): () =>
+            ref.read(viewProvider.notifier).back(),
+        const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true): () =>
+            ref.read(viewProvider.notifier).forward(),
+        const SingleActivator(LogicalKeyboardKey.browserBack): () =>
+            ref.read(viewProvider.notifier).back(),
+        const SingleActivator(LogicalKeyboardKey.browserForward): () =>
+            ref.read(viewProvider.notifier).forward(),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+            showGoTo(context, ref),
+        const SingleActivator(LogicalKeyboardKey.keyP, control: true): () =>
+            showGoTo(context, ref),
+        const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
+            ref.read(viewProvider.notifier).go('settings'),
+        for (final (i, n) in allPages.take(9).indexed)
+          SingleActivator(
+            LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i),
+            control: true,
+          ): () =>
+              ref.read(viewProvider.notifier).go(n.id),
       },
-      child: Focus(
-        autofocus: true,
-        child: Scaffold(
-          body: LayoutBuilder(
-            builder: (context, box) {
-              final w = box.maxWidth;
-              final rail = w < 1240;
-              final chatW = w < 1280 ? 320.0 : (w < 1600 ? 360.0 : 400.0);
-              return Column(
-                children: [
-                  const _TitleBar(),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+      // the mouse's back and forward side buttons
+      child: Listener(
+        onPointerDown: (e) {
+          if (e.buttons & kBackMouseButton != 0) {
+            ref.read(viewProvider.notifier).back();
+          } else if (e.buttons & kForwardMouseButton != 0) {
+            ref.read(viewProvider.notifier).forward();
+          }
+        },
+        child: DropTarget(
+          onDragEntered: (_) => setState(() => _dragging = true),
+          onDragExited: (_) => setState(() => _dragging = false),
+          onDragDone: (d) => _dropped([for (final f in d.files) f.path]),
+          child: Focus(
+            autofocus: true,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: _dragging
+                  ? BoxDecoration(
+                      border: Border.all(
+                        color: DjTokens.of(context).accent,
+                        width: 3,
+                      ),
+                    )
+                  : const BoxDecoration(),
+              child: Scaffold(
+                body: LayoutBuilder(
+                  builder: (context, box) {
+                    final w = box.maxWidth;
+                    final rail = w < 1240;
+                    final chatW = w < 1280 ? 320.0 : (w < 1600 ? 360.0 : 400.0);
+                    return Column(
                       children: [
-                        if (chat != 'full') _Sidebar(rail: rail),
-                        if (chat != 'full') const VerticalDivider(width: 1),
-                        if (chat != 'full')
-                          Expanded(
-                            child: Stack(
-                              children: [
-                                // Studio stays mounted once opened, so decks keep playing.
-                                Offstage(
-                                  offstage: !studio,
-                                  child: const StudioHost(),
+                        const _TitleBar(),
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (chat != 'full') _Sidebar(rail: rail),
+                              if (chat != 'full')
+                                const VerticalDivider(width: 1),
+                              if (chat != 'full')
+                                Expanded(
+                                  child: Stack(
+                                    children: [
+                                      // Studio stays mounted once opened, so decks keep playing.
+                                      Offstage(
+                                        offstage: !studio,
+                                        child: const StudioHost(),
+                                      ),
+                                      if (!studio) Positioned.fill(child: body),
+                                    ],
+                                  ),
                                 ),
-                                if (!studio) Positioned.fill(child: body),
-                              ],
-                            ),
+                              if (chat == 'open')
+                                SizedBox(
+                                  width: chatW,
+                                  child: const AssistantPanel(),
+                                ),
+                              if (chat == 'full')
+                                const Expanded(child: AssistantPanel()),
+                            ],
                           ),
-                        if (chat == 'open')
-                          SizedBox(width: chatW, child: const AssistantPanel()),
-                        if (chat == 'full')
-                          const Expanded(child: AssistantPanel()),
+                        ),
+                        const _StatusBar(),
                       ],
-                    ),
-                  ),
-                  const _StatusBar(),
-                ],
-              );
-            },
+                    );
+                  },
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -189,6 +329,7 @@ class _TitleBar extends ConsumerWidget {
     final t = DjTokens.of(context);
     final accounts = ref.watch(accountsProvider);
     ref.watch(sessionProvider);
+    ref.watch(viewProvider); // back/forward buttons follow navigation
     final cur = accounts.accounts
         .where((a) => a.id == accounts.currentId)
         .firstOrNull;
@@ -200,6 +341,29 @@ class _TitleBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
+          IconButton(
+            tooltip: 'Back (Alt+Left)',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.arrow_back, size: 18),
+            onPressed: ref.read(viewProvider.notifier).canGoBack
+                ? () => ref.read(viewProvider.notifier).back()
+                : null,
+          ),
+          IconButton(
+            tooltip: 'Forward (Alt+Right)',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.arrow_forward, size: 18),
+            onPressed: ref.read(viewProvider.notifier).canGoForward
+                ? () => ref.read(viewProvider.notifier).forward()
+                : null,
+          ),
+          IconButton(
+            tooltip: 'Go to a page (Ctrl+K)',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.search, size: 18),
+            onPressed: () => showGoTo(context, ref),
+          ),
+          const SizedBox(width: 4),
           Icon(Icons.graphic_eq, color: t.accent, size: 20),
           const SizedBox(width: 8),
           const Text(

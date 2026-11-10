@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
@@ -13,9 +14,12 @@ import '../core/export.dart';
 import '../core/gig.dart';
 import '../core/gigpack.dart';
 import '../core/health.dart';
+import '../core/inbox.dart';
 import '../core/jobs.dart';
 import '../core/library.dart';
 import '../core/organize.dart';
+import '../core/paths.dart';
+import '../core/removal.dart';
 import '../core/roots.dart';
 import '../core/safe_write.dart';
 import '../core/scanner.dart';
@@ -86,6 +90,7 @@ class AppSession {
   late final djExport = DjExportService(cat);
   late final gigPack = GigPackService(cat);
   late final serato = SeratoService(cat);
+  late final removal = RemovalService(cat);
   late final watcher = FolderWatcher(cat);
 
   /// Auto-import of finished downloads (Settings → Auto-import).
@@ -106,6 +111,82 @@ class AppSession {
 
   void _afterScan() {
     if (autoPrepEnabled(cat) && !gig.active) runAutoPrep();
+  }
+
+  /// Music dropped onto the window: folders become library folders, files
+  /// are imported through the Inbox. Then they are scanned and, with
+  /// Auto-prep on, analysed and fixed in the catalogue at once (new imports
+  /// also land in the Inbox crate). Returns a one-line summary.
+  Future<String> importMusic(List<String> paths) async {
+    final folders = [
+      for (final x in paths)
+        if (FileSystemEntity.isDirectorySync(x)) x,
+    ];
+    final files = [
+      for (final x in paths)
+        if (!FileSystemEntity.isDirectorySync(x)) x,
+    ];
+    final rootIds = <int>{};
+    final notes = <String>[];
+    var addedFolders = 0;
+    for (final f in folders) {
+      try {
+        rootIds.add(roots.add(f).id);
+        addedFolders++;
+      } on Exception catch (e) {
+        // already a library folder (or inside one): just scan it
+        final k = pathKey(f);
+        final r = roots
+            .list()
+            .where(
+              (r) => pathKey(r.path) == k || keyIsWithin(k, pathKey(r.path)),
+            )
+            .firstOrNull;
+        if (r != null) {
+          rootIds.add(r.id);
+        } else {
+          notes.add('$e');
+        }
+      }
+    }
+    var imported = <String>[];
+    if (files.isNotEmpty) {
+      final inbox = InboxService(cat);
+      final (got, n) = inbox.importFiles(files);
+      imported = got;
+      notes.addAll(n);
+      if (got.isNotEmpty) {
+        final inboxRoot = inbox.ensureRoot(inbox.settings.inbox);
+        final keys = {for (final x in got) pathKey(x)};
+        for (final r in roots.list()) {
+          final rk = pathKey(r.path);
+          if (r.id == inboxRoot || keys.any((k) => keyIsWithin(k, rk))) {
+            rootIds.add(r.id);
+          }
+        }
+      }
+    }
+    if (rootIds.isEmpty) {
+      return notes.isEmpty ? 'Nothing to add.' : notes.join(' · ');
+    }
+    try {
+      await scan.start(rootIds: rootIds.toList());
+    } on StateError {
+      return 'A scan is already running; try again when it finishes.';
+    }
+    final crated = InboxService(cat).addToCrate(imported);
+    final prep = autoPrepEnabled(cat) && !gig.active;
+    if (prep) runAutoPrep();
+    return [
+      if (addedFolders > 0)
+        'Added ${addedFolders == 1 ? 'a folder' : '$addedFolders folders'}',
+      if (imported.isNotEmpty)
+        'imported ${imported.length} file(s) ($crated in the Inbox crate)',
+      prep
+          ? 'analysing and fixing them now'
+          : 'Auto-prep is off, so run analysis when ready',
+      ...notes.take(3),
+    ].join('; ');
   }
 
   Map<String, Object?> startAnalysis({List<int>? ids, bool force = false}) =>

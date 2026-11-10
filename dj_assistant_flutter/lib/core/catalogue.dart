@@ -72,6 +72,12 @@ class Catalogue {
         rethrow;
       }
     }
+    // Songs the DJ removed from the library (scans skip these paths). Kept
+    // outside the numbered migrations, like the indexes below.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS hidden_tracks (path_key TEXT PRIMARY KEY, '
+      'path TEXT, artist TEXT, title TEXT, hidden_at INTEGER NOT NULL)',
+    );
     // Speed-only indexes, created outside the numbered migrations so the
     // schema version stays the one 1.x knows (it ignores extra indexes).
     db.execute(

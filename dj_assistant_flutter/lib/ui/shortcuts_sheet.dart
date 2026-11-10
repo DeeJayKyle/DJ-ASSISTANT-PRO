@@ -15,6 +15,35 @@ const shortcutGroups = <(String, List<(String, String)>)>[
     ],
   ),
   (
+    'Navigation',
+    [
+      ('Alt + Left  /  Alt + Right', 'Back / forward'),
+      ('Mouse back / forward buttons', 'Back / forward'),
+      ('Ctrl + K  or  Ctrl + P', 'Go to a page by name'),
+      ('Ctrl + 1 … 9', 'Open the first nine pages in the sidebar'),
+      ('Ctrl + ,', 'Settings'),
+    ],
+  ),
+  (
+    'Library',
+    [
+      ('Click', 'Select a song'),
+      ('Ctrl + click', 'Add or remove a song from the selection'),
+      ('Shift + click', 'Select a range'),
+      ('Double-click  or  Enter', 'Open the song’s details'),
+      ('Right-click', 'Menu: details, crate, select all, invert, tags, delete'),
+      ('Up / Down', 'Move the selection'),
+      ('Shift + Up / Down', 'Grow the selection'),
+      ('Page Up / Page Down  ·  Home / End', 'Jump through the list'),
+      ('Shift + Home / End', 'Select to the top / bottom'),
+      ('Ctrl + A', 'Select all songs in this view'),
+      ('Ctrl + I', 'Invert the selection'),
+      ('Esc', 'Clear the selection'),
+      ('Delete', 'Delete the selected songs (asks first)'),
+      ('Ctrl + F', 'Search'),
+    ],
+  ),
+  (
     'Remix',
     [
       ('Ctrl + Z', 'Undo'),

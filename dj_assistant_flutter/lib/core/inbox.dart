@@ -371,6 +371,64 @@ class InboxService {
     return (imported, notes);
   }
 
+  /// Music dropped onto the app window or picked with "Add music…":
+  /// audio files and ZIPs from outside the library are copied (verified)
+  /// into today's Inbox folder; files already inside a library folder are
+  /// used where they are. The originals are never moved or changed.
+  /// Returns (paths now in the library, notes).
+  (List<String>, List<String>) importFiles(List<String> paths) {
+    final inbox = settings.inbox;
+    final day = DateTime.now().toIso8601String().substring(0, 10);
+    final destDir = p.join(inbox, day);
+    final roots = [for (final r in RootsService(cat).list()) pathKey(r.path)];
+    bool inLibrary(String f) {
+      final k = pathKey(f);
+      return roots.any((r) => keyIsWithin(k, r));
+    }
+
+    final out = <String>[], notes = <String>[];
+    for (final path in paths) {
+      final f = File(path);
+      if (!f.existsSync()) {
+        notes.add('${p.basename(path)}: not found');
+        continue;
+      }
+      if (!_isAudio(path) && !_isZip(path)) {
+        notes.add('${p.basename(path)}: not a music file');
+        continue;
+      }
+      if (!_isZip(path) && inLibrary(path)) {
+        out.add(path);
+        continue;
+      }
+      final made = <(String, String)>[];
+      try {
+        if (_isZip(path)) {
+          made.addAll(
+            _unzip(
+              path,
+              p.join(destDir, safeFileName(p.basenameWithoutExtension(path))),
+            ),
+          );
+          if (made.isEmpty) notes.add('${p.basename(path)}: no audio inside');
+        } else {
+          Directory(destDir).createSync(recursive: true);
+          final dest = uniquePath(destDir, safeFileName(p.basename(path)));
+          _verifiedCopy(path, dest);
+          made.add(('', dest));
+        }
+      } on Object catch (e) {
+        _discard(made);
+        notes.add(
+          '${p.basename(path)}: ${e is InboxException ? e.message : e}',
+        );
+        continue;
+      }
+      out.addAll([for (final (_, dest) in made) dest]);
+    }
+    return (out, notes);
+  }
+
   /// The "Inbox" crate (created the first time).
   Crate inboxCrate() {
     final crates = CratesService(cat);

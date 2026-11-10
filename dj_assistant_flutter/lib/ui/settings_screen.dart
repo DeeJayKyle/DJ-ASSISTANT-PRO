@@ -259,6 +259,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           gap,
+          const RemovedSongsPanel(),
+          gap,
           const AutoImportPanel(),
           gap,
           Panel(
@@ -1149,6 +1151,59 @@ class _AutoImportPanelState extends ConsumerState<AutoImportPanel> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Songs the DJ deleted from the library, with a way to bring them back.
+class RemovedSongsPanel extends ConsumerWidget {
+  const RemovedSongsPanel({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(sessionProvider);
+    ref.watch(versionProvider);
+    final hidden = s.removal.hidden(limit: 200);
+    return Panel(
+      title: 'Removed songs',
+      subtitle: 'Songs you deleted from the library. Their files were left on disk; scans skip them until you bring them back.',
+      trailing: hidden.isEmpty
+          ? null
+          : TextButton(
+              onPressed: () => guard(
+                () => s.removal.restore([
+                  for (final h in s.removal.hidden(limit: 1 << 30))
+                    h['path_key']! as String,
+                ]),
+                done: 'All removed songs will come back on the next scan.',
+                bump: ref,
+              ),
+              child: const Text('Bring all back'),
+            ),
+      child: hidden.isEmpty
+          ? const HintText('Nothing removed.', icon: Icons.check)
+          : Column(
+              children: [
+                for (final h in hidden)
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      [h['artist'], h['title']]
+                          .whereType<String>()
+                          .where((x) => x.isNotEmpty)
+                          .join(' — '),
+                    ),
+                    subtitle: Text('${h['path']}'),
+                    trailing: TextButton(
+                      onPressed: () => guard(
+                        () => s.removal.restore([h['path_key']! as String]),
+                        done: 'It will come back on the next scan.',
+                        bump: ref,
+                      ),
+                      child: const Text('Bring back'),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }
