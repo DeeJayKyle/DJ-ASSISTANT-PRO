@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'open_files.dart';
 import 'scanner_test.dart' show copyLibrary, hashes;
 
 /// Drives the review screens with real taps and keys, on a temporary copy
@@ -57,11 +58,34 @@ void main() {
   Future<void> stop(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     container.dispose();
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 300)),
-    );
+    // The session's close() was scheduled in the test's fake clock: let it run.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
     accounts.close();
-    music.parent.deleteSync(recursive: true);
+    // The session closes its catalogue asynchronously (it first stops its
+    // background jobs), so wait for that rather than for a fixed time:
+    // Windows will not delete a folder with an open SQLite file.
+    await tester.runAsync(() async {
+      for (var i = 0; i < 100 && openFiles(music.parent).isNotEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    });
+    expectNoOpenFiles(music.parent);
+    await tester.runAsync(() async {
+      for (var i = 0; ; i++) {
+        try {
+          music.parent.deleteSync(recursive: true);
+          return;
+        } on FileSystemException {
+          if (i >= 50) rethrow;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+      }
+    });
   }
 
   Future<void> settle(WidgetTester tester) async {
