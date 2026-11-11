@@ -288,6 +288,7 @@ final List<ToolDef> tools = [
             'quick',
             'organize',
             'files',
+            'upgrades',
           ],
         },
         'crate_id': _int(),

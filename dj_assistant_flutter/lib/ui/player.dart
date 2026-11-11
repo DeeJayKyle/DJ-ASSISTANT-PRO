@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -42,9 +43,22 @@ class AudioEngine {
 
 /// Preview the 30 seconds around the cursor (track detail, suggestions…).
 class PreviewPlayer extends StatefulWidget {
-  const PreviewPlayer({super.key, required this.path, this.durationMs});
+  const PreviewPlayer({
+    super.key,
+    required this.path,
+    this.durationMs,
+    this.gainDb = 0,
+    this.label,
+  });
   final String path;
   final int? durationMs;
+
+  /// Playback gain (0 or less: only ever turned down, so nothing clips); used
+  /// to compare two files at the same loudness.
+  final double gainDb;
+
+  /// Names the player for screen readers ("Play current file").
+  final String? label;
   @override
   State<PreviewPlayer> createState() => _PreviewPlayerState();
 }
@@ -75,7 +89,10 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
       });
       return;
     }
-    h = sl.play(src!);
+    h = sl.play(
+      src!,
+      volume: math.pow(10, widget.gainDb.clamp(-60, 0) / 20).toDouble(),
+    );
     tick = Timer.periodic(const Duration(milliseconds: 200), (_) {
       if (!mounted || h == null) return;
       if (!sl.getIsValidVoiceHandle(h!)) {
@@ -110,7 +127,11 @@ class _PreviewPlayerState extends State<PreviewPlayer> {
     return Row(
       children: [
         IconButton.filledTonal(
-          tooltip: playing ? 'Pause' : 'Play preview',
+          tooltip: playing
+              ? 'Pause${widget.label == null ? '' : ' ${widget.label}'}'
+              : (widget.label == null
+                    ? 'Play preview'
+                    : 'Play ${widget.label}'),
           onPressed: loading ? null : _toggle,
           icon: Icon(playing ? Icons.pause : Icons.play_arrow),
         ),

@@ -7,6 +7,7 @@ import 'package:dj_assistant/core/library.dart';
 import 'package:dj_assistant/core/library_edit.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
+import 'package:dj_assistant/core/suggestions.dart';
 import 'package:dj_assistant/core/watcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -53,9 +54,48 @@ void main() {
     w.stop();
   });
 
+  test('auto-prep is review-first by default: nothing is applied', () async {
+    final before = hashes(music);
+    expect(fixMode(cat), 'review');
+    final jobs = JobsController();
+    final st = await jobs.start('auto_prep', autoPrepJob(dbPath));
+    expect(st.state, 'completed', reason: '${st.message}');
+    final r = st.result! as Map;
+    expect(r['fix_mode'], 'review');
+    expect(r['fixes_applied'], 0);
+    expect(r['left_to_review'] as int, greaterThanOrEqualTo(1));
+    expect(
+      cat.db.select("SELECT 1 FROM suggestions WHERE status='accepted'"),
+      isEmpty,
+    );
+    expect(st.message, contains('Nothing was changed'));
+    expect(hashes(music), before);
+    await jobs.shutdown();
+  });
+
+  test('fill-empty mode never replaces a value already there', () async {
+    cat.setSetting('fix_mode', 'fill_empty');
+    final jobs = JobsController();
+    final st = await jobs.start('auto_prep', autoPrepJob(dbPath));
+    expect(st.state, 'completed', reason: '${st.message}');
+    final replaced = cat.db.select(
+      "SELECT d.* FROM suggestion_decisions d WHERE d.previous_value IS NOT NULL",
+    );
+    expect(replaced, isEmpty);
+    expect(
+      cat.db.select(
+        "SELECT 1 FROM suggestions s JOIN suggestion_decisions d ON d.suggestion_id=s.id "
+        "WHERE s.status='accepted' AND d.decided_by='auto'",
+      ),
+      isNotEmpty,
+    );
+    await jobs.shutdown();
+  });
+
   test(
     'auto-prep analyses and applies recommended fixes, catalogue only',
     () async {
+      cat.setSetting('fix_mode', 'auto');
       final before = hashes(music);
       final jobs = JobsController();
       final st = await jobs.start('auto_prep', autoPrepJob(dbPath));
@@ -82,6 +122,10 @@ void main() {
         'untagged recording',
       );
       expect(hashes(music), before, reason: 'only the catalogue changed');
+      // Undo puts every automatic change back exactly.
+      final (undone, _) = SuggestionsService(cat).undoAuto();
+      expect(undone, r['fixes_applied']);
+      expect(lib.row(idOf('Roller Rink.opus'))!.genre, isNot('House'));
       expect(autoFixMin(cat), 0.85);
       cat.setSetting('auto_fix_min', '2');
       expect(autoFixMin(cat), 0.85, reason: 'out-of-range values fall back');

@@ -78,6 +78,15 @@ class Catalogue {
       'CREATE TABLE IF NOT EXISTS hidden_tracks (path_key TEXT PRIMARY KEY, '
       'path TEXT, artist TEXT, title TEXT, hidden_at INTEGER NOT NULL)',
     );
+    // What each accepted suggestion replaced, so it can be undone exactly, and
+    // who accepted it (the DJ or auto-prep). Outside the numbered migrations,
+    // so 1.x can still open the catalogue.
+    db.execute(
+      'CREATE TABLE IF NOT EXISTS suggestion_decisions (suggestion_id INTEGER PRIMARY KEY, '
+      'track_id INTEGER NOT NULL, field TEXT NOT NULL, had_override INTEGER NOT NULL, '
+      "previous_value TEXT, applied_value TEXT, decided_by TEXT NOT NULL CHECK (decided_by IN ('you','auto')), "
+      'at INTEGER NOT NULL, undone_at INTEGER)',
+    );
     // Speed-only indexes, created outside the numbered migrations so the
     // schema version stays the one 1.x knows (it ignores extra indexes).
     db.execute(

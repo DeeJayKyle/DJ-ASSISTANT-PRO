@@ -30,9 +30,11 @@ String _utf16be(Uint8List b) {
   return String.fromCharCodes(units).replaceFirst(RegExp('\u0000+\$'), '');
 }
 
-/// Track paths listed in a Serato crate file; unknown chunks are skipped and
+/// Track paths listed in a Serato crate file (`ptrk`) or, with [tag] `pfil`, in
+/// Serato's library file `database V2`; unknown chunks are skipped and
 /// malformed data simply ends parsing.
-List<String> parseSeratoCrate(Uint8List bytes) {
+List<String> parseSeratoCrate(Uint8List bytes, {String tag = 'ptrk'}) {
+  final want = tag;
   final out = <String>[];
   void walk(Uint8List b, int depth) {
     var i = 0;
@@ -45,7 +47,7 @@ List<String> parseSeratoCrate(Uint8List bytes) {
       final data = Uint8List.sublistView(b, start, end);
       if (tag == 'otrk' && depth < 3) {
         walk(data, depth + 1);
-      } else if (tag == 'ptrk') {
+      } else if (tag == want) {
         final s = _utf16be(data);
         if (s.isNotEmpty) out.add(s);
       }

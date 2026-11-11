@@ -10,6 +10,7 @@ import 'autoprep.dart';
 import 'catalogue.dart';
 import 'inbox.dart' show defaultDownloadsFolder, defaultInboxFolder;
 import 'library.dart';
+import 'organize.dart' show organiseModeOn;
 
 class SettingsException implements Exception {
   SettingsException(this.message);
@@ -72,6 +73,9 @@ class SettingsService {
       'auto_prep': autoPrepEnabled(cat),
       'ui_prefs': prefs is Map ? prefs : <String, Object?>{},
       'auto_fix_min': autoFixMin(cat),
+      'fix_mode': fixMode(cat),
+      'fix_mode_notice_seen': _flag('fix_mode_notice_seen', false),
+      'organise_mode': organiseModeOn(cat),
       'ai_provider': cat.getSetting('ai_provider') ?? 'off',
     };
   }
@@ -92,6 +96,8 @@ class SettingsService {
     'auto_prep',
     'watch_enabled',
     'inbox_enabled',
+    'fix_mode_notice_seen',
+    'organise_mode',
   };
 
   void set(String key, Object? value) {
@@ -170,6 +176,8 @@ class SettingsService {
           _bad('confidence must be between 0.5 and 1.0');
         }
         cat.setSetting(key, '$v');
+      case 'fix_mode':
+        choice(fixModes, 'fix mode must be review, fill_empty or auto');
       case 'ai_provider':
         if (!isProvider(s())) _bad('unknown AI provider');
         cat.setSetting(key, s());

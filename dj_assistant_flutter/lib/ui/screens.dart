@@ -8,6 +8,7 @@ import 'library_tools.dart';
 import 'prepare_screens.dart';
 import 'quick_prep_screen.dart';
 import 'settings_screen.dart';
+import 'upgrades_screen.dart';
 import 'state.dart';
 
 export 'studio/studio_host.dart' show StudioHost;
@@ -34,5 +35,6 @@ Widget screenFor(AppView v) => switch (v.id) {
   'gig-pack' => const GigPackScreen(),
   'files' => const FilesScreen(),
   'settings' => const SettingsScreen(),
+  'upgrades' => const UpgradesScreen(),
   _ => const LibraryScreen(key: ValueKey('library')),
 };

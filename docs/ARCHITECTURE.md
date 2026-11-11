@@ -1,4 +1,6 @@
-# Architecture
+# Architecture (1.x, legacy)
+
+> This describes DJ Assistant **1.x** (Tauri + Rust + React), which stopped at 1.8.1. The current release is 2.x, written in Dart and Flutter in `dj_assistant_flutter/`. See `dj_assistant_flutter/MIGRATION.md` for how each 1.x part maps to 2.x, and `dj_assistant_flutter/README.md` for the 2.x layout. Both versions share the same catalogue schema.
 
 ## Why this stack
 

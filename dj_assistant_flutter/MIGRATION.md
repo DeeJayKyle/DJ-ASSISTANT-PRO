@@ -151,7 +151,7 @@ Development happens on Linux. Dart code is checked here with `flutter analyze`,
 | 3. Core services | Done. Every 1.x command group in the inventory above has its Dart service (`lib/core`, `lib/online`, `lib/assistant`, `lib/analysis`, `lib/audio`, `lib/app/session.dart`). |
 | 4. UI and state | Done. Shell (title bar with accounts, sidebar with crates and folders, status bar, job toasts, Ctrl+J assistant), every 1.x screen, Quick Prep, and the Studio (Stems, Remix, DJ Decks, Synth Lab, Drum Lab). Riverpod providers in `lib/ui/state.dart`. |
 | 5. Verify | Done, except hands-on testing on a DJ's PC (below). |
-| Release | **v2.0.4 published** (`release-flutter.yml`), after v2.0.0 to v2.0.3. Each installer is signed with 1.x's update key and published with `latest.json`, so 1.8 and earlier 2.0 installs are offered it by their auto-updater. |
+| Release | **v2.3.0 is the latest published release** (`release-flutter.yml`, 10 Nov 2026); 2.4.0 is prepared, not yet published. Since 2.0.0, Each installer is signed with 1.x's update key and published with `latest.json`, so 1.8 and earlier 2.0 installs are offered it by their auto-updater. |
 
 ### Evidence
 
@@ -242,4 +242,17 @@ Hands-on testing that CI cannot do:
 - **Studio settings:** Pro Stems AI on the graphics card, Fast split cores, audio buffer.
 - **AI on every page:** an *Ask the assistant* button in every page header and "For this page" suggestions. New tools cover suggestions, Auto-prep, online lookups, duplicates, Discovery, limits and the Studio (`test/agent_tools_test.dart`).
 - **Library at 50,000 tracks** (`test/library_scale_test.dart`): the ordered ids of a query are kept until the catalogue changes (this connection's `total_changes()` and `PRAGMA data_version` for scans and jobs), so each 200-row page while scrolling takes 1–2 ms (was 300–460 ms). The first page of a new order still takes about 0.35 s, because the folded artist/title sort runs over every track once.
+
+## 2.4: review-first suggestions, Organise Files mode, Upgrades
+
+New 2.x data lives in tables created with `CREATE TABLE IF NOT EXISTS` outside the numbered migrations, like `hidden_tracks`. The schema version stays the one 1.x knows, so 1.8 can still open the catalogue and ignores these tables:
+
+| Table | What it holds |
+|---|---|
+| `suggestion_decisions` | For each accepted suggestion: the catalogue value it replaced, the value applied, and who accepted it (`you` or `auto`), so Undo restores it exactly |
+| `file_op_hashes` | The BLAKE3 hash of each file Organise moved, checked before and after the move |
+| `track_replacements` | Track replacements (old path, new path, source, hash), undone as a whole |
+| `upgrade_reviews` | Low-bitrate tracks the DJ chose to keep as they are |
+
+New settings: `fix_mode` (`review` by default, `fill_empty`, `auto` = the earlier behaviour), `fix_mode_notice_seen`, and `organise_mode`. Without `organise_mode`, a library that had `allow_file_changes` on keeps Organise Files available. `ui_prefs.chat_width` remembers the assistant's width.
 

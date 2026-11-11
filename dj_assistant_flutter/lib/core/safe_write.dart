@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import 'blake3.dart';
 import 'catalogue.dart';
+import 'organize.dart' show organiseModeOn;
 import 'tag_writer.dart';
 
 /// Opt-in, verified tag writing (1.x `safe_write.rs`). This and the organiser are
@@ -93,7 +94,9 @@ class SafeWriteService {
   /// The account's data folder; backups go to `<dataDir>/backups/<day>/`.
   final String dataDir;
 
-  bool get enabled => cat.getSetting('allow_file_changes') == '1';
+  /// Tag writing is allowed by its own switch, or as part of Organise Files mode.
+  bool get enabled =>
+      cat.getSetting('allow_file_changes') == '1' || organiseModeOn(cat);
 
   /// The exact preview for writing [values] (field → value, null to remove) to
   /// each track. Nothing is written.

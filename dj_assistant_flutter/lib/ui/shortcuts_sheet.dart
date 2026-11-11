@@ -9,6 +9,11 @@ const shortcutGroups = <(String, List<(String, String)>)>[
     [
       ('F1  or  Ctrl + /', 'Show these shortcuts'),
       ('Ctrl + J', 'Open or close the assistant'),
+      ('Ctrl + Shift + J', 'Expand the assistant to full width, or back'),
+      (
+        'Drag the assistant’s edge  ·  focus it and press Left / Right',
+        'Make the assistant wider or narrower',
+      ),
       ('Tab  /  Shift + Tab', 'Move between controls'),
       ('Enter  or  Space', 'Press the focused button'),
       ('Esc', 'Close a dialog or menu'),
@@ -31,7 +36,10 @@ const shortcutGroups = <(String, List<(String, String)>)>[
       ('Ctrl + click', 'Add or remove a song from the selection'),
       ('Shift + click', 'Select a range'),
       ('Double-click  or  Enter', 'Open the song’s details'),
-      ('Right-click', 'Menu: details, crate, select all, invert, tags, delete'),
+      (
+        'Right-click',
+        'Menu: details, crate, select all, invert, tags, organise, replace, delete',
+      ),
       ('Up / Down', 'Move the selection'),
       ('Shift + Up / Down', 'Grow the selection'),
       ('Page Up / Page Down  ·  Home / End', 'Jump through the list'),

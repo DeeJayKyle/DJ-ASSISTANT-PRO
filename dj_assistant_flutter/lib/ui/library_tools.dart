@@ -950,7 +950,7 @@ class DuplicatesScreen extends ConsumerWidget {
                         ),
                       ),
                     const HintText(
-                      'To remove or merge copies, use Organise Files → Replace duplicates: moves go to a removed-files area you can undo.',
+                      'To remove or merge copies, use Organise Files → Remove duplicates (Organise Files mode): choose the copy to keep, preview, and the others go to a Removed files area you can undo.',
                     ),
                   ],
                 ),
@@ -962,7 +962,8 @@ class DuplicatesScreen extends ConsumerWidget {
   }
 }
 
-/// Metadata suggestions to review before they reach the catalogue.
+/// Metadata suggestions to review before they reach the catalogue: approve or
+/// reject one at a time or in batches, and undo any accepted one exactly.
 class SuggestionsScreen extends ConsumerStatefulWidget {
   const SuggestionsScreen({super.key});
   @override
@@ -971,23 +972,56 @@ class SuggestionsScreen extends ConsumerStatefulWidget {
 
 class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
   String status = 'pending';
+  String? field, source;
   double min = 0.85;
+  final selected = <int>{};
+
+  void _show(String st) => setState(() {
+    status = st;
+    selected.clear();
+  });
+
+  Future<void> _batch(String what, (int, int) Function() f) async {
+    final r = await guard(f, bump: ref);
+    if (r == null) return;
+    final (ok, failed) = r;
+    setState(selected.clear);
+    toast(
+      '$what ${plural(ok, 'suggestion')}'
+      '${failed == 0 ? '' : '; ${plural(failed, 'was', 'were')} left as they are (changed since, or not valid)'}.',
+      error: ok == 0 && failed > 0,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(sessionProvider);
     ref.watch(versionProvider);
     final t = DjTokens.of(context);
+    final st = ref.watch(settingsProvider);
     final counts = s.suggestions.counts();
-    final list = s.suggestions.list(
+    final all = s.suggestions.list(
       status: status,
       limit: userLimit(ref, 'suggestions_shown'),
     );
+    final list = [
+      for (final x in all)
+        if ((field == null || x.field == field) &&
+            (source == null || x.source == source))
+          x,
+    ];
+    final fields = {for (final x in all) x.field}.toList()..sort();
+    final sources = {for (final x in all) x.source}.toList()..sort();
+    final by = status == 'accepted'
+        ? s.suggestions.decidedBy(list.map((x) => x.id))
+        : const <int, String>{};
+    selected.retainWhere((id) => list.any((x) => x.id == id));
+    final allSelected = list.isNotEmpty && selected.length == list.length;
     final on = s.settings.services();
     bool svc(String id) => on.any((x) => x['id'] == id && x['enabled'] == true);
     return PageFrame(
       title: 'Suggestions',
-      subtitle: 'Fixes found in file names, folders, spellings and the online services you turned on. Nothing reaches your catalogue until you accept it; files are not changed.',
+      subtitle: 'Fixes found in file names, folders, spellings and the online services you turned on. Review them here: nothing reaches your catalogue until you approve it (unless you chose otherwise in Settings), and files are never changed.',
       actions: [
         OutlinedButton(
           onPressed: () => guard(
@@ -1031,6 +1065,23 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (st['fix_mode_notice_seen'] != true) ...[
+            Panel(
+              title: 'Suggestions now wait for you',
+              subtitle: st['fix_mode'] == 'review'
+                  ? 'Before 2.4, auto-prep accepted confident suggestions by itself after every scan (into the catalogue only). Now nothing changes until you approve it here, one at a time or in batches. Changes from now on can be undone exactly under Accepted. Ones accepted before this version show as "earlier": their previous values weren\'t kept, so edit those tracks directly if needed.'
+                  : 'Auto-prep applies some suggestions by itself, as chosen in Settings → Library → Metadata suggestions. Every automatic change is marked "automatic" under Accepted and can be undone.',
+              trailing: TextButton(
+                onPressed: () => guard(
+                  () => s.settings.set('fix_mode_notice_seen', true),
+                  bump: ref,
+                ),
+                child: const Text('Got it'),
+              ),
+              child: const SizedBox.shrink(),
+            ),
+            const SizedBox(height: Space.x3),
+          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1038,118 +1089,291 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
             children: [
               SegmentedButton<String>(
                 segments: [
-                  for (final k in [
-                    'pending',
-                    'accepted',
-                    'rejected',
-                    'superseded',
+                  for (final (k, label) in const [
+                    ('pending', 'To review'),
+                    ('accepted', 'Accepted'),
+                    ('rejected', 'Rejected'),
                   ])
                     ButtonSegment(
                       value: k,
-                      label: Text('$k (${counts[k] ?? 0})'),
+                      label: Text('$label (${fmtNumber(counts[k] ?? 0)})'),
                     ),
                 ],
                 selected: {status},
-                onSelectionChanged: (v) => setState(() => status = v.first),
+                onSelectionChanged: (v) => _show(v.first),
               ),
-              if (status == 'pending') ...[
-                const SizedBox(width: 16),
-                Text(
-                  'Accept all at or above',
-                  style: TextStyle(color: t.faint),
-                ),
-                SizedBox(
-                  width: 160,
-                  child: Slider(
-                    value: min,
-                    min: 0.5,
-                    max: 1,
-                    divisions: 10,
-                    label: '${(min * 100).round()}%',
-                    onChanged: (v) => setState(() => min = v),
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () => guard(
-                    () => toast(
-                      'Accepted ${s.suggestions.acceptBulk(min)} suggestion(s).',
-                    ),
-                    bump: ref,
-                  ),
-                  child: Text('Accept ≥ ${(min * 100).round()}%'),
-                ),
-              ],
+              _Filter(
+                label: 'Field',
+                value: field,
+                options: fields,
+                onChanged: (v) => setState(() => field = v),
+              ),
+              _Filter(
+                label: 'Source',
+                value: source,
+                options: sources,
+                onChanged: (v) => setState(() => source = v),
+              ),
             ],
           ),
           const SizedBox(height: 10),
+          if (list.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Semantics(
+                  label: 'Select all shown',
+                  child: Checkbox(
+                    tristate: true,
+                    value: allSelected
+                        ? true
+                        : (selected.isEmpty ? false : null),
+                    onChanged: (_) => setState(() {
+                      if (allSelected) {
+                        selected.clear();
+                      } else {
+                        selected.addAll(list.map((x) => x.id));
+                      }
+                    }),
+                  ),
+                ),
+                Text(
+                  selected.isEmpty
+                      ? 'Select all ${fmtNumber(list.length)} shown'
+                      : '${fmtNumber(selected.length)} of ${fmtNumber(list.length)} selected',
+                  style: TextStyle(color: t.muted),
+                ),
+                if (status == 'pending') ...[
+                  FilledButton(
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () => _batch(
+                            'Approved',
+                            () => s.suggestions.acceptMany(selected),
+                          ),
+                    child: const Text('Approve selected'),
+                  ),
+                  OutlinedButton(
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () => _batch(
+                            'Rejected',
+                            () => s.suggestions.rejectMany(selected),
+                          ),
+                    child: const Text('Reject selected'),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() {
+                      selected
+                        ..clear()
+                        ..addAll(
+                          list
+                              .where((x) => (x.confidence ?? 0) >= min)
+                              .map((x) => x.id),
+                        );
+                    }),
+                    child: Text('Select ≥ ${(min * 100).round()}%'),
+                  ),
+                  SizedBox(
+                    width: 140,
+                    child: Slider(
+                      value: min,
+                      min: 0.5,
+                      max: 1,
+                      divisions: 10,
+                      label: '${(min * 100).round()}%',
+                      semanticFormatterCallback: (v) =>
+                          'Confidence ${(v * 100).round()} percent',
+                      onChanged: (v) => setState(() => min = v),
+                    ),
+                  ),
+                ],
+                if (status == 'accepted')
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.undo),
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () => _batch(
+                            'Undid',
+                            () => s.suggestions.undoMany(selected),
+                          ),
+                    label: const Text('Undo selected'),
+                  ),
+                if (status == 'rejected')
+                  OutlinedButton(
+                    onPressed: selected.isEmpty
+                        ? null
+                        : () => _batch('Moved back', () {
+                            for (final id in selected) {
+                              s.suggestions.reset(id);
+                            }
+                            return (selected.length, 0);
+                          }),
+                    child: const Text('Back to review'),
+                  ),
+              ],
+            ),
+          const SizedBox(height: 6),
           if (list.isEmpty)
-            const EmptyState(
+            EmptyState(
               icon: Icons.auto_fix_high_outlined,
-              title: 'Nothing here',
+              title: status == 'pending' ? 'Nothing to review' : 'Nothing here',
               message: 'Find suggestions from file names and folders, or turn on an online service in Settings.',
             ),
           for (final x in list)
             Card(
               margin: const EdgeInsets.only(bottom: 6),
               child: ListTile(
+                leading: Checkbox(
+                  value: selected.contains(x.id),
+                  semanticLabel: 'Select ${x.field} for ${x.track}',
+                  onChanged: (v) => setState(
+                    () =>
+                        v == true ? selected.add(x.id) : selected.remove(x.id),
+                  ),
+                ),
                 title: Text(
-                  '${x.track} — ${x.field}: ${x.currentValue ?? '∅'} → ${x.suggestedValue}',
+                  x.track,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text(
-                  '${x.source} · ${((x.confidence ?? 0) * 100).round()}% · ${x.evidence ?? ''}',
-                  style: const TextStyle(fontSize: DjType.small),
-                ),
-                trailing: status == 'pending'
-                    ? Wrap(
-                        spacing: 4,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text.rich(
+                      TextSpan(
                         children: [
-                          IconButton(
-                            tooltip: 'Edit and accept',
-                            onPressed: () async {
-                              final v = await askText(
-                                context,
-                                title: 'Accept with a change',
-                                label: x.field,
-                                initial: x.suggestedValue,
-                                ok: 'Accept',
-                              );
-                              if (v != null) {
-                                await guard(
-                                  () => s.suggestions.accept(x.id, edited: v),
-                                  bump: ref,
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.edit_outlined),
+                          TextSpan(
+                            text: '${x.field}: ',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          FilledButton.tonal(
-                            onPressed: () => guard(
-                              () => s.suggestions.accept(x.id),
-                              bump: ref,
-                            ),
-                            child: const Text('Accept'),
+                          TextSpan(
+                            text: x.currentValue ?? '(empty)',
+                            style: TextStyle(color: t.faint),
                           ),
-                          IconButton(
-                            tooltip: 'Reject',
-                            onPressed: () => guard(
-                              () => s.suggestions.reject(x.id),
-                              bump: ref,
-                            ),
-                            icon: const Icon(Icons.close),
-                          ),
+                          const TextSpan(text: '  →  '),
+                          TextSpan(text: x.suggestedValue),
                         ],
-                      )
-                    : TextButton(
-                        onPressed: () =>
-                            guard(() => s.suggestions.reset(x.id), bump: ref),
-                        child: const Text('Back to pending'),
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '${x.source} · ${((x.confidence ?? 0) * 100).round()}% confident'
+                      '${x.evidence == null || x.evidence!.isEmpty ? '' : ' · ${x.evidence}'}',
+                      style: TextStyle(fontSize: DjType.small, color: t.faint),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+                trailing: switch (status) {
+                  'pending' => Wrap(
+                    spacing: 4,
+                    children: [
+                      IconButton(
+                        tooltip: 'Edit and accept',
+                        onPressed: () async {
+                          final v = await askText(
+                            context,
+                            title: 'Accept with a change',
+                            label: x.field,
+                            initial: x.suggestedValue,
+                            ok: 'Accept',
+                          );
+                          if (v != null) {
+                            await guard(
+                              () => s.suggestions.accept(x.id, edited: v),
+                              bump: ref,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () =>
+                            guard(() => s.suggestions.accept(x.id), bump: ref),
+                        child: const Text('Accept'),
+                      ),
+                      IconButton(
+                        tooltip: 'Reject',
+                        onPressed: () =>
+                            guard(() => s.suggestions.reject(x.id), bump: ref),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  'accepted' => Wrap(
+                    spacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Pill(
+                        switch (by[x.id]) {
+                          'auto' => 'automatic',
+                          'you' => 'by you',
+                          _ => 'earlier',
+                        },
+                        color: by[x.id] == 'auto' ? t.warn : null,
+                        tooltip: by[x.id] == null
+                            ? 'Accepted before DJ Assistant kept the previous value; edit the track to change it.'
+                            : null,
+                      ),
+                      TextButton(
+                        onPressed: by[x.id] == null
+                            ? null
+                            : () => guard(
+                                () => s.suggestions.undo(x.id),
+                                done: 'Restored the previous value.',
+                                bump: ref,
+                              ),
+                        child: const Text('Undo'),
+                      ),
+                    ],
+                  ),
+                  _ => TextButton(
+                    onPressed: () =>
+                        guard(() => s.suggestions.reset(x.id), bump: ref),
+                    child: const Text('Back to review'),
+                  ),
+                },
               ),
             ),
         ],
       ),
     );
   }
+}
+
+class _Filter extends StatelessWidget {
+  const _Filter({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+  final String label;
+  final String? value;
+  final List<String> options;
+  final ValueChanged<String?> onChanged;
+  @override
+  Widget build(BuildContext context) => DropdownButton<String?>(
+    value: options.contains(value) ? value : null,
+    hint: Text('$label: all'),
+    items: [
+      DropdownMenuItem(value: null, child: Text('$label: all')),
+      for (final o in options)
+        DropdownMenuItem(
+          value: o,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Text('$label: $o', overflow: TextOverflow.ellipsis),
+          ),
+        ),
+    ],
+    onChanged: onChanged,
+  );
 }
 
 /// Rows as plain JSON for previews.

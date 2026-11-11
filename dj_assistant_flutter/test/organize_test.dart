@@ -4,7 +4,9 @@ import 'package:dj_assistant/core/catalogue.dart';
 import 'package:dj_assistant/core/crates.dart';
 import 'package:dj_assistant/core/organize.dart';
 import 'package:dj_assistant/core/roots.dart';
+import 'package:dj_assistant/core/blake3.dart';
 import 'package:dj_assistant/core/scanner.dart';
+import 'package:dj_assistant/core/serato_links.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -68,7 +70,7 @@ void main() {
     final b = idOf('Basement Hours.mp3');
     expect(
       () => org.previewRename([a], '{artist} - {title}'),
-      throwsA(predicate((e) => '$e'.contains('turned off'))),
+      throwsA(predicate((e) => '$e'.contains('mode is off'))),
     );
     cat.setSetting('allow_file_changes', '1');
     expect(
@@ -218,4 +220,162 @@ void main() {
       expect(clash.ops.single.blocked, contains('already exists'));
     },
   );
+
+  test('Organise Files mode: off by default, its own switch, legacy kept', () {
+    final a = idOf('Deep Tenant - Warehouse 94.mp3');
+    expect(organiseModeOn(cat), isFalse);
+    expect(() => org.previewRemove([a]), throwsA(isA<OrganizeException>()));
+    // A library that allowed file changes before keeps Organise available...
+    cat.setSetting('allow_file_changes', '1');
+    expect(organiseModeOn(cat), isTrue);
+    // ...until Organise mode itself is switched off.
+    cat.setSetting('organise_mode', '0');
+    expect(organiseModeOn(cat), isFalse);
+    cat
+      ..setSetting('allow_file_changes', '0')
+      ..setSetting('organise_mode', '1');
+    expect(org.previewRemove([a]).ready, 1);
+  });
+
+  test('only the approved items of a plan are applied', () {
+    cat.setSetting('organise_mode', '1');
+    final a = idOf('Deep Tenant - Warehouse 94.mp3');
+    final b = idOf('Basement Hours.mp3');
+    final before = {a: pathOf(a), b: pathOf(b)};
+    final plan = org.previewRename([a, b], '{title} ({artist})');
+    expect(plan.ready, 2);
+    final i = plan.ops.indexWhere((o) => o.trackId == b);
+    final r = org.apply(plan, only: {i});
+    expect(r.done, 1);
+    expect(pathOf(a), before[a], reason: 'not approved, not changed');
+    expect(pathOf(b), isNot(before[b]));
+    expect(File(pathOf(b)).existsSync(), isTrue);
+    // The moved file's hash was recorded and matches.
+    final h = cat.db.select('SELECT hash FROM file_op_hashes').single['hash'];
+    expect(blake3File(pathOf(b)), h);
+  });
+
+  test('replace a track: preview, verified copy, original kept, undo', () {
+    cat.setSetting('organise_mode', '1');
+    final a = idOf('Deep Tenant - Warehouse 94.mp3');
+    final path = pathOf(a);
+    final crates = CratesService(cat);
+    final c = crates.create(const CrateInput(name: 'Keep me', kind: 'manual'));
+    crates.addTracks(c.id, [a]);
+    final oldHash = blake3File(path);
+    // A "better" copy from somewhere else (synthetic bytes; same format).
+    final better = File(p.join(music.parent.path, 'downloads', 'better.mp3'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync([...File(path).readAsBytesSync(), 1, 2, 3]);
+    final newHash = blake3File(better.path);
+
+    final plan = org.previewReplaceFile(a, better.path);
+    expect(plan.ops.single.op, 'replace');
+    expect(plan.ops.single.to, path, reason: 'same format keeps the name');
+    expect(plan.ops.single.blocked, isNull);
+    final r = org.apply(plan);
+    expect(r.done, 1, reason: '${r.skipped}');
+    expect(blake3File(path), newHash);
+    expect(better.existsSync(), isTrue, reason: 'the source is copied');
+    expect(blake3File(better.path), newHash);
+    final kept = org.removedFiles().single['to']! as String;
+    expect(p.isWithin(org.removedArea, kept), isTrue);
+    expect(blake3File(kept), oldHash, reason: 'original kept, verified');
+    expect(pathOf(a), path);
+    expect(
+      cat.db.select(
+        'SELECT 1 FROM crate_tracks WHERE crate_id=? AND track_id=?',
+        [c.id, a],
+      ),
+      hasLength(1),
+      reason: 'crates stay with the track',
+    );
+    expect(org.replacements().single['status'], 'done');
+
+    // Undo from any of its history items restores the original exactly; the
+    // copied-in file is kept in Removed files, not deleted.
+    final opId = org.history().first['id']! as int;
+    org.undo(opId: opId);
+    expect(blake3File(path), oldHash);
+    expect(org.replacements().single['status'], 'undone');
+    final aside = org.removedFiles().single['to']! as String;
+    expect(blake3File(aside), newHash);
+    expect(
+      cat.db.select('SELECT presence FROM tracks WHERE id=?', [
+        a,
+      ]).single['presence'],
+      'present',
+    );
+  });
+
+  test('replace with another format keeps the name stem and warns', () {
+    cat.setSetting('organise_mode', '1');
+    final a = idOf('Deep Tenant - Warehouse 94.mp3');
+    final path = pathOf(a);
+    final flac = File(p.join(music.parent.path, 'downloads', 'x.flac'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('not really flac');
+    final plan = org.previewReplaceFile(a, flac.path);
+    final op = plan.ops.single;
+    expect(op.to, p.setExtension(path, '.flac'));
+    expect(op.notes.join(), contains('Different format'));
+    expect(org.apply(plan).done, 1);
+    expect(pathOf(a), op.to);
+    expect(File(path).existsSync(), isFalse);
+    // Emptying Removed files deletes the kept original but never the track.
+    expect(org.emptyRemoved(), 1);
+    expect(cat.db.select('SELECT 1 FROM tracks WHERE id=?', [a]), hasLength(1));
+    // With the original gone for good, undo refuses and changes nothing.
+    final batch = org.replacements().single['batch']! as String;
+    expect(
+      () => org.undo(batch: batch),
+      throwsA(predicate((e) => '$e'.contains('no longer in Removed files'))),
+    );
+    expect(File(op.to).existsSync(), isTrue);
+    expect(pathOf(a), op.to);
+    expect(() => org.previewReplaceFile(a, op.to), returnsNormally);
+    expect(
+      org.previewReplaceFile(a, op.to).ops.single.blocked,
+      contains('same file'),
+    );
+  });
+
+  test('previews say which tracks Serato knows about (read-only)', () {
+    cat.setSetting('organise_mode', '1');
+    final a = idOf('Deep Tenant - Warehouse 94.mp3');
+    final b = idOf('Basement Hours.mp3');
+    final serato = Directory(p.join(music.parent.path, '_Serato_'))
+      ..createSync();
+    List<int> chunk(String tag, List<int> data) => [
+      ...tag.codeUnits,
+      (data.length >> 24) & 255,
+      (data.length >> 16) & 255,
+      (data.length >> 8) & 255,
+      data.length & 255,
+      ...data,
+    ];
+    List<int> utf16(String s) => [
+      for (final u in s.codeUnits) ...[u >> 8, u & 255],
+    ];
+    final rel = p.relative(pathOf(a), from: p.rootPrefix(pathOf(a)));
+    File(p.join(serato.path, 'database V2'))
+        .writeAsBytesSync(chunk('otrk', chunk('pfil', utf16(rel))));
+    Directory(p.join(serato.path, 'Subcrates')).createSync();
+    final crateFile = File(
+      p.join(serato.path, 'Subcrates', 'House%%Warm up.crate'),
+    )..writeAsBytesSync(chunk('otrk', chunk('ptrk', utf16(rel))));
+    final before = crateFile.readAsBytesSync();
+
+    final plan = org.checkSerato(
+      org.previewRename([a, b], '{title} ({artist})'),
+      links: SeratoLinks(seratoDirs: [serato.path]),
+    );
+    final opA = plan.ops.firstWhere((o) => o.trackId == a);
+    final opB = plan.ops.firstWhere((o) => o.trackId == b);
+    expect(opA.serato, contains("Serato's library"));
+    expect(opA.serato, contains('House / Warm up'));
+    expect(opA.serato, contains('Relocate'));
+    expect(opB.serato, isNull);
+    expect(crateFile.readAsBytesSync(), before, reason: 'Serato is only read');
+  });
 }

@@ -6,120 +6,116 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 ![Music Library](docs/screenshots/library.png)
 
-## What it does (v1.3)
+> **Current release: DJ Assistant 2.x (Flutter), in [`dj_assistant_flutter/`](dj_assistant_flutter/).** It is what the Releases page publishes and what installs update to. The 1.x app (React + Tauri + Rust, in `src/`, `src-tauri/` and `crates/`) stopped at 1.8.1 and is kept for reference and for the shared catalogue schema; see [Legacy 1.x](#legacy-1x-react--tauri) below.
 
-**Studio (new in 1.5, extended in 1.6)** — under *Create* in the sidebar:
-- **Stems:** vocals, drums, bass and melodies from any track, with key, tempo, live chords, WAV stems and a MIDI file.
-- **Remix:** tracks and stems on a beat grid; move, trim, loop, duplicate and delete clips, with undo and redo; every clip is auto-synced to the remix's tempo and key.
-- **DJ Decks:** two decks with Sync, key matching, live stem toggles, 3-band EQ, a filter, hot cues, beat loops and a crossfader.
-- **Synth Lab** and **Drum Lab:** describe a sound or a kit in words, play it from the keyboard or a MIDI controller, and save it as WAV plus SFZ. Drum Lab also has a 16-step sequencer with swing that exports loops as WAV or MIDI.
+## What it does (2.4)
 
-It all runs on this computer. Stems use signal processing rather than an AI model, so they're private but less clean than AI separators.
+**Library** — choose music folders and drives, or drag folders and files onto the window (files are copied into the Inbox, never moved); read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; accent-insensitive search; Genre / Decade / Format / Quality filters plus a rule builder; select with click, Ctrl/Shift-click, arrow keys, Ctrl+A and Ctrl+I; right-click for a menu; offline drives kept, never treated as deleted; folder watcher and optional Inbox auto-import of finished downloads.
 
-**Quick Prep (new in 1.3)** — a fast lane for a folder of fresh downloads. Pick a folder (it's added read-only and analysed on this computer, with a small mini-game while you wait), then one of four paths:
-- **Clean names:** strips `[FREE DL]`, `www.site.net`, `320kbps`, `final FINAL v3`, track numbers and underscores; fixes capitals; keeps the mix name; *Artist – Title* or *Title – Artist*; edit any name inline; genre per track. Saved to the catalogue only.
-- **Build a playlist:** drag to reorder or one-click *Warm-up → peak* (harmonic, smooth tempo steps), *Ascending BPM*, *Harmonic*, *Group by genre*, *Cool down*, or type what you want ("fastest first"). A flow score shows how well it mixes.
-- **Organise folders:** set up gig folders with *Warm Up / Groove / Peak Time* sub-folders, listen on the waveform, and press **1–9** to sort each track (or drag it). *Auto-sort by energy* does it for you.
-- **Split by genre:** groups by genre, or by families (Tech House + Deep House → House).
+**Your catalogue** — energy (1–10), star ratings, colour, mood, tags, notes and your own title, artist, album, genre, year, original year, BPM, key, label and version. Stored in DJ Assistant only; the file's own tags stay visible separately.
 
-Every path exports as a **verified copy in a new folder**, **one ZIP**, or **playlists only** (pointing at your originals), with an `.m3u8` per folder and — optionally — clean title, artist, genre, BPM and key written into the **copies** (MP3, FLAC, M4A; never the originals). Folders and genres can also be saved as crates.
+**Virtual crates** — manual and smart crates (AND/OR rules, ranges, exclusions, manual additions), nested folders and one-click templates: genres, energy (Peak Time 9–10 → Cool Down 1–2), utility, events, ratings, decades and genre-by-energy. Crate-hygiene warnings. Export as M3U8, CSV, Serato `.crate` (new files only), rekordbox XML or verified folder copies.
 
-**Local accounts (new in 1.3)** — no sign-in. Create one account or several (a second DJ, a separate library) from the title bar; each keeps its own folders, crates, sets, analysis and settings in its own catalogue on this computer. An existing catalogue becomes the first account automatically.
+**Quick Prep** — a fast lane for a folder of fresh downloads: clean names, build a playlist, organise into gig folders, split by genre; exported as verified copies, a ZIP or playlists pointing at the originals. Tags are only ever written into the new copies.
 
-**Library** — choose music folders and drives, or drag folders and files onto the window (files are copied into the Inbox, analysed and fixed automatically); select with click, Ctrl/Shift-click, arrow keys, Ctrl+A and Ctrl+I; right-click for a menu; delete songs from the library (files stay; bring them back from Settings) or, when allowed, move the files to a restorable Removed files area; back/forward history (Alt+←/→, mouse side buttons) and Ctrl+K to jump to any page; read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; fast accent-insensitive search; Genre / Decade / Format / Quality filters plus a full rule builder; offline drives kept, never treated as deleted; folder watcher that notices new music.
+**Audio analysis (local)** — BPM with half/double alternatives, whole-file beatgrid, key with Camelot code, energy, loudness (LUFS), peak, clipping, silence, intro/outro, cue ideas, waveform and fingerprint. Shown as estimates; your values always win. Serato's own BPM, beatgrid, hot cues and saved loops are read from the file tags (never written).
 
-**Video files** — music videos and visuals (MP4, M4V, MOV, MKV, WebM, AVI) are catalogued next to your audio with resolution, codec and frame rate, so you can search, rate, tag and crate them. Only file headers are read and videos are never written to. Media and resolution filters, a Video badge, and an option to turn video scanning off.
+**Suggestions — review first (new default in 2.4)** — fixes from file names, folders, spellings, analysis and the online services you turn on, each with the current value, suggestion, source, evidence and confidence. Approve or reject one at a time, or tick a batch. Accepting changes the catalogue only, never the file, and **Undo restores the exact previous value**. See [Auto-prep and suggestions](#auto-prep-and-suggestions).
 
-**Auto-prep** — after every scan, new tracks are analysed and recommended fixes (titles, artists, genres, years…) are applied to your catalogue; empty fields are filled from evidence, existing values change only at high confidence. Undo from Suggestions.
+**Organise Files mode (opt-in, off by default)** — edit tags in the files, rename and move files or folders, replace a track with a better file, remove exact duplicates and bad files. See [Organise Files](#organise-files).
 
-**Organise Files (opt-in)** — write catalogue fixes into file tags, rename files by template, sort files into folders, rename folders, remove corrupt/empty files to a restorable area, and replace duplicates. Every change is previewed, approved, change-checked and undoable.
+**Upgrades (new in 2.4)** — lossy tracks below your low-bitrate warning (configurable, default 128 kbps; lossless and unknown are never flagged). For each one: better copies you already own, a side-by-side comparison with two players at matched loudness, legitimate store search links, and "Replace…" through Organise Files' preview. **Bitrate is treated as a clue, never as proof of quality.**
 
-**Export crates** — to Serato (.crate files, never overwriting), rekordbox (XML) or folders (verified copies with playlists).
+**Duplicates & health** — exact (full-file hash), possible and alternate versions with reasons; library health for missing metadata (with a Fix list), unreadable/unsupported files, low bitrate, offline drives and missing files.
 
-**Look & sound** — colour themes or a custom accent, background styles, page transitions, animation speed, completion sounds, animated splash, system tray icon.
+**Discovery** — tracks that fit a crate, gaps, alternatives to overplayed tracks, tracklist and playlist-file matching with a shopping list CSV, Last.fm similar artists and MusicBrainz new releases (both opt-in, each saying what it sends), and store search links. Recommendations come from your own library and the services you turn on; nothing is hard-coded.
 
-**Your catalogue** — energy (1–10 LED meter), star ratings, colour, mood, tags, notes and overrides for title, artist, genre, year, BPM, key and more. Stored in DJ Assistant only; the file’s own tags stay visible separately.
+**Set Studio, Gig Mode & Gig Pack** — running orders with mix grades and rules; offline gig mode with requests, notes, play log and **Next up** (can follow Serato DJ 4's history, read from a copy); verified USB gig packs.
 
-**Virtual crates** — manual and smart crates (AND/OR, ranges, exclusions, manual additions, live preview), nested folders, and one-click templates from the *Crate & Playlist Cheat Sheet*: genres, energy (Peak Time 9–10 → Cool Down 1–2), utility (openers, closers, bangers, acapellas…), events, ratings (Guaranteed → Archive), decades and genre-by-energy folders. Crate-hygiene warnings for vague or oversized crates. Export any crate or selection as M3U8 or CSV.
+**Serato, rekordbox & history** — read-only import of Serato crates, Serato DJ 4 play history and history CSVs, and rekordbox XML playlists. Serato cues and beatgrids carried into rekordbox XML exports.
 
-**Audio analysis (local)** — BPM with half/double-time alternatives, key with Camelot code, energy (scaled to your library), loudness (LUFS), peak, clipping, silence, intro/outro length, cue ideas (first sound, mix-in, drop, mix-out), waveform, tempo-drift warning and an audio fingerprint. All shown as estimates with method and version; your values always win.
+**Studio** — Stems (fast DSP split, or Pro Stems AI from an optional pack), Remix, DJ Decks, Synth Lab and Drum Lab. Saves only new files.
 
-**Suggestions** — from file names, folder names, consistent spellings, analysis, and (opt-in) MusicBrainz, AcoustID, the free Deezer & Apple Music catalogues, Spotify, YouTube & YouTube Music and GetSongBPM (BPM and key checked against the audio analysis; release year, genre, album, label and artist credits — applied automatically only when the sources or the audio agree). Each shows the current value, the suggestion, source, evidence and confidence. Accept, edit or reject; accepting writes to the catalogue only. Original release year is kept separate from file/remix/reissue years.
+**Assistant** — open by default on the right. Drag its edge (or focus it and use ←/→) to resize, expand it to full width (Ctrl+Shift+J) or hide it (Ctrl+J); on a narrow window it floats over the page. The built-in helper and /commands work offline; an AI model (free online options, your own Claude/OpenAI/… key, any OpenAI-compatible server, or Ollama on this computer) is opt-in. Actions appear as cards that run only when you press Run. It can never change music files and cannot turn on file changes.
 
-**Duplicates & health** — exact (full-file hash) vs possible vs alternate versions, with reasons and review notes; library health for missing metadata (with a **Fix** list that offers evidence-based suggestions and bulk editing, saved to the catalogue only), unreadable/unsupported files, low bitrate (configurable, default 128 kbps, never applied to lossless or unknown), offline drives and missing files.
+**Look and keys** — dark/light themes, five accents, glass/solid panels, reduced motion, Premium UI; Camelot or musical key notation; F1 lists every keyboard shortcut.
 
-**Library Map** — every analysed track on one chart by tempo and energy, coloured by Camelot key; search lights up matches and a click opens the track.
+**Local accounts** — no sign-in; each account keeps its own catalogue on this computer.
 
-**Discovery** — tracks that fit a crate (with reasons), gaps, alternatives to overplayed tracks, version-aware tracklist and playlist-file matching (paste a list or open an M3U/M3U8/CSV: owned / possibly owned / missing / unknown, with a shopping list CSV), Last.fm similar artists and tracks (opt-in), new releases from artists you follow (MusicBrainz, opt-in), store search links (Beatport, Bandcamp, Traxsource, Juno, Apple, Amazon, YouTube preview). “What I’ve learned” can be inspected, switched off and reset.
+## Auto-prep and suggestions
 
-**Set Studio** — event, audience, length, genres, must-plays, exclusions, clean-only, BPM range, a tempo ramp, key mixing (strict / loose / off), half/double time, artist gap, energy band, an opening track, energy journey (journey, warm-up, peak, wedding, lounge) → an editable running order with a grade for every mix (smooth / good / workable / clash), per-slot issues, tempo/key transition notes, alternatives per slot, reordering, emergency floor-fillers; save, export M3U8, save as crate.
+Auto-prep runs after scans and imports (switch in Settings → Library). It analyses new tracks and creates suggestions. What happens next is your choice in **Settings → Library → Metadata suggestions**:
 
-**Gig Mode & Gig Pack** — offline set list, request queue, DJ notes and play log with background work paused; **Next up** ranks what mixes in after the last play (and can follow Serato, marking tracks as played as they play) (Cool / Hold / Lift energy, tempo window with half/double time, Camelot key gate, one-click loosening); post-gig recap. Gig packs copy a crate or set to a USB drive into a new folder, verify every copy by hash, and write a manifest, playlist and missing-file report.
+| Mode | What auto-prep does |
+|---|---|
+| **Review first** (default from 2.4) | Changes nothing. Every suggestion waits in Suggestions for your approval. |
+| Fill empty fields | Fills empty fields from the best evidence. Never replaces a value you already have. |
+| Apply confident fixes | The behaviour before 2.4: fills empty fields and replaces existing values at or above the confidence slider (default 85%). |
 
-**Serato, rekordbox & history** — read-only import of Serato crates, Serato DJ 4's own play history and history CSV exports, and rekordbox XML playlists as crates (matched by artist and title, file path or name, or a likely title-and-artist match); Serato's hot cues and saved loops shown in track details and carried into rekordbox XML exports.
+All three only touch DJ Assistant's catalogue, never the files. From 2.4 every accepted suggestion records what it replaced and who accepted it ("by you" or "automatic"), so **Undo** under Suggestions → Accepted (or **Undo automatic changes…** in Settings) puts the exact previous value back, unless you have changed it since. Values accepted before 2.4 show as "earlier" and can't be undone exactly, because their previous values weren't kept.
 
-**Safe tag writing (opt-in, off by default; also used by Organise Files)** — write catalogue values to MP3/FLAC/M4A tags with an exact preview, change detection, a verified backup, checks that the audio data and every other tag frame (including Serato’s cue/beatgrid frames) are preserved, a change log and exact-byte rollback.
+## Organise Files
 
-**Personal files (opt-in module)** — index chosen document folders, search names and text (txt, md, csv, json, docx, odt…), flag duplicates and encrypted/unreadable files, suggest organisation. Never used for music recommendations.
+Off by default, with its own switch (Settings → Changes to music files, or the Organise Files page). Libraries that already allowed file changes before 2.4 keep it available.
 
-**Assistant** — an AI assistant that already knows every feature of the app (choose from a dropdown: free online AIs such as Gemini, Groq, OpenRouter's free models and GitHub Models; Claude, ChatGPT, DeepSeek or Grok with your own key; any OpenAI-compatible server; or any model in Ollama on this computer; off by default). It looks things up in your library, filters views, and proposes actions (crates, energy/genre/key edits, tags, templates, scans, analysis, sets, gig mode, settings) as cards that run only when you press Run. It can never change music files or Serato data. Without AI, the built-in rule-based assistant and **/commands** (/scan, /fix genre, /set 120 wedding, /keys musical…) still work. Hide it with Ctrl+J.
-**Quick Prep AI help** — when the AI assistant is on (below), *Improve with AI* sharpens clean names and genres and the playlist box understands any request. It uses the same model you chose for the assistant and sends only file names, tag text and BPM/key/energy — never audio or file paths. Answers are suggestions; your edits win.
+- **Nothing happens silently.** Every action opens a preview listing **every** item with a tick. Name conflicts and missing files are blocked; only ticked items run, after a second confirmation; each file is re-checked and skipped if it changed since the preview.
+- **Verified and restorable.** Tag edits use the safe tag writer: per-file preview, a verified (BLAKE3) backup, Serato's cue and beatgrid data kept byte for byte, rollback from the change log. Renames and moves check each file's hash before and after. Removed and replaced files go to a **Removed files** area in the app's data folder, outside your music. Nothing is permanently deleted until you empty that area, after seeing the full list.
+- **Undo.** History undoes one change or a whole batch; a replacement is always undone as a whole.
+- **Serato warnings per track.** The preview reads, never writes, Serato's `database V2`, its crates and the cue, loop and beatgrid data in each file, and says which tracks Serato knows about. Renaming or moving those files breaks Serato's links until you use Serato's *Files → Relocate lost files*. A replacement with the same format keeps the file name, so Serato's crates still find it, but cues and beatgrids stored inside the old file don't carry over to the new one. The old file is kept.
+- **Scope.** Work on tracks sent from the Library ("Organise…"), a crate, or every track.
 
-**Assistant** — a local, rule-based helper (not an AI model) in a sidebar you can hide (Ctrl+J) or expand. “afrobeats 2010s energy 6-8 no live”, “low bitrate”, “plan a 2 hour wedding set”, “gig pack”… It says exactly what it understood and can only search, filter and open views.
-
-**Key notation** — show keys as Camelot (8A) or musical names (Am); search, filters and the Assistant accept either, including Open Key (1m).
-
-**Premium UI** — a title-bar switch for the Midnight Pro look from RxPOS, with a translucent sidebar, a glowing current page, glass cards, mono figures and light beams. It only repaints.
-
-**Auto-update** — signed updates install in place from GitHub releases (see [docs/UPDATES.md](docs/UPDATES.md)). Can be turned off in Settings.
+Test on copies of your music first.
 
 ## Safety
 
-- Music files are only read, except by the opt-in tag writer (above). Quick Prep writes tags only into new copies it has just made and verified. CI fails the build if any other module gains a file-writing API (`scripts/check-read-only.sh`).
-- Serato’s databases, crates, cues, beatgrids, history and settings are never written.
-- Nothing is ever deleted or merged; duplicate decisions are notes.
-- Scans and analysis commit in short transactions; cancelled or crashed runs leave the catalogue consistent.
+- Music files are only read unless you turn on tag writing or Organise Files mode (both off by default). Quick Prep, Gig Pack and exports only create new files and folders.
+- Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato adds a new `.crate` file in `_Serato_/Subcrates`, never overwriting one.
+- The AI assistant has no tool that changes, moves or deletes files, and cannot change the file-change switches or the suggestion mode.
 
 ## Privacy
 
-- No online account and no telemetry; accounts are local to this computer. The core library has no network code; CI traces system calls during scanning, analysis, Set Studio, gig packs, tag writing and personal-file indexing to prove no internet sockets are opened.
-- Online services (MusicBrainz, Deezer & Apple Music catalogues, Spotify, YouTube & YouTube Music, GetSongBPM, AcoustID, Last.fm, the AI assistant, update checks) live in a separate crate, are **off by default** (except update checks, which you can turn off), and each explains exactly what it sends. AcoustID asks before every batch. API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
-- Logs record command names and errors only.
+- No online account and no telemetry; accounts are local to this computer.
+- Every online service (MusicBrainz, AcoustID, the Deezer and Apple Music catalogues, Spotify, YouTube, GetSongBPM, Last.fm, an online AI model, update checks) is **off by default**, except update checks, which send only the app version and can be turned off. Each one says exactly what it sends, in Settings next to its switch and in Discovery where it is used. Store links are plain links: nothing is sent until you open one.
+- API keys go to Windows Credential Manager and are never shown, logged or stored in the catalogue.
+- A test (`test/network_audit_test.dart`) checks that nothing is sent until a service is on, and only to that service.
 
 ## Install (Windows 10/11, 64-bit)
 
 1. Download `DJ-Assistant_<version>_x64-setup.exe` and `SHA256SUMS.txt` from Releases.
-2. Verify: `Get-FileHash .\DJ-Assistant_1.0.0_x64-setup.exe -Algorithm SHA256` and compare with `SHA256SUMS.txt`.
-3. Run it (per-user install, no admin needed). The installer is **not code-signed**, so SmartScreen will warn — choose *More info → Run anyway* if the checksum matches.
-4. Later versions arrive through **Settings → Updates** (or the banner on start-up); no need to download again.
+2. Verify: `Get-FileHash .\DJ-Assistant_<version>_x64-setup.exe -Algorithm SHA256` and compare with `SHA256SUMS.txt`.
+3. Run it (per-user install, no admin needed). The installer is **not code-signed**, so SmartScreen may warn about an unknown publisher; choose *More info → Run anyway* if the checksum matches.
+4. Later versions arrive through **Settings → Updates**. Updates are signed with the same key as 1.x, so 1.8 installs update to 2.x in place and keep their data.
 
-## Build from source
+## Build from source (2.x)
 
-Rust 1.97 (`rust-toolchain.toml`), Node 22, and on Windows the MSVC build tools + WebView2.
+Flutter 3.47.9 (stable). On Windows, Visual Studio with the C++ desktop workload.
 
 ```bash
-npm ci
-cargo test -p dj-core -p dj-online
-npm test
-npm run e2e          # real UI + real backend + real audio fixtures (dev-only loopback bridge)
-npx tauri dev
-npx tauri build --config src-tauri/tauri.ci.conf.json   # installer without updater signing
+cd dj_assistant_flutter
+flutter pub get
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze --fatal-infos
+flutter test                 # unit, service and screen-layout tests (Linux or Windows)
+flutter test integration_test -d windows   # drives the real app
+flutter build windows --release
 ```
 
-Other checks: `scripts/check-no-network.sh`, `scripts/check-read-only.sh`, `python scripts/check-licenses.py`. `scripts/make-demo-library.sh <dir>` generates a 20-track synthetic demo library for trying the app.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTING.md), [ROADMAP.md](ROADMAP.md) and [docs/UPDATES.md](docs/UPDATES.md).
+`SCREENSHOTS=<folder> flutter test test/screens` writes a screenshot of every page at seven window sizes (900×600 to 1920×1080), dark and light. Tests always work on temporary copies of the synthetic fixture library in `crates/dj-core/tests/fixtures/`. See [docs/TESTING.md](docs/TESTING.md), [dj_assistant_flutter/MIGRATION.md](dj_assistant_flutter/MIGRATION.md), [ROADMAP.md](ROADMAP.md) and [docs/UPDATES.md](docs/UPDATES.md). Release notes: [docs/RELEASE_NOTES_2.md](docs/RELEASE_NOTES_2.md).
 
 ## Known limitations
 
-- **Not yet hand-tested on a real Windows PC, a real library or alongside Serato** — automated tests run on Windows CI. Please work through the manual checklist in docs/TESTING.md, starting with copies of your music.
-- Installer unsigned (SmartScreen warning).
-- Video: WMV, FLV, MPEG, MTS/M2TS, 3GP and VOB are listed as unsupported. Opus audio (common in WebM) and AVI audio can't be analysed yet. Videos are never written to.
-- Analysis is estimation: half/double tempo and relative/modal key confusion happen; energy is relative to your own library.
-- Online services and the AI assistant were verified with recorded responses, a scripted model and a fake local model server in tests. Live calls to Anthropic, MusicBrainz, AcoustID, Last.fm or a real Ollama install could not be made from the build environment.
-- Stem separation is not included. Physical file moves/renames are deliberately not offered (they break Serato links).
-- Serato crate parsing follows the community-documented format; it is read-only and may need updates if Serato changes it.
+- **Not yet hand-tested on a real Windows PC with a real library and Serato.** Automated tests run on Linux and Windows CI with synthetic files. Please work through the 2.4 checklist in [docs/TESTING.md](docs/TESTING.md), starting with copies of your music.
+- Installer not code-signed (SmartScreen warning).
+- Analysis is estimation: half/double tempo and relative-key confusion happen; energy is relative to your library. Ogg Vorbis and Opus are catalogued but not analysed.
+- Serato file formats follow community documentation. They are only read, and may need updates if Serato changes them.
+- Live calls to online services and AI providers can't be made from the build environment; they are tested with recorded responses and fakes.
+
+## Legacy 1.x (React + Tauri)
+
+1.x (last release 1.8.1) is a Tauri app: a Rust engine in `crates/dj-core` and `crates/dj-online`, a React/TypeScript interface in `src/`, and the shell in `src-tauri/`. Its workflows (`ci.yml`, `release.yml`) still build it, but new releases come from `release-flutter.yml`. 2.x opens the same catalogue (`catalogue.sqlite3`, the same numbered schema) and `accounts.json`. New 2.x data lives in extra tables that 1.x ignores, so a library can still be opened by 1.8. Features added after 2.0 exist only in 2.x.
+
+To build 1.x: Rust 1.97, Node 22, then `npm ci`, `cargo test -p dj-core -p dj-online`, `npm test`, `npx tauri build --config src-tauri/tauri.ci.conf.json`.
 
 ## Licence
 
-MIT. Third-party licences: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (includes Symphonia under MPL-2.0; its source is published on crates.io).
+MIT. Third-party licences: [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
