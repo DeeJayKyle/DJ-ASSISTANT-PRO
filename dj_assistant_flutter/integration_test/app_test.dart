@@ -33,6 +33,7 @@ const pages = [
   'discovery',
   'gig',
   'gig-pack',
+  'upgrades',
   'settings',
   'studio:remix',
   'studio:dj',

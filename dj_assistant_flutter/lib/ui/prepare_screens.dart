@@ -14,6 +14,7 @@ import '../core/library.dart';
 import '../core/library_edit.dart';
 import '../core/next_track.dart';
 import '../online/http_online.dart' show appVersion;
+import '../online/online.dart' show onlineServices;
 import 'format.dart';
 import 'state.dart';
 import 'theme.dart';
@@ -1218,6 +1219,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
                         label: const Text('Similar artists on Last.fm'),
                       ),
                     ),
+                  if (crateId != null) HintText('Last.fm: ${_sends('lastfm')}'),
                 ],
               ),
             ),
@@ -1335,7 +1337,9 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
             width: 560,
             child: Panel(
               title: 'Recommendations',
-              subtitle: 'From Last.fm (similar artists/tracks) and MusicBrainz (new releases from artists you follow). Online services must be on in Settings.',
+              subtitle:
+                  'From Last.fm (similar artists/tracks) and MusicBrainz (new releases from artists you follow). Both are off until you turn them on in Settings → Online services. '
+                  'Last.fm receives: ${_sends('lastfm')} MusicBrainz receives: ${_sends('musicbrainz')}',
               trailing: TextButton(
                 onPressed: () async {
                   final n = await guard(
@@ -1635,3 +1639,7 @@ class _NextUpPanelState extends ConsumerState<NextUpPanel> {
     );
   }
 }
+
+/// What an online service receives, in its own words (Settings shows the same).
+String _sends(String id) =>
+    onlineServices.where((x) => x.id == id).firstOrNull?.sends ?? '';

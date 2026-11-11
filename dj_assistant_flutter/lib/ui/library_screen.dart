@@ -17,6 +17,7 @@ import 'theme.dart';
 import 'track_detail.dart';
 import 'widgets.dart';
 import 'crates_screen.dart';
+import 'organise_preview.dart' show replaceWithBetterFile;
 import 'remove_dialog.dart';
 import 'write_dialog.dart';
 
@@ -277,6 +278,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           value: 'write',
           child: Text('Write tags to files…'),
         ),
+        const PopupMenuItem(value: 'organise', child: Text('Organise…')),
+        if (ids.length == 1)
+          const PopupMenuItem(
+            value: 'replace',
+            child: Text('Replace with a better file…'),
+          ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'delete',
@@ -315,9 +322,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         _invert(s, eff);
       case 'write':
         await showWriteDialog(context, ref, ids);
+      case 'organise':
+        _organise(ids);
+      case 'replace':
+        await replaceWithBetterFile(context, ref, ids.single);
       case 'delete':
         await _delete(context, ids);
     }
+  }
+
+  void _organise(List<int> ids) {
+    ref.read(organiseTargetProvider.notifier).set((
+      '${plural(ids.length, 'selected track')} from the Library',
+      ids,
+    ));
+    ref.read(viewProvider.notifier).go('organize');
   }
 
   LibraryQuery _sub = const LibraryQuery();
@@ -987,6 +1006,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               onPressed: () => showWriteDialog(context, ref, ids),
               icon: const Icon(Icons.edit_note, size: 18),
               label: const Text('Write tags to files…'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _organise(ids),
+              icon: const Icon(Icons.drive_file_move_outline, size: 18),
+              label: const Text('Organise…'),
             ),
             MenuAnchor(
               builder: (c, ctl, _) => OutlinedButton.icon(

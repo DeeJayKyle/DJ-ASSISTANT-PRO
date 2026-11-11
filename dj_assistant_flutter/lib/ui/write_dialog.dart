@@ -22,18 +22,24 @@ Future<void> showWriteDialog(
   WidgetRef ref,
   List<int> ids, {
   Map<String, String> initial = const {},
+  bool fromCatalogue = false,
 }) async {
   final s = ref.read(sessionProvider);
   if (!s.safeWrite.enabled) {
     toast(
-      'Writing tags to files is turned off. Turn on “Allow file changes” in Settings first.',
+      'Writing tags to files is turned off. Turn on “Write tags to music files” or Organise Files mode in Settings → Changes to music files first.',
       error: true,
     );
     return;
   }
   await showDialog<void>(
     context: context,
-    builder: (c) => _WriteDialog(ids: ids, initial: initial, ref: ref),
+    builder: (c) => _WriteDialog(
+      ids: ids,
+      initial: initial,
+      ref: ref,
+      fromCatalogue: fromCatalogue,
+    ),
   );
 }
 
@@ -42,7 +48,12 @@ class _WriteDialog extends StatefulWidget {
     required this.ids,
     required this.initial,
     required this.ref,
+    this.fromCatalogue = false,
   });
+
+  /// Write each track's own catalogue values (titles, genres, years…) instead
+  /// of one set of values typed here.
+  final bool fromCatalogue;
   final List<int> ids;
   final Map<String, String> initial;
   final WidgetRef ref;
@@ -63,6 +74,33 @@ class _WriteDialogState extends State<_WriteDialog> {
   bool busy = false;
   (int, int)? done;
 
+  /// Indexes of the previewed files the DJ ticked.
+  final chosen = <int>{};
+  bool estimates = false;
+
+  void _setPlan(List<PlannedChange> p) {
+    plan = p;
+    chosen
+      ..clear()
+      ..addAll([
+        for (var i = 0; i < p.length; i++)
+          if (p[i].blocked == null) i,
+      ]);
+    err = null;
+  }
+
+  void _previewCatalogue() {
+    try {
+      setState(
+        () => _setPlan(
+          svc.previewFromCatalogue(widget.ids, includeEstimates: estimates),
+        ),
+      );
+    } on Object catch (e) {
+      setState(() => err = '$e');
+    }
+  }
+
   SafeWriteService get svc => widget.ref.read(sessionProvider).safeWrite;
 
   void _preview() {
@@ -76,10 +114,7 @@ class _WriteDialogState extends State<_WriteDialog> {
       return;
     }
     try {
-      setState(() {
-        plan = svc.preview(widget.ids, values);
-        err = null;
-      });
+      setState(() => _setPlan(svc.preview(widget.ids, values)));
     } on Object catch (e) {
       setState(() => err = '$e');
     }
@@ -88,7 +123,10 @@ class _WriteDialogState extends State<_WriteDialog> {
   void _apply() {
     setState(() => busy = true);
     try {
-      final res = svc.apply(plan!);
+      final res = svc.apply([
+        for (var i = 0; i < plan!.length; i++)
+          if (chosen.contains(i)) plan![i],
+      ]);
       final ok = res.where((r) => r['status'] == 'done').length;
       final failed = res.where((r) => r['status'] == 'failed').toList();
       if (failed.isNotEmpty) toast('${failed.first['message']}', error: true);
@@ -104,7 +142,7 @@ class _WriteDialogState extends State<_WriteDialog> {
   @override
   Widget build(BuildContext context) {
     final t = DjTokens.of(context);
-    final changes = plan?.where((p) => p.blocked == null).toList() ?? const [];
+    final ready = plan?.where((p) => p.blocked == null).length ?? 0;
     Widget body;
     if (done != null) {
       body = Column(
@@ -121,6 +159,28 @@ class _WriteDialogState extends State<_WriteDialog> {
             'Each original was backed up and verified first. You can undo any change in Settings → Change log.',
             style: TextStyle(color: t.faint),
             textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    } else if (plan == null && widget.fromCatalogue) {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "${widget.ids.length} track${widget.ids.length == 1 ? '' : 's'}. Each file gets its own catalogue values (your edits and accepted suggestions: title, artist, album, genre, year, BPM, key). Files that already match are left out. The next step shows every change before anything is written.",
+            style: TextStyle(color: t.muted),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: estimates,
+            onChanged: (v) => setState(() => estimates = v ?? false),
+            title: const Text(
+              'Also fill missing BPM and key from the audio analysis',
+            ),
+            subtitle: const Text(
+              'Estimates, not facts; only used where the file has none.',
+            ),
           ),
         ],
       );
@@ -179,13 +239,39 @@ class _WriteDialogState extends State<_WriteDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Exact changes. Nothing has been written yet.',
+            plan!.isEmpty ? 'Nothing to change — these files already match.' : 'Exact changes. Nothing has been written yet. Untick any file you want to leave as it is.',
             style: TextStyle(color: t.faint),
           ),
+          if (ready > 0)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              tristate: true,
+              value: chosen.length == ready
+                  ? true
+                  : (chosen.isEmpty ? false : null),
+              onChanged: (_) => setState(() {
+                if (chosen.length == ready) {
+                  chosen.clear();
+                } else {
+                  for (var i = 0; i < plan!.length; i++) {
+                    if (plan![i].blocked == null) chosen.add(i);
+                  }
+                }
+              }),
+              title: Text('${chosen.length} of $ready files ticked'),
+            ),
           const SizedBox(height: 8),
-          for (final p in plan!)
-            ListTile(
+          for (final (i, p) in plan!.indexed)
+            CheckboxListTile(
               dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: chosen.contains(i),
+              onChanged: p.blocked != null
+                  ? null
+                  : (v) => setState(
+                      () => v == true ? chosen.add(i) : chosen.remove(i),
+                    ),
               title: Text(
                 p.path,
                 style: const TextStyle(
@@ -213,7 +299,9 @@ class _WriteDialogState extends State<_WriteDialog> {
     return AlertDialog(
       title: const Text('Write tags to music files'),
       content: SizedBox(
-        width: 640,
+        width: (MediaQuery.sizeOf(context).width - 64)
+            .clamp(320, 760)
+            .toDouble(),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -242,11 +330,11 @@ class _WriteDialogState extends State<_WriteDialog> {
                 child: const Text('Back'),
               ),
               FilledButton(
-                onPressed: changes.isEmpty || busy ? null : _apply,
+                onPressed: chosen.isEmpty || busy ? null : _apply,
                 child: Text(
                   busy
                       ? 'Writing…'
-                      : 'Back up and write ${changes.length} file${changes.length == 1 ? '' : 's'}',
+                      : 'Back up and write ${chosen.length} file${chosen.length == 1 ? '' : 's'}',
                 ),
               ),
             ]
@@ -256,7 +344,7 @@ class _WriteDialogState extends State<_WriteDialog> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: _preview,
+                onPressed: widget.fromCatalogue ? _previewCatalogue : _preview,
                 child: const Text('Preview changes'),
               ),
             ],

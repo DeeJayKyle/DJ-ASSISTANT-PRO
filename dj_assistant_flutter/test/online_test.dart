@@ -262,15 +262,30 @@ void main() {
       cat.db.select('SELECT 1 FROM catalog_checked WHERE track_id=?', [id]),
       hasLength(1),
     );
-    // Auto-prep applies what the catalogues agree on.
+    // In review-first mode (the default) auto-prep changes nothing...
     final jobs = JobsController();
-    final st = await jobs.start(
+    var st0 = await jobs.start(
       'auto_prep',
       autoPrepJob(dbPath, onlineSteps: [_fakeAutoPrepStep]),
     );
-    expect(st.state, 'completed', reason: st.message);
+    expect(st0.state, 'completed', reason: st0.message);
+    expect((st0.result! as Map)['fixes_applied'], 0);
+    expect(LibraryService(cat).row(id)!.year, 2016);
+    // ...and with "Apply confident fixes" it applies what the catalogues agree on.
+    cat.setSetting('fix_mode', 'auto');
+    st0 = await jobs.start(
+      'auto_prep',
+      autoPrepJob(dbPath, onlineSteps: [_fakeAutoPrepStep]),
+    );
+    expect(st0.state, 'completed', reason: st0.message);
     final row = LibraryService(cat).row(id)!;
     expect(row.year, 2014);
+    // Every automatic change can be undone exactly.
+    final (undone, kept) = sugg.undoAuto();
+    expect(undone, greaterThanOrEqualTo(1));
+    expect(kept, 0);
+    expect(LibraryService(cat).row(id)!.year, 2016);
+    expect(pending(id, 'year')!.suggestedValue, '2014');
     // the file already had a genre: the catalogue's is suggested, not forced
     expect(row.genre, 'Afrobeats');
     expect(genre.confidence, lessThan(0.85));

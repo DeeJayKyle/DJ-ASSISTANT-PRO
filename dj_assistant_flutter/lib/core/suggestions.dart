@@ -18,6 +18,20 @@ const suggestionFields = [
   'record_label',
 ];
 
+/// The `track_user` column behind each suggestion field.
+const suggestionColumns = {
+  'title': 'title',
+  'artist': 'artist',
+  'album': 'album',
+  'genre': 'genre',
+  'year': 'year',
+  'original_year': 'original_year',
+  'bpm': 'bpm',
+  'key': 'musical_key',
+  'version_label': 'version_label',
+  'record_label': 'record_label',
+};
+
 /// Records (or refreshes) a pending suggestion. Nothing is written to files; the
 /// DJ accepts suggestions into the catalogue. Ignored when the value is empty or
 /// already the current one.
@@ -204,8 +218,10 @@ class SuggestionsService {
   };
 
   /// Accepts a suggestion (optionally edited) into the catalogue; other pending
-  /// suggestions for the same field are superseded.
-  void accept(int id, {String? edited}) {
+  /// suggestions for the same field are superseded. The catalogue's previous
+  /// value is kept in `suggestion_decisions`, so [undo] can restore it exactly.
+  /// [by] is 'you' for the DJ's own approvals and 'auto' for auto-prep.
+  void accept(int id, {String? edited, String by = 'you'}) {
     final rows = cat.db.select(
       'SELECT track_id, field, suggested_value FROM suggestions WHERE id=?',
       [id],
@@ -230,16 +246,139 @@ class SuggestionsService {
       'bpm' => {'bpm': num(v)},
       _ => throw SuggestionException('unknown field'),
     };
+    final (had, previous) = _override(trackId, field);
     LibraryService(cat).updateUserFields([trackId], patch);
+    final (_, applied) = _override(trackId, field);
     final now = nowMs();
     cat.db.execute(
       "UPDATE suggestions SET status='accepted', decided_at=? WHERE id=?",
       [now, id],
     );
     cat.db.execute(
+      'INSERT OR REPLACE INTO suggestion_decisions(suggestion_id, track_id, field, had_override, previous_value, applied_value, decided_by, at) '
+      'VALUES (?,?,?,?,?,?,?,?)',
+      [id, trackId, field, had ? 1 : 0, previous, applied, by, now],
+    );
+    cat.db.execute(
       "UPDATE suggestions SET status='rejected', decided_at=? WHERE track_id=? AND field=? AND status='pending' AND id<>?",
       [now, trackId, field, id],
     );
+  }
+
+  /// The DJ's own (catalogue) value for [field] on a track, as stored text, and
+  /// whether a `track_user` row existed.
+  (bool, String?) _override(int trackId, String field) {
+    final col = suggestionColumns[field];
+    if (col == null) throw SuggestionException('unknown field');
+    final r = cat.db.select(
+      'SELECT $col AS v FROM track_user WHERE track_id=?',
+      [trackId],
+    );
+    if (r.isEmpty) return (false, null);
+    final v = r.first['v'];
+    return (true, v?.toString());
+  }
+
+  /// Who decided an accepted suggestion: 'you', 'auto', or null when it was
+  /// accepted before decisions were recorded (no exact undo possible).
+  Map<int, String> decidedBy(Iterable<int> ids) {
+    final list = ids.toList();
+    if (list.isEmpty) return const {};
+    final out = <int, String>{};
+    for (var i = 0; i < list.length; i += 500) {
+      final part = list.sublist(i, (i + 500).clamp(0, list.length));
+      for (final r in cat.db.select(
+        'SELECT suggestion_id, decided_by FROM suggestion_decisions WHERE undone_at IS NULL AND suggestion_id IN (${List.filled(part.length, '?').join(',')})',
+        part,
+      )) {
+        out[r['suggestion_id'] as int] = r['decided_by'] as String;
+      }
+    }
+    return out;
+  }
+
+  /// Undoes an accepted suggestion: the catalogue value goes back to exactly what
+  /// it was before (or the file's own tag, if there was no catalogue value), and
+  /// the suggestion is pending again. Refused when the value has been changed
+  /// since, so a later edit is never overwritten.
+  void undo(int id) {
+    final rows = cat.db.select(
+      "SELECT d.track_id, d.field, d.previous_value, d.applied_value FROM suggestion_decisions d "
+      "JOIN suggestions s ON s.id=d.suggestion_id WHERE d.suggestion_id=? AND d.undone_at IS NULL AND s.status='accepted'",
+      [id],
+    );
+    if (rows.isEmpty) {
+      throw SuggestionException(
+        'This was accepted before DJ Assistant kept the previous value, so it can\'t be undone exactly. Edit the track instead.',
+      );
+    }
+    final r = rows.first;
+    final trackId = r['track_id'] as int, field = r['field'] as String;
+    final (_, now) = _override(trackId, field);
+    if (now != r['applied_value']) {
+      throw SuggestionException(
+        'The $field has been changed since this was accepted, so it was left as it is.',
+      );
+    }
+    final prev = r['previous_value'] as String?;
+    Object? value = prev;
+    if (prev != null) {
+      if (field == 'year' || field == 'original_year') {
+        value = int.tryParse(prev);
+      } else if (field == 'bpm') {
+        value = double.tryParse(prev);
+      }
+    }
+    LibraryService(cat).updateUserFields([trackId], {field: value});
+    final t = nowMs();
+    cat.db.execute(
+      "UPDATE suggestions SET status='pending', decided_at=NULL WHERE id=?",
+      [id],
+    );
+    cat.db.execute(
+      'UPDATE suggestion_decisions SET undone_at=? WHERE suggestion_id=?',
+      [t, id],
+    );
+  }
+
+  /// Accepts each of [ids] (still pending ones only). Returns (accepted, failed).
+  (int, int) acceptMany(Iterable<int> ids) => _many(ids, (id) {
+    if (!_stillPending(id)) return false;
+    accept(id);
+    return true;
+  });
+
+  (int, int) rejectMany(Iterable<int> ids) => _many(ids, (id) {
+    if (!_stillPending(id)) return false;
+    reject(id);
+    return true;
+  });
+
+  (int, int) undoMany(Iterable<int> ids) => _many(ids, (id) {
+    undo(id);
+    return true;
+  });
+
+  /// Undoes every change auto-prep made that is still in place and unchanged.
+  (int, int) undoAuto() => undoMany(
+    cat.db
+        .select(
+          "SELECT d.suggestion_id FROM suggestion_decisions d JOIN suggestions s ON s.id=d.suggestion_id "
+          "WHERE d.decided_by='auto' AND d.undone_at IS NULL AND s.status='accepted' ORDER BY d.at DESC",
+        )
+        .map((r) => r['suggestion_id'] as int),
+  );
+
+  (int, int) _many(Iterable<int> ids, bool Function(int) f) {
+    var ok = 0, failed = 0;
+    for (final id in ids.toList()) {
+      try {
+        if (f(id)) ok++;
+      } on Exception {
+        failed++;
+      }
+    }
+    return (ok, failed);
   }
 
   void reject(int id) {
@@ -283,7 +422,11 @@ class SuggestionsService {
 
   /// Fills empty fields from the best suggestion at or above [minFill]; replaces an
   /// existing value only at or above [minReplace].
-  int acceptRecommended(double minFill, double minReplace) {
+  int acceptRecommended(
+    double minFill,
+    double minReplace, {
+    String by = 'you',
+  }) {
     var n = 0;
     for (final s in list(status: 'pending')) {
       if (!autoFields.contains(s.field)) continue;
@@ -291,7 +434,7 @@ class SuggestionsService {
       if ((s.confidence ?? 0) < (empty ? minFill : minReplace)) continue;
       if (!_stillPending(s.id)) continue;
       try {
-        accept(s.id);
+        accept(s.id, by: by);
         n++;
       } on Exception {
         // left pending

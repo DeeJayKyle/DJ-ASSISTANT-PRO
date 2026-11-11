@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/organize.dart' show organiseModeOn;
 import 'format.dart';
+import 'organise_preview.dart';
 import 'state.dart';
 
 /// Asks how to delete [ids] and does it. By default songs leave the library
@@ -16,7 +18,7 @@ Future<bool> showRemoveDialog(
 ) async {
   if (ids.isEmpty) return false;
   final s = ref.read(sessionProvider);
-  final filesAllowed = s.cat.getSetting('allow_file_changes') == '1';
+  final filesAllowed = organiseModeOn(s.cat);
   var moveFiles = false;
   final ok = await showDialog<bool>(
     context: context,
@@ -50,8 +52,8 @@ Future<bool> showRemoveDialog(
                       ),
                       subtitle: Text(
                         filesAllowed
-                            ? 'The files leave your music folders. Undo from Organise Files.'
-                            : 'Turn on "Allow changes to music files" in Settings → Safety to use this.',
+                            ? 'You see every file first and approve them. They leave your music folders for the restorable Removed files area. Undo from Organise Files.'
+                            : 'Turn on Organise Files mode in Settings → Changes to music files to use this.',
                       ),
                     ),
                   ],
@@ -74,13 +76,19 @@ Future<bool> showRemoveDialog(
     ),
   );
   if (ok != true) return false;
+  if (moveFiles) {
+    // The files move only after the full preview, with each one approved.
+    final plan = await guard(() => s.organize.previewRemove(ids));
+    if (plan == null || !context.mounted) return false;
+    final r = await showOrganisePreview(
+      context,
+      ref,
+      plan,
+      title: 'Move ${plural(ids.length, 'file')} to Removed files',
+    );
+    return r != null && r.done > 0;
+  }
   final r = await guard(() {
-    if (moveFiles) {
-      final plan = s.organize.previewRemove(ids);
-      final done = s.organize.apply(plan);
-      return 'Moved ${plural(done.done, 'file')} to Removed files'
-          '${done.skipped.isEmpty ? '' : ' (${done.skipped.length} skipped)'}. Undo from Organise Files.';
-    }
     final n = s.removal.removeFromLibrary(ids);
     return 'Removed ${plural(n, 'song')} from the library. The files are untouched.';
   }, bump: ref);

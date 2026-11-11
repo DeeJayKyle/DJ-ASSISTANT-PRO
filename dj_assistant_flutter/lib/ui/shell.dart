@@ -49,6 +49,8 @@ const _prepare = [
   _Nav('suggestions', 'Suggestions', Icons.auto_fix_high_outlined),
   _Nav('gig', 'Gig Mode', Icons.sensors),
   _Nav('gig-pack', 'Gig Pack', Icons.usb_outlined),
+  // Last, so Ctrl+1…9 still open the same pages as before.
+  _Nav('upgrades', 'Upgrades', Icons.high_quality_outlined),
 ];
 
 class NavPage {
@@ -132,6 +134,29 @@ class Shell extends ConsumerStatefulWidget {
 
 class _ShellState extends ConsumerState<Shell> {
   bool _dragging = false;
+
+  /// The assistant's width while it is being resized (saved when done).
+  double? _chatDrag;
+
+  static const _chatMin = 280.0;
+
+  double _savedChatWidth() {
+    final prefs = ref.read(settingsProvider)['ui_prefs'];
+    final v = prefs is Map ? prefs['chat_width'] : null;
+    return v is num ? v.toDouble() : 0;
+  }
+
+  void _saveChatWidth(double w) {
+    final s = ref.read(sessionProvider);
+    final prefs = ref.read(settingsProvider)['ui_prefs'];
+    guard(
+      () => s.settings.set('ui_prefs', {
+        if (prefs is Map) ...prefs.cast<String, Object?>(),
+        'chat_width': w.round(),
+      }),
+      bump: ref,
+    );
+  }
 
   Future<void> _dropped(List<String> paths) async {
     setState(() => _dragging = false);
@@ -222,6 +247,13 @@ class _ShellState extends ConsumerState<Shell> {
         const SingleActivator(LogicalKeyboardKey.keyJ, control: true): () => ref
             .read(chatModeProvider.notifier)
             .set(chat == 'hidden' ? 'open' : 'hidden'),
+        const SingleActivator(
+          LogicalKeyboardKey.keyJ,
+          control: true,
+          shift: true,
+        ): () => ref
+            .read(chatModeProvider.notifier)
+            .set(chat == 'full' ? 'open' : 'full'),
         // navigation
         const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): () =>
             ref.read(viewProvider.notifier).back(),
@@ -274,7 +306,41 @@ class _ShellState extends ConsumerState<Shell> {
                   builder: (context, box) {
                     final w = box.maxWidth;
                     final rail = w < 1240;
-                    final chatW = w < 1280 ? 320.0 : (w < 1600 ? 360.0 : 400.0);
+                    // Narrow windows: the assistant floats over the page
+                    // instead of squeezing it, and stays open.
+                    final overlay = w < 960;
+                    final sideW = rail ? 72.0 : 240.0;
+                    final maxChat = (w - sideW - 520).clamp(_chatMin, 720.0);
+                    final auto = w < 1280 ? 320.0 : (w < 1600 ? 360.0 : 400.0);
+                    final saved = _savedChatWidth();
+                    final chatW = overlay
+                        ? (w * 0.86).clamp(_chatMin, 420.0)
+                        : (_chatDrag ?? (saved > 0 ? saved : auto))
+                              .clamp(_chatMin, maxChat)
+                              .toDouble();
+                    final page = Expanded(
+                      child: Stack(
+                        children: [
+                          // Studio stays mounted once opened, so decks keep playing.
+                          Offstage(
+                            offstage: !studio,
+                            child: const StudioHost(),
+                          ),
+                          if (!studio) Positioned.fill(child: body),
+                          if (overlay && chat == 'open')
+                            Positioned(
+                              top: 0,
+                              bottom: 0,
+                              right: 0,
+                              width: chatW,
+                              child: const Material(
+                                elevation: 4,
+                                child: AssistantPanel(),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
                     return Column(
                       children: [
                         const _TitleBar(),
@@ -285,24 +351,24 @@ class _ShellState extends ConsumerState<Shell> {
                               if (chat != 'full') _Sidebar(rail: rail),
                               if (chat != 'full')
                                 const VerticalDivider(width: 1),
-                              if (chat != 'full')
-                                Expanded(
-                                  child: Stack(
-                                    children: [
-                                      // Studio stays mounted once opened, so decks keep playing.
-                                      Offstage(
-                                        offstage: !studio,
-                                        child: const StudioHost(),
-                                      ),
-                                      if (!studio) Positioned.fill(child: body),
-                                    ],
-                                  ),
+                              if (chat != 'full') page,
+                              if (chat == 'open' && !overlay) ...[
+                                _ResizeHandle(
+                                  width: chatW,
+                                  min: _chatMin,
+                                  max: maxChat,
+                                  onChanged: (v) =>
+                                      setState(() => _chatDrag = v),
+                                  onDone: (v) {
+                                    _saveChatWidth(v);
+                                    setState(() => _chatDrag = null);
+                                  },
                                 ),
-                              if (chat == 'open')
                                 SizedBox(
                                   width: chatW,
                                   child: const AssistantPanel(),
                                 ),
+                              ],
                               if (chat == 'full')
                                 const Expanded(child: AssistantPanel()),
                             ],
@@ -312,6 +378,88 @@ class _ShellState extends ConsumerState<Shell> {
                       ],
                     );
                   },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The divider between the page and the assistant: drag it, or focus it and
+/// use the Left and Right arrow keys, to change the assistant's width.
+class _ResizeHandle extends StatefulWidget {
+  const _ResizeHandle({
+    required this.width,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    required this.onDone,
+  });
+  final double width, min, max;
+  final ValueChanged<double> onChanged, onDone;
+  @override
+  State<_ResizeHandle> createState() => _ResizeHandleState();
+}
+
+class _ResizeHandleState extends State<_ResizeHandle> {
+  bool hover = false, focused = false;
+  double? start, startX;
+
+  void _set(double v, {bool done = false}) {
+    final c = v.clamp(widget.min, widget.max).toDouble();
+    done ? widget.onDone(c) : widget.onChanged(c);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DjTokens.of(context);
+    final active = hover || focused || start != null;
+    return Semantics(
+      label: 'Assistant width',
+      value: '${widget.width.round()} pixels',
+      hint: 'Use the left and right arrow keys to resize',
+      child: Focus(
+        onFocusChange: (f) => setState(() => focused = f),
+        onKeyEvent: (_, e) {
+          if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          if (e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            _set(widget.width + 24, done: true);
+            return KeyEventResult.handled;
+          }
+          if (e.logicalKey == LogicalKeyboardKey.arrowRight) {
+            _set(widget.width - 24, done: true);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.resizeColumn,
+          onEnter: (_) => setState(() => hover = true),
+          onExit: (_) => setState(() => hover = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (d) => setState(() {
+              start = widget.width;
+              startX = d.globalPosition.dx;
+            }),
+            onHorizontalDragUpdate: (d) =>
+                _set(start! - (d.globalPosition.dx - startX!)),
+            onHorizontalDragEnd: (_) {
+              _set(widget.width, done: true);
+              setState(() => start = null);
+            },
+            onDoubleTap: () => _set(widget.min + 80, done: true),
+            child: SizedBox(
+              width: 6,
+              child: Center(
+                child: Container(
+                  width: active ? 3 : 1,
+                  color: active ? t.accent : t.line,
                 ),
               ),
             ),
@@ -922,15 +1070,34 @@ class _StatusBar extends ConsumerWidget {
           const SizedBox(width: 6),
           Text('Local catalogue', style: st()),
           const SizedBox(width: 16),
-          Tooltip(
-            message: 'Music files are only read. The optional tag writer needs your approval for every change.',
-            child: Row(
-              children: [
-                Icon(Icons.lock_outline, size: 13, color: t.faint),
-                const SizedBox(width: 4),
-                Text('Source files read-only', style: st()),
-              ],
-            ),
+          Builder(
+            builder: (context) {
+              final set = ref.watch(settingsProvider);
+              final organise = set['organise_mode'] == true;
+              final tags = set['allow_file_changes'] == true;
+              final writable = organise || tags;
+              return Tooltip(
+                message: writable
+                    ? '${organise ? 'Organise Files mode' : 'Tag writing'} is on: music files can change, but only after a preview you approve, with a verified backup or restorable copy. Turn it off in Settings → Changes to music files.'
+                    : 'Music files are only read. Tag writing and Organise Files mode are off.',
+                child: Row(
+                  children: [
+                    Icon(
+                      writable ? Icons.lock_open_outlined : Icons.lock_outline,
+                      size: 13,
+                      color: writable ? t.warn : t.faint,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      writable
+                          ? (organise ? 'Organise mode on' : 'Tag writing on')
+                          : 'Source files read-only',
+                      style: writable ? st().copyWith(color: t.warn) : st(),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(width: 16),
           Tooltip(

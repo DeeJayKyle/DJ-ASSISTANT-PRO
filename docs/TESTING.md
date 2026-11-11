@@ -1,6 +1,62 @@
 # Testing
 
-## Automated (run on every push)
+## DJ Assistant 2.x (Flutter, current release)
+
+### Automated (`.github/workflows/flutter.yml`, every push)
+
+| Suite | What it proves |
+|---|---|
+| `dart format`, `flutter analyze --fatal-infos` | Format and lint clean |
+| `flutter test` (Linux; Windows adds Media Foundation, Pro Stems AI and MP3/M4A Studio tests) | Services, parsers, golden files shared with 1.x, network audit, library safety |
+| `test/screens/screens_test.dart` | Every page at 900×600, 1024×640, 1280×720, 1366×768, 1100×720, 1440×900 and 1920×1080, dark and light, with no overflow or layout error; long names with the assistant open, full and hidden; `SCREENSHOTS=<dir>` saves them |
+| `integration_test/app_test.dart` | Drives the real app on Linux (Xvfb) and Windows |
+| `installer/test-upgrade.ps1` (Windows) | 1.8.1 → 2.x and 2.x → 2.x updates keep data |
+
+Tests for 2.4:
+
+| Requirement | Test |
+|---|---|
+| Auto-prep is review-first: nothing accepted, files unchanged | `watch_autoprep_test.dart` — *auto-prep is review-first by default* |
+| "Fill empty fields" never replaces a value | `watch_autoprep_test.dart` — *fill-empty mode…* |
+| "Apply confident fixes" (old behaviour) and exact undo of every automatic change | `watch_autoprep_test.dart`, `online_test.dart` — *catalogues fix BPM, year and genre…* |
+| Organise mode off by default, own switch, legacy libraries keep it | `organize_test.dart` — *Organise Files mode…* |
+| Only approved items apply; moved file's hash recorded and matches | `organize_test.dart` — *only the approved items…* |
+| Replacement: verified copy in, original kept and verified, crates kept, source untouched, undo restores exact bytes, nothing deleted | `organize_test.dart` — *replace a track…* |
+| Replacement with another format; emptying Removed files never deletes the track | `organize_test.dart` — *replace with another format…* |
+| Serato notes from `database V2` and crates; Serato's files byte-identical afterwards | `organize_test.dart` — *previews say which tracks Serato knows about* |
+| Low-bitrate list honours the setting; lossless never listed; owned copies; file facts; loudness matching; caveat wording | `upgrades_test.dart` |
+| Pages fit small laptops, long names, assistant modes | `screens/screens_test.dart` |
+
+All tests work on temporary copies of the synthetic fixture library (`crates/dj-core/tests/fixtures/library`) or files they create. None touch a real library.
+
+### Manual tests for 2.4 — NOT yet performed (need a Windows 10/11 PC with Serato DJ)
+
+Use **copies**: copy a few albums and a copy of the `_Serato_` folder to a test drive or user account, and point Serato at that copy, not your live library. Record the date, Windows version, Serato version and result.
+
+| # | Test | Expected |
+|---|---|---|
+| W1 | Update from 2.3 to 2.4 | Library, crates, settings kept. Suggestions shows the one-time notice. Settings → Library → Metadata suggestions = *Review first* |
+| W2 | Scan new music with auto-prep on | Suggestions appear; no catalogue value changes until approved |
+| W3 | Approve 3 single suggestions, then a batch of 10; undo one and the batch | Values change, then return exactly to what they were |
+| W4 | Window at 1280×720 and 1366×768, at 100%, 125% and 150% scaling; a narrow window | Every page readable, no clipped buttons; assistant docked, resizable, overlay when narrow |
+| W5 | Keyboard only: Tab through Suggestions, Organise preview, Upgrades; resize the assistant with arrow keys; Ctrl+J, Ctrl+Shift+J; Narrator | Everything reachable and announced; ticks and buttons have names |
+| W6 | Organise mode on; rename 5 copied tracks that are in a copied Serato crate | Preview shows Serato notes for those 5; after applying, Serato shows them missing; *Relocate lost files* finds them; cues and beatgrids intact |
+| W7 | Undo the rename batch | Files back under their old names; Serato finds them again |
+| W8 | Move tracks into `{genre}` folders; rename a folder | Same as W6/W7 |
+| W9 | Replace a copied 128 kbps MP3 that has Serato cues with a better MP3 of the same song | Preview warns that cues stay with the old file. New file has the old name; Serato's crate still lists it; old file in Removed files; undo restores the original and its cues |
+| W10 | Replace with a FLAC | Name gains `.flac`; preview warns links break; Serato shows the old name missing |
+| W11 | Remove exact duplicates (after Duplicates → Find exact copies) | Kept copy has the crates/tags; others in Removed files; undo works |
+| W12 | Edit tags in the files from Organise for 5 tracks | Per-file preview; backups in the app's data folder; Serato cues and beatgrids intact; rollback restores exact bytes |
+| W13 | Empty Removed files | The full list is shown first; only files inside Removed files are deleted |
+| W14 | Upgrades: compare two real versions with *Compare*; play both | Loudness-matched playback; facts correct; nothing replaced unless chosen |
+| W15 | A file open in Serato while renaming it | That item is skipped with a clear reason; nothing half-done |
+| W16 | Online services off: use every new page | No network requests (check with Resource Monitor or a firewall log) |
+
+## Legacy 1.x (Tauri) testing
+
+The sections below describe the 1.x test suites and manual checks. They remain valid for the 1.x code in `src/`, `src-tauri/` and `crates/`.
+
+### Automated (run on every push)
 
 | Suite | Where | What it proves |
 |---|---|---|
@@ -92,4 +148,4 @@ These need a real Windows 10/11 PC. Please record date, Windows version and resu
 
 ## Serato
 
-v0.1 does not read or write any Serato data, so there is no Serato integration to test. Before any future integration, tests must be run against a **disposable copy** of a Serato library.
+DJ Assistant reads Serato data (crates, `database V2`, history, and the cues, loops and beatgrids in file tags) and never writes Serato's databases, cues, beatgrids, history or existing crates. Exporting crates adds new `.crate` files only. Every Serato test must use a **disposable copy** of a Serato library (see W6–W12 above).

@@ -24,9 +24,11 @@ import 'theme.dart';
 import 'widgets.dart';
 
 const safetyPoints = [
-  'Your music is only read. DJ Assistant never renames, moves, replaces or deletes music files.',
-  'Tag writing is off by default. If you turn it on, every change is previewed, the original is backed up and verified first, and you can roll it back.',
-  "Serato's databases, crates, cues, beatgrids, history and settings are never written. Serato crates and history can be imported read-only.",
+  'Your music is only read unless you turn on tag writing or Organise Files mode below. Both are off by default.',
+  'With either on, nothing happens silently: every change is listed in a preview, you approve it one by one or in batches, a verified backup or restorable copy is kept, and it can be undone.',
+  'Files are never permanently deleted except when you empty the Removed files area yourself, after seeing what is in it.',
+  'Metadata suggestions wait for your review unless you choose otherwise. Accepting one changes the catalogue only, never the file, and can be undone.',
+  "Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato only adds a new .crate file. Serato crates and history can be imported read-only.",
   "Your ratings, energy, tags, crates, sets and notes stay in DJ Assistant's own catalogue on this computer.",
   'Only folders you choose are scanned. Personal files are a separate, opt-in module.',
   'Core features work offline with no sign-in and no telemetry; accounts live only on this computer. Online services are off until you turn each one on, and each says exactly what it sends.',
@@ -232,28 +234,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 sw(
                   'auto_prep',
                   'Auto-prep after every scan',
-                  sub: 'Analysis, suggestions and confident fixes — into the catalogue only.',
+                  sub: 'Analyses new music and finds suggestions. What happens to the suggestions is chosen below.',
                 ),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Auto-prep applies fixes at or above'),
-                    ),
-                    SizedBox(
-                      width: 220,
-                      child: Slider(
-                        value: ((st['auto_fix_min'] as num?) ?? 0.85)
-                            .toDouble(),
-                        min: 0.5,
-                        max: 1,
-                        divisions: 10,
-                        label:
-                            '${((((st['auto_fix_min'] as num?) ?? 0.85) * 100)).round()}%',
-                        onChanged: (v) =>
-                            _set('auto_fix_min', (v * 100).round() / 100),
+                choice('fix_mode', 'Metadata suggestions', const [
+                  ('review', 'Review first'),
+                  ('fill_empty', 'Fill empty fields'),
+                  ('auto', 'Apply confident fixes'),
+                ]),
+                Text(switch (st['fix_mode']) {
+                  'fill_empty' => 'Auto-prep fills empty fields (title, artist, genre, year…) from the best evidence. Values you already have are never replaced; changes to them wait in Suggestions.',
+                  'auto' => 'Auto-prep fills empty fields and replaces existing values when it is at least as confident as the slider below. This was how DJ Assistant worked before 2.4.',
+                  _ => 'Nothing is changed until you approve it in Suggestions, one at a time or in batches. Recommended.',
+                }, style: TextStyle(color: t.faint, fontSize: DjType.small)),
+                if (st['fix_mode'] == 'auto')
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Replace existing values at or above'),
                       ),
-                    ),
-                  ],
+                      SizedBox(
+                        width: 220,
+                        child: Slider(
+                          value: ((st['auto_fix_min'] as num?) ?? 0.85)
+                              .toDouble(),
+                          min: 0.5,
+                          max: 1,
+                          divisions: 10,
+                          label:
+                              '${((((st['auto_fix_min'] as num?) ?? 0.85) * 100)).round()}%',
+                          onChanged: (v) =>
+                              _set('auto_fix_min', (v * 100).round() / 100),
+                        ),
+                      ),
+                    ],
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Undo automatic changes…'),
+                    onPressed: () async {
+                      final ok = await confirm(
+                        context,
+                        title: 'Undo every automatic change?',
+                        message: 'Every value auto-prep put into your catalogue goes back to what it was before, and the suggestion waits for your review again. Values you have changed since are left as they are. Files are not touched.',
+                        ok: 'Undo them',
+                      );
+                      if (!ok) return;
+                      await guard(() {
+                        final (n, kept) = s.suggestions.undoAuto();
+                        return toast(
+                          'Undid ${plural(n, 'automatic change')}${kept == 0 ? '' : '; ${plural(kept, 'value')} changed since were kept'}.',
+                        );
+                      }, bump: ref);
+                    },
+                  ),
                 ),
               ],
             ),
@@ -428,11 +463,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           gap,
           Panel(
             title: 'Changes to music files',
-            subtitle: 'Off by default. Every change is previewed, backed up, verified and can be rolled back.',
+            subtitle: 'Both off by default. Every change is previewed and approved by you, backed up and verified, and can be undone. Test on copies of your music first.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                sw('allow_file_changes', 'Allow writing to music files'),
+                sw(
+                  'allow_file_changes',
+                  'Write tags to music files',
+                  sub: 'Puts catalogue values into the files\' own tags (MP3, FLAC, M4A) after an exact preview and a verified backup. Serato\'s cue and beatgrid data in the file is kept byte for byte.',
+                ),
+                sw(
+                  'organise_mode',
+                  'Organise Files mode',
+                  sub: 'Adds Organise Files: edit tags, rename and move files or folders, replace tracks and remove duplicates. Renaming or moving a file breaks Serato\'s link to it until you relocate it in Serato; every preview says which tracks Serato knows about.',
+                ),
                 const Text(
                   'Change log',
                   style: TextStyle(fontWeight: FontWeight.w700),

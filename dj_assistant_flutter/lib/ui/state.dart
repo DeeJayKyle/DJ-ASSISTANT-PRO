@@ -178,6 +178,18 @@ final libraryQueryProvider =
       LibraryQueryNotifier.new,
     );
 
+/// Tracks sent from the Library to Organise Files (label, ids), or null.
+class OrganiseTargetNotifier extends Notifier<(String, List<int>)?> {
+  @override
+  (String, List<int>)? build() => null;
+  void set((String, List<int>)? v) => state = v;
+}
+
+final organiseTargetProvider =
+    NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(
+      OrganiseTargetNotifier.new,
+    );
+
 /// Assistant panel: open, full width or hidden.
 class ChatModeNotifier extends Notifier<String> {
   @override

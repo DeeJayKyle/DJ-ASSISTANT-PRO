@@ -713,6 +713,10 @@ const pageAiSuggestions = <String, List<String>>{
     'Run auto-prep on my whole library',
     'What would auto-prep change?',
   ],
+  'upgrades': [
+    'Which low-bitrate tracks do I play most?',
+    'How do I compare two versions by ear?',
+  ],
   'set-studio': [
     'Plan a 3 hour club set from 118 to 128 BPM',
     'Plan a wedding set with a clean-only filter',

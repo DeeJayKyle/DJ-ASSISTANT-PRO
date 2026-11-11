@@ -6,6 +6,7 @@ import 'blake3.dart';
 import 'catalogue.dart';
 import 'keys.dart';
 import 'paths.dart';
+import 'serato_links.dart';
 
 /// File organiser (opt-in), ported from 1.x `organize.rs`: rename files and
 /// folders, move files into a folder layout, and remove broken or unwanted files —
@@ -51,7 +52,7 @@ class FileOp {
     this.tracks = 1,
   });
 
-  /// rename | move | folder_rename | remove
+  /// rename | move | folder_rename | remove | replace
   final String op;
   final int? trackId;
   final String from;
@@ -59,6 +60,15 @@ class FileOp {
   final int? size, mtime;
   String? blocked;
   final int tracks;
+
+  /// For `replace`: the better file that is copied in (it stays where it is).
+  String? source;
+
+  /// What this change would mean in Serato (see [OrganizeService.checkSerato]).
+  String? serato;
+
+  /// Other things to know before approving (a different format, for example).
+  final notes = <String>[];
 
   Map<String, Object?> toJson() => {
     'op': op,
@@ -69,6 +79,9 @@ class FileOp {
     'mtime': mtime,
     'blocked': blocked,
     'tracks': tracks,
+    'source': ?source,
+    'serato': ?serato,
+    if (notes.isNotEmpty) 'notes': notes,
   };
 }
 
@@ -180,6 +193,13 @@ bool _targetExists(String to, String from) =>
     _exists(to) &&
     pathKey(to, insensitive: true) != pathKey(from, insensitive: true);
 
+/// Organise Files mode (rename, move, remove, replace). Off by default. A
+/// library that allowed file changes before this switch existed keeps Organise
+/// available, so an existing workflow is not taken away.
+bool organiseModeOn(Catalogue cat) =>
+    (cat.getSetting('organise_mode') ?? cat.getSetting('allow_file_changes')) ==
+    '1';
+
 class OrganizeService {
   OrganizeService(this.cat, this.dataDir);
   final Catalogue cat;
@@ -187,10 +207,59 @@ class OrganizeService {
 
   String get removedArea => p.join(dataDir, 'Removed files');
 
+  /// Side tables kept outside the shared schema (1.x still opens the catalogue):
+  /// the hash of each moved file, checked before an undo, and track
+  /// replacements (the better file copied in for a track).
+  void _ensureTables() {
+    cat.db.execute(
+      'CREATE TABLE IF NOT EXISTS file_op_hashes (op_id INTEGER PRIMARY KEY, hash TEXT NOT NULL)',
+    );
+    cat.db.execute(
+      'CREATE TABLE IF NOT EXISTS track_replacements (id INTEGER PRIMARY KEY, batch TEXT NOT NULL, '
+      'track_id INTEGER, old_path TEXT NOT NULL, new_path TEXT NOT NULL, source_path TEXT NOT NULL, '
+      "hash TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('done','undone')), at INTEGER NOT NULL)",
+    );
+  }
+
+  /// Adds what each change would mean in Serato, read from Serato's own files
+  /// (never written). [links] can point at test folders.
+  OrganizePlan checkSerato(OrganizePlan plan, {SeratoLinks? links}) {
+    final l = links ?? SeratoLinks();
+    final files = [
+      for (final o in plan.ops)
+        if (o.op != 'folder_rename' && o.blocked == null) o.from,
+    ];
+    final found = l.check(files);
+    for (final o in plan.ops) {
+      if (o.op == 'folder_rename') {
+        o.serato = o.tracks > 0
+            ? 'Serato will show the ${o.tracks} track(s) in this folder as missing until you relocate them (Files → Relocate lost files). Cues and beatgrids stored in the files travel with them.'
+            : null;
+        continue;
+      }
+      final link = found[o.from];
+      if (link == null) continue;
+      o.serato = switch (o.op) {
+        'rename' || 'move' => link.moveRisk(),
+        'replace' => link.replaceRisk(
+          samePath:
+              pathKey(o.to, insensitive: true) ==
+              pathKey(o.from, insensitive: true),
+        ),
+        'remove' =>
+          link.inLibrary || link.crates.isNotEmpty
+              ? "Serato will show it as missing in its library${link.crates.isEmpty ? '' : ' and ${link.crates.length} crate(s)'}. The file is kept in Removed files until you empty it."
+              : null,
+        _ => null,
+      };
+    }
+    return plan;
+  }
+
   void _requireEnabled() {
-    if (cat.getSetting('allow_file_changes') != '1') {
+    if (!organiseModeOn(cat)) {
       _no(
-        'Changes to music files are turned off. Turn on "Allow changes to music files" in Settings → Safety first (and keep a backup of your music).',
+        'Organise Files mode is off. Turn it on in Settings → Changes to music files (and keep a backup of your music).',
       );
     }
   }
@@ -404,6 +473,49 @@ class OrganizeService {
     return OrganizePlan(plan.ops, warning: plan.warning, merge: (keep, others));
   }
 
+  /// Replaces a track's file with a better copy ([source], e.g. a higher-quality
+  /// purchase). The track keeps its crates, ratings, notes and other catalogue
+  /// values. The old file goes to the restorable "Removed files" area; the new
+  /// file is copied (never moved) into the old file's folder and verified. With
+  /// the same format it takes the old file's exact name, so Serato's crates still
+  /// find it; otherwise it keeps the old name with its own extension.
+  OrganizePlan previewReplaceFile(int trackId, String source) {
+    _requireEnabled();
+    final (path, _, f) = _track(trackId);
+    final (size, mtime) = _stamp(path);
+    final ext = p.extension(source);
+    final sameFormat = ext.toLowerCase() == p.extension(path).toLowerCase();
+    final to = sameFormat
+        ? path
+        : p.join(p.dirname(path), '${p.basenameWithoutExtension(path)}$ext');
+    final op = FileOp('replace', trackId, path, to, size, mtime)
+      ..source = source;
+    final srcType = FileSystemEntity.typeSync(source, followLinks: false);
+    if (f.containsKey('_missing') || size == null) {
+      op.blocked = "The current file isn't available.";
+    } else if (srcType != FileSystemEntityType.file) {
+      op.blocked = "The replacement file isn't available.";
+    } else if (pathKey(source, insensitive: true) ==
+        pathKey(path, insensitive: true)) {
+      op.blocked = 'That is the same file.';
+    } else if (!sameFormat && _targetExists(to, path)) {
+      op.blocked = 'A file with the new name already exists in that folder.';
+    } else if (cat.db.select(
+      'SELECT 1 FROM tracks WHERE path_key=? AND id<>?',
+      [pathKey(source), trackId],
+    ).isNotEmpty) {
+      op.notes.add(
+        'The replacement is already in your library as another track; it is copied, so that track stays as it is.',
+      );
+    }
+    if (!sameFormat) {
+      op.notes.add(
+        'Different format (${p.extension(path)} → $ext): the file name changes, so links from Serato and other apps to the old name will break.',
+      );
+    }
+    return _finish([op]);
+  }
+
   void _mergeInto(int keep, List<int> others) {
     const cols = [
       'genre',
@@ -503,15 +615,36 @@ class OrganizeService {
     }
   }
 
-  /// Applies a previewed plan. Each item is re-checked; a problem skips that item only.
-  OrganizeResult apply(OrganizePlan plan) {
+  /// Applies a previewed plan. Only the items at the indexes in [only] are
+  /// applied when it is given (the ones the DJ approved); each item is re-checked
+  /// and a problem skips that item only.
+  OrganizeResult apply(OrganizePlan plan, {Set<int>? only}) {
     _requireEnabled();
+    _ensureTables();
+    final chosen = [
+      for (var i = 0; i < plan.ops.length; i++)
+        if (only == null || only.contains(i)) plan.ops[i],
+    ];
     final merge = plan.merge;
-    if (merge != null) _mergeInto(merge.$1, merge.$2);
-    final batch = '${nowMs()}';
+    if (merge != null && chosen.any((o) => o.blocked == null)) {
+      final removing = {
+        for (final o in chosen)
+          if (o.blocked == null && o.trackId != null) o.trackId!,
+      };
+      _mergeInto(merge.$1, [
+        for (final x in merge.$2)
+          if (removing.contains(x)) x,
+      ]);
+    }
+    var batch = '${nowMs()}';
+    while (cat.db.select('SELECT 1 FROM file_ops WHERE batch=?', [
+      batch,
+    ]).isNotEmpty) {
+      batch = '${int.parse(batch) + 1}';
+    }
     var done = 0;
     final skipped = <(String, String)>[];
-    for (final o in plan.ops) {
+    for (final o in chosen) {
       if (o.blocked != null) {
         skipped.add((o.from, o.blocked!));
         continue;
@@ -521,6 +654,15 @@ class OrganizeService {
           o.from,
           'The file changed or moved since the preview; preview again.',
         ));
+        continue;
+      }
+      if (o.op == 'replace') {
+        final err = _replace(o, batch);
+        if (err == null) {
+          done++;
+        } else {
+          skipped.add((o.from, err));
+        }
         continue;
       }
       final String to;
@@ -540,7 +682,12 @@ class OrganizeService {
         continue;
       }
       String? error;
+      String? hash;
       try {
+        if (o.op != 'folder_rename') {
+          hash = blake3File(o.from);
+          if (hash == null) _no("couldn't read the file to check it");
+        }
         if (o.op == 'folder_rename') {
           try {
             Directory(o.from).renameSync(to);
@@ -551,6 +698,12 @@ class OrganizeService {
           }
         } else {
           _move(o.from, to);
+          if (blake3File(to) != hash) {
+            // Never expected (a rename doesn't touch the bytes); say so loudly.
+            _no(
+              'the file at the new location does not match the original; it was left there for you to check',
+            );
+          }
         }
       } on OrganizeException catch (e) {
         error = e.message;
@@ -578,13 +731,170 @@ class OrganizeService {
         "INSERT INTO file_ops(batch, op, track_id, from_path, to_path, status, at) VALUES (?,?,?,?,?,'done',?)",
         [batch, o.op, o.trackId, o.from, to, nowMs()],
       );
+      if (hash != null) {
+        cat.db.execute(
+          'INSERT OR REPLACE INTO file_op_hashes(op_id, hash) VALUES (?,?)',
+          [cat.db.lastInsertRowId, hash],
+        );
+      }
       done++;
     }
     return OrganizeResult(batch, done, skipped);
   }
 
+  /// One track replacement: the old file goes to "Removed files" (verified),
+  /// the new file is copied next to it under a temporary name, verified, then
+  /// given its final name. Any failure puts the old file back. Returns an error.
+  String? _replace(FileOp o, String batch) {
+    final source = o.source!;
+    final srcHash = blake3File(source), oldHash = blake3File(o.from);
+    if (srcHash == null) return "The replacement file couldn't be read.";
+    if (oldHash == null) return "The current file couldn't be read.";
+    if (o.to != o.from && _targetExists(o.to, o.from)) {
+      return 'Something already exists at the new name.';
+    }
+    final rel =
+        cat.db.select('SELECT rel_path FROM tracks WHERE id=?', [
+              o.trackId,
+            ]).firstOrNull?['rel_path']
+            as String? ??
+        p.basename(o.from);
+    final parts = p
+        .split(rel)
+        .where(
+          (s) => s.isNotEmpty && s != '.' && s != '..' && !p.isAbsolute(s),
+        );
+    final kept = p.joinAll([removedArea, batch, ...parts]);
+    if (_exists(kept)) return 'The Removed files area already has that file.';
+    try {
+      _move(o.from, kept);
+    } on OrganizeException catch (e) {
+      return e.message;
+    }
+    if (blake3File(kept) != oldHash) {
+      return 'The kept copy of the original did not verify; it is at $kept. Nothing else was changed.';
+    }
+    final tmp = p.join(p.dirname(o.to), '.djassist-replace-$batch.tmp');
+    void restore() {
+      try {
+        if (File(tmp).existsSync()) File(tmp).deleteSync();
+        _move(kept, o.from);
+      } on Object {
+        // left in Removed files; reported below
+      }
+    }
+
+    try {
+      File(source).copySync(tmp);
+      if (blake3File(tmp) != srcHash) {
+        restore();
+        return "The copy of the replacement didn't verify; the original was put back.";
+      }
+      File(tmp).renameSync(o.to);
+    } on FileSystemException catch (e) {
+      restore();
+      return "Couldn't copy the replacement (${e.message}); the original was put back.";
+    }
+    final now = nowMs();
+    cat.db.execute(
+      "INSERT INTO file_ops(batch, op, track_id, from_path, to_path, status, at) VALUES (?,'remove',?,?,?,'done',?)",
+      [batch, o.trackId, o.from, kept, now],
+    );
+    cat.db.execute(
+      'INSERT OR REPLACE INTO file_op_hashes(op_id, hash) VALUES (?,?)',
+      [cat.db.lastInsertRowId, oldHash],
+    );
+    cat.db.execute(
+      'INSERT INTO track_replacements(batch, track_id, old_path, new_path, source_path, hash, status, at) '
+      "VALUES (?,?,?,?,?,?,'done',?)",
+      [batch, o.trackId, o.from, o.to, source, srcHash, now],
+    );
+    if (o.trackId != null && o.to != o.from) _updatePath(o.trackId!, o.to);
+    return null;
+  }
+
+  /// Undoes the replacements in [batch]: each copied-in file moves to the
+  /// "Removed files" area (it is a copy, but it may hold cues Serato added
+  /// since, so it is kept, not deleted) and the track points at its old path
+  /// again; the old file itself comes back with the batch's file operations.
+  int _undoReplacements(String batch) {
+    _ensureTables();
+    final rows = cat.db.select(
+      "SELECT id, track_id, old_path, new_path FROM track_replacements WHERE batch=? AND status='done' ORDER BY id DESC",
+      [batch],
+    );
+    // Check every original is still waiting in Removed files before moving
+    // anything, so an undo never leaves a track without a file.
+    for (final r in rows) {
+      final kept = cat.db.select(
+        "SELECT to_path FROM file_ops WHERE batch=? AND op='remove' AND status='done' AND from_path=?",
+        [batch, r['old_path']],
+      );
+      if (kept.isEmpty || !File(kept.first['to_path'] as String).existsSync()) {
+        _no(
+          "can't undo this replacement: the original file is no longer in Removed files (it was emptied), so the replacement was left in place",
+        );
+      }
+    }
+    var n = 0;
+    for (final r in rows) {
+      final neu = r['new_path'] as String;
+      if (_exists(neu)) {
+        final dest = p.join(
+          removedArea,
+          '$batch-undone',
+          '${r['id']}-${p.basename(neu)}',
+        );
+        _move(neu, dest);
+        cat.db.execute(
+          "INSERT INTO file_ops(batch, op, track_id, from_path, to_path, status, at) VALUES (?,'remove',NULL,?,?,'done',?)",
+          ['$batch-undone', neu, dest, nowMs()],
+        );
+      }
+      final tid = r['track_id'] as int?;
+      if (tid != null && neu != r['old_path']) {
+        _updatePath(tid, r['old_path'] as String);
+      }
+      cat.db.execute(
+        "UPDATE track_replacements SET status='undone' WHERE id=?",
+        [r['id']],
+      );
+      n++;
+    }
+    return n;
+  }
+
+  /// Track replacements, newest first.
+  List<Map<String, Object?>> replacements({int? limit}) {
+    _ensureTables();
+    return [
+      for (final r in cat.db.select(
+        'SELECT id, batch, track_id, old_path, new_path, source_path, status, at FROM track_replacements ORDER BY id DESC${limit == null ? '' : ' LIMIT $limit'}',
+      ))
+        {...r},
+    ];
+  }
+
   /// Undoes a batch (or one operation): everything moves back, newest first.
   int undo({String? batch, int? opId}) {
+    _ensureTables();
+    // A replacement is undone as a whole: its new file first, then its old one.
+    if (batch == null && opId != null) {
+      final b =
+          cat.db.select('SELECT batch FROM file_ops WHERE id=?', [
+                opId,
+              ]).firstOrNull?['batch']
+              as String?;
+      if (b != null &&
+          cat.db.select(
+            "SELECT 1 FROM track_replacements WHERE batch=? AND status='done'",
+            [b],
+          ).isNotEmpty) {
+        batch = b;
+        opId = null;
+      }
+    }
+    if (batch != null) _undoReplacements(batch);
     final rows = cat.db.select(
       "SELECT id, op, track_id, from_path, to_path FROM file_ops WHERE status='done' AND ((? IS NOT NULL AND batch=?) OR id=?) ORDER BY id DESC",
       [batch, batch, opId],
@@ -653,6 +963,23 @@ class OrganizeService {
         .first;
     return {'files': r['n'] as int, 'bytes': r['bytes'] as int};
   }
+
+  /// Every file waiting in the "Removed files" area: where it came from, where
+  /// it is now and its size. Shown in full before the area is emptied.
+  List<Map<String, Object?>> removedFiles() => [
+    for (final r in cat.db.select(
+      "SELECT id, batch, from_path, to_path, at FROM file_ops WHERE op='remove' AND status='done' ORDER BY id DESC",
+    ))
+      {
+        'id': r['id'],
+        'from': r['from_path'],
+        'to': r['to_path'],
+        'at': r['at'],
+        'bytes': File(r['to_path'] as String).existsSync()
+            ? File(r['to_path'] as String).lengthSync()
+            : 0,
+      },
+  ];
 
   /// Permanently deletes everything in the "Removed files" area. Explicit and
   /// final; never deletes anything outside that area.

@@ -1,10 +1,29 @@
 # Roadmap
 
-**Tested** = implemented with automated tests (Rust integration tests on Linux and Windows CI and/or the browser e2e test). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
+The current release is **2.x (Flutter)**. Sections for 1.x (v1.0–v1.5) describe the legacy Tauri app; their features carried over to 2.0 (see `dj_assistant_flutter/MIGRATION.md`).
+
+**Tested** = implemented with automated tests (Flutter tests on Linux and Windows CI for 2.x; Rust integration tests and the browser e2e test for 1.x). **Implemented** = built and exercised, limited automated coverage. **Planned** = not built.
 Every item still needs **manual testing on a real Windows PC with a real library** (see docs/TESTING.md).
 
 
-## v2.1 (Flutter, in progress)
+## v2.4 (Flutter, prepared)
+
+| Area | Feature | Status |
+|---|---|---|
+| Suggestions | Review-first by default (`fix_mode`: review / fill empty / apply confident); one-time notice | Tested |
+| Suggestions | Individual and batch approve/reject; field and source filters; "by you / automatic / earlier" | Tested (service); screen checked at 8 sizes |
+| Suggestions | Exact undo of accepted suggestions (previous value kept); undo all automatic changes; refuses when changed since | Tested |
+| Organise Files | Own off-by-default switch (`organise_mode`); legacy `allow_file_changes` libraries keep it | Tested |
+| Organise Files | Full preview with per-item ticks and a second confirmation; blocked conflicts; skip if changed since preview | Tested (service); dialog needs a hand test on Windows |
+| Organise Files | Hash check before/after every move; replacement (old file kept, verified copy in, undo as a whole) | Tested (synthetic files) |
+| Organise Files | Per-track Serato notes from `database V2`, crates and in-file cues/loops/beatgrid (read only) | Tested (built Serato files); not yet on a real `_Serato_` folder |
+| Organise Files | Duplicates removal UI, tag edits from the catalogue with per-file ticks, Removed files list before emptying | Builds; screen checked; needs a hand test |
+| Upgrades | Low-bitrate list, owned better copies, file facts, keep-as-is | Tested |
+| Upgrades | Side-by-side comparison with loudness-matched players; store search links; replace via Organise | Builds; playback needs a hand test on Windows |
+| Layout | Resizable assistant (drag or arrow keys, remembered), Ctrl+Shift+J, overlay below 960 px; status bar shows file-change modes | Screen tests at 900×600 → 1920×1080, long names, every assistant mode |
+| Docs | README, TESTING, ROADMAP, assistant guide and release notes for 2.4 | Done |
+
+## v2.1 (Flutter)
 
 | Area | Feature | Status |
 |---|---|---|
@@ -124,4 +143,6 @@ See docs/SERATO_STUDY.md and docs/DAJENT_STUDY.md for what was learned from othe
 | Request queue from phones on the same network | Planned |
 | Local stem separation (only if a permissively licensed, offline model is practical) | Planned |
 | Code-signed installer | Planned (needs a certificate) |
-| Physical folder organisation (moves/renames) | Not planned by default — breaks Serato links; would need the full safety process |
+| Physical folder organisation (moves/renames) | Shipped in Organise Files mode (opt-in, previewed, undoable, with Serato warnings) |
+| Carry Serato cues and beatgrid into a replacement file | Planned, opt-in only: timing can shift between encodes, so it needs offset checks and a hand test with Serato |
+| Spectral (frequency-cutoff) estimate in Upgrades' comparison | Planned; MP3/AAC decoding is Windows-only, so it needs testing there. Always shown as a clue, not proof |
