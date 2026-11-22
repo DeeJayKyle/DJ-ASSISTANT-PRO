@@ -91,6 +91,10 @@ flutter:
         - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
 
+  # The app icon (tool/make_icon.py draws it and the Windows .ico).
+  assets:
+    - assets/icon/app_icon_256.png
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

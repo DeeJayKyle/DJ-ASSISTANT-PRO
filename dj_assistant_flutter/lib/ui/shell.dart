@@ -514,7 +514,12 @@ class _TitleBar extends ConsumerWidget {
             onPressed: () => showGoTo(context, ref),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.graphic_eq, color: t.accent, size: 20),
+          Image.asset(
+            'assets/icon/app_icon_256.png',
+            width: 22,
+            height: 22,
+            filterQuality: FilterQuality.medium,
+          ),
           const SizedBox(width: 8),
           const Text(
             'DJ Assistant',
