@@ -232,6 +232,14 @@ extension LibraryEdits on LibraryService {
               as int,
       'crates':
           cat.db.select('SELECT COUNT(*) AS n FROM crates').first['n'] as int,
+      'analysed':
+          cat.db
+                  .select(
+                    "SELECT COUNT(*) AS n FROM analysis a JOIN tracks t ON t.id=a.track_id "
+                    "WHERE a.status='ok' AND t.presence='present'",
+                  )
+                  .first['n']
+              as int,
     };
   }
 

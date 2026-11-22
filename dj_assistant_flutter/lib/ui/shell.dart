@@ -205,6 +205,12 @@ class _ShellState extends ConsumerState<Shell> {
     setState(() {});
   }
 
+  /// Ctrl+Tab / Ctrl+Shift+Tab: the next or previous tab of the open hub.
+  void _stepTab(int step) {
+    final next = stepTab(ref.read(viewProvider).id, step);
+    if (next != null) ref.read(viewProvider.notifier).go(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     PageFrame.onAskAssistant = (_) {
@@ -254,6 +260,22 @@ class _ShellState extends ConsumerState<Shell> {
             showGoTo(context, ref),
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
             ref.read(viewProvider.notifier).go('settings'),
+        const SingleActivator(LogicalKeyboardKey.digit0, control: true): () =>
+            ref.read(viewProvider.notifier).go('home'),
+        const SingleActivator(LogicalKeyboardKey.home, alt: true): () =>
+            ref.read(viewProvider.notifier).go('home'),
+        const SingleActivator(LogicalKeyboardKey.tab, control: true): () =>
+            _stepTab(1),
+        const SingleActivator(LogicalKeyboardKey.pageDown, control: true): () =>
+            _stepTab(1),
+        const SingleActivator(
+          LogicalKeyboardKey.tab,
+          control: true,
+          shift: true,
+        ): () =>
+            _stepTab(-1),
+        const SingleActivator(LogicalKeyboardKey.pageUp, control: true): () =>
+            _stepTab(-1),
         for (final (i, h) in hubs.indexed)
           SingleActivator(
             LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i),
@@ -695,6 +717,14 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       onTap: () => ref.read(viewProvider.notifier).go(n.id),
     );
     final here = hubOf(view.id);
+    final homeItem = _NavItem(
+      nav: const _Nav('home', 'Home', Icons.dashboard_outlined),
+      color: homeColor(context),
+      hint: homePage.hint,
+      selected: view.id == 'home',
+      rail: widget.rail,
+      onTap: () => ref.read(viewProvider.notifier).go('home'),
+    );
     // One entry per hub; it opens the hub's first tab.
     Widget hubItem(Hub h) {
       final (count, warn) = switch (h.id) {
@@ -704,8 +734,13 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         'hub:crates' when crates.isNotEmpty => ('${crates.length}', false),
         _ => (null, false),
       };
+      final i = hubs.indexOf(h);
       return _NavItem(
         nav: _Nav(h.id, h.label, h.icon),
+        color: h.color(context),
+        hint:
+            '${h.hint}\nCtrl+${i + 1} · tabs: '
+            '${h.tabs.map((x) => x.label).join(', ')}',
         selected: identical(here, h),
         rail: widget.rail,
         count: widget.rail && h.id == 'hub:library' ? null : count,
@@ -789,6 +824,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: Space.x2),
           children: [
+            homeItem,
             for (final h in hubs) hubItem(h),
             section(''),
             if (docs)
@@ -809,6 +845,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       child: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 8),
         children: [
+          homeItem,
           for (final h in hubs) hubItem(h),
           section(
             'My crates',
@@ -889,8 +926,12 @@ class _NavItem extends StatefulWidget {
     required this.onTap,
     this.count,
     this.warn = false,
+    this.color,
+    this.hint,
   });
   final _Nav nav;
+  final Color? color;
+  final String? hint;
   final bool selected, rail, warn;
   final String? count;
   final VoidCallback onTap;
@@ -906,7 +947,8 @@ class _NavItemState extends State<_NavItem> {
     final t = DjTokens.of(context);
     final text = Theme.of(context).textTheme;
     final on = widget.selected;
-    final fg = on ? t.accent : (_hover ? t.text : t.muted);
+    final hue = widget.color ?? t.accent;
+    final fg = widget.color ?? (on ? t.accent : (_hover ? t.text : t.muted));
     final badge = widget.count == null
         ? null
         : Text(
@@ -923,7 +965,7 @@ class _NavItemState extends State<_NavItem> {
       padding: EdgeInsets.symmetric(horizontal: widget.rail ? 0 : Space.x3),
       decoration: BoxDecoration(
         color: on
-            ? t.tint(t.accent, 0.13)
+            ? t.tint(hue, 0.16)
             : (_hover ? t.text.withValues(alpha: 0.05) : Colors.transparent),
         borderRadius: Radii.medium,
       ),
@@ -940,10 +982,7 @@ class _NavItemState extends State<_NavItem> {
               width: 3,
               transform: Matrix4.diagonal3Values(1, on ? 1 : 0, 1),
               transformAlignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: t.accent,
-                borderRadius: Radii.small,
-              ),
+              decoration: BoxDecoration(color: hue, borderRadius: Radii.small),
             ),
           ),
           if (widget.rail)
@@ -965,7 +1004,7 @@ class _NavItemState extends State<_NavItem> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: text.bodyMedium?.copyWith(
-                      color: on ? t.accent : t.text,
+                      color: on ? hue : t.text,
                       fontWeight: on ? FontWeight.w600 : FontWeight.w500,
                     ),
                   ),
@@ -976,11 +1015,13 @@ class _NavItemState extends State<_NavItem> {
         ],
       ),
     );
-    if (widget.rail) {
+    if (widget.rail || widget.hint != null) {
+      final name = widget.count == null
+          ? widget.nav.label
+          : '${widget.nav.label} (${widget.count})';
       body = Tooltip(
-        message: widget.count == null
-            ? widget.nav.label
-            : '${widget.nav.label} (${widget.count})',
+        message: widget.hint == null ? name : '$name\n${widget.hint}',
+        waitDuration: Duration(milliseconds: widget.rail ? 0 : 400),
         preferBelow: false,
         verticalOffset: 0,
         margin: const EdgeInsets.only(left: 64),

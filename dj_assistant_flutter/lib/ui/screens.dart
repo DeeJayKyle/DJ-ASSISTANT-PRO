@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'crates_screen.dart';
 import 'files_screens.dart';
+import 'home_screen.dart';
 import 'library_map.dart';
 import 'library_screen.dart';
 import 'library_tools.dart';
@@ -19,6 +20,7 @@ Widget screenFor(AppView v) => switch (v.id) {
     crateId: v.crateId,
   ),
   'root' => LibraryScreen(key: ValueKey('root${v.rootId}'), rootId: v.rootId),
+  'home' => const HomeScreen(),
   'quick' => const QuickPrepScreen(),
   'crates' => const CratesScreen(),
   'duplicates' => const DuplicatesScreen(),

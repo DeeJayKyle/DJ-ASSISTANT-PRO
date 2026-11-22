@@ -49,7 +49,7 @@ const assistantHelp =
     '• "house 120-128 bpm"  • "key 8A"  • "clean 90s hip hop"\n'
     '• "low bitrate"  • "lossless"  • "missing genre"\n'
     '• "show duplicates"  • "library health"  • "scan"\n'
-    '• "plan a 2 hour wedding set"  • "gig mode"  • "gig pack"  • "suggestions"\n'
+    '• "gig mode"  • "gig pack"  • "suggestions"\n'
     "Everything stays on this computer. I can't edit files, tags or Serato data.";
 
 Map<String, Object?> _cond(String field, String op, Object? value) => {

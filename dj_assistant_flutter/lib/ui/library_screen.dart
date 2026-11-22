@@ -437,15 +437,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final t = DjTokens.of(context);
     final stats = ref.watch(statsProvider);
     if (!_scoped && (stats['roots'] ?? 0) == 0) {
-      return EmptyState(
-        icon: Icons.library_music_outlined,
-        title:
-            'Welcome, ${ref.watch(accountsProvider).accounts.where((a) => a.id == ref.watch(accountsProvider).currentId).firstOrNull?.name ?? 'DJ'}',
-        message: 'Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never writes to Serato.',
-        action: FilledButton.icon(
-          onPressed: () => addMusicFolders(ref),
-          icon: const Icon(Icons.create_new_folder_outlined),
-          label: const Text('Add music folders'),
+      return PageFrame(
+        title: 'Music Library',
+        scroll: false,
+        child: EmptyState(
+          icon: Icons.library_music_outlined,
+          title:
+              'Welcome, ${ref.watch(accountsProvider).accounts.where((a) => a.id == ref.watch(accountsProvider).currentId).firstOrNull?.name ?? 'DJ'}',
+          message: 'Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never writes to Serato.',
+          action: FilledButton.icon(
+            onPressed: () => addMusicFolders(ref),
+            icon: const Icon(Icons.create_new_folder_outlined),
+            label: const Text('Add music folders'),
+          ),
         ),
       );
     }

@@ -99,7 +99,7 @@ class ViewNotifier extends Notifier<AppView> {
   static const _limit = 50;
 
   @override
-  AppView build() => const AppView('library');
+  AppView build() => const AppView('home');
 
   bool get canGoBack => _back.isNotEmpty;
   bool get canGoForward => _forward.isNotEmpty;

@@ -102,7 +102,8 @@ void main() {
     nav.back();
     expect(c.read(viewProvider).id, 'crates');
     nav.back();
-    expect(c.read(viewProvider).id, 'library');
+    // the app opens on Home
+    expect(c.read(viewProvider).id, 'home');
     expect(nav.canGoBack, isFalse);
     nav.forward();
     expect(c.read(viewProvider).id, 'crates');

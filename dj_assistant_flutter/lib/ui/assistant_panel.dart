@@ -76,7 +76,6 @@ const _commands = [
 const _ruleSuggestions = [
   'Show low-bitrate Afrobeats tracks',
   'house 120-128 bpm',
-  'plan a 2 hour wedding set',
   'show duplicates',
   'help',
 ];
@@ -84,7 +83,6 @@ const _aiSuggestions = [
   "What's in my library?",
   'Build me a peak-time Afrobeats crate',
   'Which tracks are missing genre or year?',
-  'Plan a 2 hour wedding set, clean only',
 ];
 
 class AssistantPanel extends ConsumerStatefulWidget {

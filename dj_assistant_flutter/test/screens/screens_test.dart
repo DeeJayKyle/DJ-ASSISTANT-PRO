@@ -22,6 +22,7 @@ import 'package:path/path.dart' as p;
 /// to write them (CI uploads them for review); each page must also lay out
 /// without overflow or exceptions at every size.
 const pages = [
+  'home',
   'library',
   'quick',
   'crates',

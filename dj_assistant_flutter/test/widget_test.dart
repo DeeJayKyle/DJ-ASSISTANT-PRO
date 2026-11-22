@@ -7,6 +7,7 @@ import 'package:dj_assistant/online/online.dart';
 import 'package:dj_assistant/ui/hubs.dart';
 import 'package:dj_assistant/ui/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -56,23 +57,26 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Quick Prep'), findsWidgets);
-    expect(find.text('DJ Decks'), findsWidgets);
-    await tester.scrollUntilVisible(
-      find.text('Settings'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // Home first: the hubs in the sidebar and the bento tiles
+    for (final x in ['Home', 'Library', 'Analysis', 'Crates', 'Prep & Gigs']) {
+      expect(find.text(x), findsWidgets, reason: x);
+    }
+    expect(find.text('Your library'), findsOneWidget);
+    expect(find.text('DJ Decks'), findsNothing);
+    await tester.ensureVisible(find.text('Settings').first);
     await tester.tap(find.text('Settings').first);
     await tester.pump();
     expect(find.text('Appearance'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Virtual Crates'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Virtual Crates').first);
+    await tester.ensureVisible(find.text('Crates').first);
+    await tester.tap(find.text('Crates').first);
     await tester.pump();
+    expect(find.text('Virtual crates'), findsWidgets);
+    // Ctrl+Tab steps to the hub's next tab
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(find.text('See also'), findsWidgets);
     expect(find.byType(Scaffold), findsWidgets);
     await closeApp(tester, accounts);
   });

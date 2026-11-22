@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 /// screenshot.
 const shots = String.fromEnvironment('SHOTS');
 const pages = [
+  'home',
   'library',
   'quick',
   'crates',
