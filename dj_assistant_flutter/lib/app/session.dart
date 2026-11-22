@@ -25,6 +25,7 @@ import '../core/safe_write.dart';
 import '../core/scanner.dart';
 import '../core/serato.dart';
 import '../core/sets.dart';
+import '../core/taggers.dart';
 import '../core/settings.dart';
 import '../core/suggestions.dart';
 import '../core/templates.dart';
@@ -91,6 +92,7 @@ class AppSession {
   late final gigPack = GigPackService(cat);
   late final serato = SeratoService(cat);
   late final removal = RemovalService(cat);
+  late final taggers = TaggerService(cat, dataDir);
   late final watcher = FolderWatcher(cat);
 
   /// Auto-import of finished downloads (Settings → Auto-import).

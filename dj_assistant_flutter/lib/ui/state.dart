@@ -185,6 +185,12 @@ class OrganiseTargetNotifier extends Notifier<(String, List<int>)?> {
   void set((String, List<int>)? v) => state = v;
 }
 
+/// Tracks sent from the Library to Analysis → Taggers (label, ids), or null.
+final taggerTargetProvider =
+    NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(
+      OrganiseTargetNotifier.new,
+    );
+
 final organiseTargetProvider =
     NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(
       OrganiseTargetNotifier.new,

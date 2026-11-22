@@ -11,6 +11,7 @@ import 'quick_prep_screen.dart';
 import 'settings_screen.dart';
 import 'upgrades_screen.dart';
 import 'state.dart';
+import 'taggers_screen.dart';
 
 /// The page for a view id. Pages that are tabs of a hub (see hubs.dart) are
 /// wrapped in its HubScope by the shell.
@@ -30,6 +31,7 @@ Widget screenFor(AppView v) => switch (v.id) {
   'discovery' => const DiscoveryScreen(),
   'map' => const LibraryMapScreen(),
   'suggestions' => const SuggestionsScreen(),
+  'taggers' => const TaggersScreen(),
   'gig' => const GigScreen(),
   'gig-pack' => const GigPackScreen(),
   'files' => const FilesScreen(),

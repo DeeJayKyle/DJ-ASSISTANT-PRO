@@ -120,7 +120,16 @@ const hubs = <Hub>[
         hint:
             'Proposed fixes with evidence and confidence. Approve or reject; '
             'Undo puts the old value back.',
-        related: ['health', 'activity', 'library'],
+        related: ['taggers', 'health', 'activity'],
+      ),
+      HubTab(
+        'taggers',
+        'Taggers',
+        Icons.auto_awesome_motion_outlined,
+        hint:
+            'MusicBrainz Picard, OneTagger, Mp3tag and beets on copies of '
+            'your tracks; what they agree on becomes Suggestions.',
+        related: ['suggestions', 'health', 'library'],
       ),
       HubTab(
         'health',

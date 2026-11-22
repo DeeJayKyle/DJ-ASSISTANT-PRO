@@ -278,6 +278,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           value: 'write',
           child: Text('Write tags to files…'),
         ),
+        const PopupMenuItem(
+          value: 'taggers',
+          child: Text('Tag with Picard, OneTagger, Mp3tag, beets…'),
+        ),
         const PopupMenuItem(value: 'organise', child: Text('Organise…')),
         if (ids.length == 1)
           const PopupMenuItem(
@@ -322,6 +326,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         _invert(s, eff);
       case 'write':
         await showWriteDialog(context, ref, ids);
+      case 'taggers':
+        _taggers(ids);
       case 'organise':
         _organise(ids);
       case 'replace':
@@ -329,6 +335,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       case 'delete':
         await _delete(context, ids);
     }
+  }
+
+  void _taggers(List<int> ids) {
+    ref.read(taggerTargetProvider.notifier).set((
+      '${plural(ids.length, 'selected track')} from the Library',
+      ids,
+    ));
+    ref.read(viewProvider.notifier).go('taggers');
   }
 
   void _organise(List<int> ids) {
@@ -1010,6 +1024,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               onPressed: () => showWriteDialog(context, ref, ids),
               icon: const Icon(Icons.edit_note, size: 18),
               label: const Text('Write tags to files…'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _taggers(ids),
+              icon: const Icon(Icons.auto_awesome_motion_outlined, size: 18),
+              label: const Text('Tag with tools…'),
             ),
             OutlinedButton.icon(
               onPressed: () => _organise(ids),

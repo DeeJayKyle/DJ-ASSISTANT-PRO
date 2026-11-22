@@ -287,6 +287,7 @@ final List<ToolDef> tools = [
             'map',
             'discovery',
             'suggestions',
+            'taggers',
             'gig',
             'gig-pack',
             'settings',

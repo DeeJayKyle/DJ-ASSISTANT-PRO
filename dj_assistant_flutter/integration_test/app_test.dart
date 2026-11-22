@@ -28,6 +28,7 @@ const pages = [
   'activity',
   'health',
   'suggestions',
+  'taggers',
   'organize',
   'discovery',
   'gig',
