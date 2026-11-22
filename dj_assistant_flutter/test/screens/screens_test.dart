@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/core/accounts.dart';
 import 'package:dj_assistant/core/crates.dart';
+import 'package:dj_assistant/core/crew.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
 import 'package:dj_assistant/core/suggestions.dart';
@@ -31,6 +32,7 @@ const pages = [
   'duplicates',
   'activity',
   'health',
+  'crew',
   'suggestions',
   'taggers',
   'organize',
@@ -163,6 +165,12 @@ void main() {
           'beets',
           'beet',
           run: tool({'genre': 'Afro House', 'year': '2019'}),
+        );
+        session.taggers.merge(ws);
+        // the Analysis Crew has run once
+        await session.jobs.start(
+          'crew',
+          crewJob(CrewPlan(dbPath: session.dbPath, dataDir: session.dataDir)),
         );
       });
       session.settings.set('theme', theme);

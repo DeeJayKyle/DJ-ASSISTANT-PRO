@@ -191,7 +191,9 @@ class _ShellState extends ConsumerState<Shell> {
       final was = _prev[j.kind];
       if (was != null && live(was) && !live(j.state)) {
         changed = true;
-        final name = j.kind[0].toUpperCase() + j.kind.substring(1);
+        final name = j.kind == 'crew'
+            ? 'The analysis crew'
+            : j.kind[0].toUpperCase() + j.kind.substring(1);
         toast(
           j.state == 'failed'
               ? '${j.kind} failed: ${j.message ?? ''}'

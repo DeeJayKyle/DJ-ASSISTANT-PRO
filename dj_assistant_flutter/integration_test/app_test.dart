@@ -27,6 +27,7 @@ const pages = [
   'duplicates',
   'activity',
   'health',
+  'crew',
   'suggestions',
   'taggers',
   'organize',

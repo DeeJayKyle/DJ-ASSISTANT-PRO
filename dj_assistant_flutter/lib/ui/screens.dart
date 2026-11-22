@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'crates_screen.dart';
+import 'crew_screen.dart';
 import 'files_screens.dart';
 import 'home_screen.dart';
 import 'library_map.dart';
@@ -30,6 +31,7 @@ Widget screenFor(AppView v) => switch (v.id) {
   'organize' => const OrganiseScreen(),
   'discovery' => const DiscoveryScreen(),
   'map' => const LibraryMapScreen(),
+  'crew' => const CrewScreen(),
   'suggestions' => const SuggestionsScreen(),
   'taggers' => const TaggersScreen(),
   'gig' => const GigScreen(),

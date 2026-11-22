@@ -24,6 +24,7 @@ import '../core/roots.dart';
 import '../core/safe_write.dart';
 import '../core/scanner.dart';
 import '../core/serato.dart';
+import '../core/crew.dart';
 import '../core/sets.dart';
 import '../core/taggers.dart';
 import '../core/settings.dart';
@@ -196,20 +197,44 @@ class AppSession {
 
   Map<String, Object?> startHash() => _launch('hash', hashJob(dbPath));
 
-  Map<String, Object?> runAutoPrep() {
+  /// The Analysis Crew: every analyser as one team of agents (crew.dart).
+  /// Auto-prep after scans and imports is the crew on new and incomplete
+  /// tracks; the DJ can also send it a scope or chosen tracks.
+  Map<String, Object?> runCrew({String scope = 'new', List<int>? ids}) {
     final make = onlineFactory;
     final store = secrets is MemorySecrets ? secrets : null;
+    final online = settings.services().any(
+      (x) => x['enabled'] == true && x['id'] != 'updates',
+    );
     return _launch(
-      'auto_prep',
-      autoPrepJob(
-        dbPath,
+      'crew',
+      crewJob(
+        CrewPlan(
+          dbPath: dbPath,
+          dataDir: dataDir,
+          scope: scope,
+          ids: ids,
+          off: crewOff(cat),
+          taggerExe: {
+            for (final d in taggerDefs)
+              if (d.mode == TaggerMode.automatic &&
+                  taggers.enabled(d.id) &&
+                  taggers.path(d.id) != null)
+                d.id: taggers.path(d.id)!,
+          },
+          platforms: taggers.oneTaggerPlatforms,
+          beetsPlugins: taggers.beetsPlugins,
+        ),
         onlineSteps: [
-          (c, ctx) =>
-              autoPrepOnline(c, ctx, make(), store ?? platformSecrets()),
+          if (online)
+            (c, ctx) =>
+                autoPrepOnline(c, ctx, make(), store ?? platformSecrets()),
         ],
       ),
     );
   }
+
+  Map<String, Object?> runAutoPrep() => runCrew();
 
   /// Looks tracks up in the switched-on catalogues (a background job).
   Map<String, Object?> lookupCatalogs(List<int> ids) {

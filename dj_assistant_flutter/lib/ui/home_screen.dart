@@ -84,12 +84,12 @@ class HomeScreen extends ConsumerWidget {
         hint:
             'BPM, key, energy, loudness, cues and waveform, worked out on '
             'this computer.',
-        onOpen: () => nav.go('activity'),
+        onOpen: () => nav.go('crew'),
         value: '${(pct * 100).round()}%',
         caption: '${fmtNumber(analysed)} of ${fmtNumber(tracks)} analysed',
         progress: pct,
         links: [
-          page('activity', label: 'Analyse the rest'),
+          page('crew', label: 'Run the analysis crew'),
           page('map', label: 'See the results'),
         ],
       ),

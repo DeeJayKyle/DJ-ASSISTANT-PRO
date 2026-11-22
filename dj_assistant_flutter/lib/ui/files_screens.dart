@@ -76,7 +76,7 @@ class _OrganiseScreenState extends ConsumerState<OrganiseScreen> {
     final t = DjTokens.of(context);
     final settings = ref.watch(settingsProvider);
     final on = settings['organise_mode'] == true;
-    final prep = s.jobs.status('auto_prep');
+    final prep = s.jobs.status('crew');
     final prepLive = prep.state == 'running' || prep.state == 'paused';
     final crates = ref
         .watch(cratesProvider)

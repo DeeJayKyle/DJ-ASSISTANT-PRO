@@ -12,6 +12,7 @@ import '../core/library_edit.dart';
 import '../core/rules.dart';
 import 'format.dart';
 import 'rules_ui.dart';
+import 'crew_screen.dart' show crewTargetProvider;
 import 'state.dart';
 import 'theme.dart';
 import 'track_detail.dart';
@@ -279,6 +280,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           child: Text('Write tags to files…'),
         ),
         const PopupMenuItem(
+          value: 'crew',
+          child: Text('Analyse with the crew…'),
+        ),
+        const PopupMenuItem(
           value: 'taggers',
           child: Text('Tag with Picard, OneTagger, Mp3tag, beets…'),
         ),
@@ -326,6 +331,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         _invert(s, eff);
       case 'write':
         await showWriteDialog(context, ref, ids);
+      case 'crew':
+        ref.read(crewTargetProvider.notifier).set((
+          '${plural(ids.length, 'selected track')} from the Library',
+          ids,
+        ));
+        ref.read(viewProvider.notifier).go('crew');
       case 'taggers':
         _taggers(ids);
       case 'organise':

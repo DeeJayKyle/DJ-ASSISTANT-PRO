@@ -287,6 +287,7 @@ final List<ToolDef> tools = [
             'map',
             'discovery',
             'suggestions',
+            'crew',
             'taggers',
             'gig',
             'gig-pack',
@@ -473,7 +474,7 @@ final List<ToolDef> tools = [
   ToolDef(
     'run_auto_prep',
     Tier.act,
-    'Run auto-prep: analysis, suggestions from names and folders, online lookups for services that are on, then the confident fixes (catalogue only).',
+    'Run the Analysis Crew on new, unanalysed and incomplete tracks: Scout (what needs doing), Listener (audio analysis), Detective (names and folders), Librarian (online services that are on), Taggers (installed OneTagger/beets on copies), Judge (cross-checks agents against each other and the audio), Clerk (review-first, or the DJ\'s fix mode). Catalogue only; music files are never changed.',
     _obj,
   ),
   ToolDef(

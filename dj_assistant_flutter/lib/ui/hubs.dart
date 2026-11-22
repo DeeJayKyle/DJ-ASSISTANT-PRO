@@ -114,13 +114,22 @@ const hubs = <Hub>[
     Color(0xFF6D28D9),
     [
       HubTab(
+        'crew',
+        'Analyse',
+        Icons.groups_2_outlined,
+        hint:
+            'One button runs every analyser as a crew of agents: Scout, '
+            'Listener, Detective, Librarian, Taggers, Judge and Clerk.',
+        related: ['suggestions', 'taggers', 'health'],
+      ),
+      HubTab(
         'suggestions',
         'Suggestions',
         Icons.auto_fix_high_outlined,
         hint:
             'Proposed fixes with evidence and confidence. Approve or reject; '
             'Undo puts the old value back.',
-        related: ['taggers', 'health', 'activity'],
+        related: ['crew', 'taggers', 'health'],
       ),
       HubTab(
         'taggers',
