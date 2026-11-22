@@ -81,14 +81,21 @@ void main() {
     tearDown(() => tmp.deleteSync(recursive: true));
 
     test('a set path wins; otherwise PATH, then usual Windows folders', () {
+      // PATH as this computer writes it (";" and beet.exe on Windows)
+      final win = Platform.isWindows;
       final bin = Directory(p.join(tmp.path, 'bin'))..createSync();
-      File(p.join(bin.path, 'beet')).writeAsStringSync('');
+      final exe = p.join(bin.path, win ? 'beet.exe' : 'beet');
+      File(exe).writeAsStringSync('');
       final beets = taggerById('beets')!;
       expect(
-        findTool(beets, env: {'PATH': bin.path}, windows: false),
-        p.join(bin.path, 'beet'),
+        findTool(
+          beets,
+          env: {'PATH': '${tmp.path}${win ? ';' : ':'}${bin.path}'},
+          windows: win,
+        ),
+        exe,
       );
-      expect(findTool(beets, env: {'PATH': ''}, windows: false), isNull);
+      expect(findTool(beets, env: {'PATH': ''}, windows: win), isNull);
       final mine = File(p.join(tmp.path, 'my-beet'))..writeAsStringSync('');
       expect(
         findTool(beets, configured: mine.path, env: const {}, windows: false),

@@ -8,7 +8,7 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 > **Current release: DJ Assistant 2.x (Flutter), in [`dj_assistant_flutter/`](dj_assistant_flutter/).** It is what the Releases page publishes and what installs update to. The 1.x app (React + Tauri + Rust, in `src/`, `src-tauri/` and `crates/`) stopped at 1.8.1 and is kept for reference and for the shared catalogue schema; see [Legacy 1.x](#legacy-1x-react--tauri) below.
 
-## What it does (2.4)
+## What it does (2.5)
 
 The app is focused on **music analysis** and **DJ crate building**. The sidebar has four hubs, each a page with tabs along the top: **Library** (Tracks · Map · Sources & scans), **Analysis** (Analyse · Suggestions · Taggers · Health · Duplicates · Upgrades), **Crates** (Virtual crates · Discovery) and **Prep & Gigs** (Quick Prep · Organise Files · Gig Mode · Gig Pack). The app opens on **Home**, a colourful bento overview where every tile and line is a link (right-click a tile for its links). Ctrl+0 is Home, Ctrl+1…4 open the hubs, Ctrl+Tab / Ctrl+Shift+Tab or the mouse wheel over the tabs switch tabs, Ctrl+K goes to any tab by name, and hovering a hub, tab or link explains it.
 
