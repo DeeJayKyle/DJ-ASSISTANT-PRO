@@ -5,6 +5,7 @@ import '../analysis/beatgrid.dart' show foldBpmForGenre;
 import 'analysis_store.dart';
 import 'autoprep.dart';
 import 'catalogue.dart';
+import 'file_sync.dart';
 import 'health.dart';
 import 'jobs.dart';
 import 'keys.dart';
@@ -154,6 +155,7 @@ class CrewBoard {
   List<int> unanalysed = const [], incomplete = const [];
   int suggestionsBefore = 0;
   int clues = 0, onlineChecked = 0, applied = 0;
+  int filesWritten = 0, filesSkipped = 0, filesFailed = 0;
   Map<String, int> missingBefore = const {};
   final reports = {for (final a in crewAgents) a.id: AgentReport(a.id)};
 }
@@ -201,7 +203,7 @@ Future<void> runCrew(
     'librarian': () => _librarian(b, ctx, onlineSteps),
     'taggers': () => _taggers(b, ctx),
     'judge': () async => _judge(b),
-    'clerk': () async => _clerk(b),
+    'clerk': () => _clerk(b),
   };
   for (final MapEntry(key: id, value: step) in steps.entries) {
     final r = b.reports[id]!;
@@ -558,7 +560,7 @@ bool _relative(String a, String b) =>
     a != b;
 
 /// Clerk: applies the DJ's fix mode and counts what waits for review.
-String? _clerk(CrewBoard b) {
+Future<String?> _clerk(CrewBoard b) async {
   final cat = b.cat;
   final mode = fixMode(cat);
   var applied = 0;
@@ -572,14 +574,27 @@ String? _clerk(CrewBoard b) {
     );
   }
   b.applied = applied;
+  // write-through: what was just accepted goes into the files too
+  if (fileSyncOn(cat) && fileSyncQueued(cat) > 0) {
+    final (w, sk, f) = await flushFileSync(cat, dataDir: b.plan.dataDir);
+    b.filesWritten = w;
+    b.filesSkipped = sk;
+    b.filesFailed = f;
+  }
   final waiting = _count(
     cat,
     "SELECT COUNT(*) AS n FROM suggestions WHERE status='pending'",
   );
+  final files = b.filesWritten + b.filesSkipped + b.filesFailed == 0
+      ? ''
+      : ' Wrote ${b.filesWritten} music file(s)'
+            '${b.filesSkipped > 0 ? '; ${b.filesSkipped} already up to date or not writable (WAV, AIFF, Ogg…)' : ''}'
+            '${b.filesFailed > 0 ? '; ${b.filesFailed} could not be written' : ''}.';
   b.reports['clerk']!.summary = switch (mode) {
     'review' =>
-      '$waiting suggestion(s) wait for your review. Nothing was changed.',
-    _ => 'Applied $applied fix(es) (undoable); $waiting left for review.',
+      '$waiting suggestion(s) wait for your review. Nothing was changed.'
+          '$files',
+    _ => 'Applied $applied fix(es) (undoable); $waiting left for review.$files',
   };
   return null;
 }

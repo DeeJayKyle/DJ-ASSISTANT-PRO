@@ -25,6 +25,7 @@ import '../core/safe_write.dart';
 import '../core/scanner.dart';
 import '../core/serato.dart';
 import '../core/crew.dart';
+import '../core/file_sync.dart';
 import '../core/sets.dart';
 import '../core/taggers.dart';
 import '../core/settings.dart';
@@ -235,6 +236,16 @@ class AppSession {
   }
 
   Map<String, Object?> runAutoPrep() => runCrew();
+
+  /// Writes queued catalogue changes into the music files (write-through,
+  /// file_sync.dart), in the background. No-op when nothing is queued.
+  Map<String, Object?>? startFileSync() {
+    if (!fileSyncOn(cat) || jobs.running('file_sync') || gig.active) {
+      return null;
+    }
+    if (fileSyncQueued(cat) == 0) return null;
+    return _launch('file_sync', fileSyncJob(dbPath, dataDir));
+  }
 
   /// Looks tracks up in the switched-on catalogues (a background job).
   Map<String, Object?> lookupCatalogs(List<int> ids) {

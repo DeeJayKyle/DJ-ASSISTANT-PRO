@@ -167,6 +167,12 @@ class _ShellState extends ConsumerState<Shell> {
   void _watch() {
     if (!mounted) return;
     final s = ref.read(sessionProvider);
+    // write-through: catalogue changes waiting for their files
+    try {
+      s.startFileSync();
+    } on Object {
+      // a busy database: next tick
+    }
     bool live(String st) => st == 'running' || st == 'paused';
     var changed = false;
     final sc = s.lastScan;
@@ -191,9 +197,11 @@ class _ShellState extends ConsumerState<Shell> {
       final was = _prev[j.kind];
       if (was != null && live(was) && !live(j.state)) {
         changed = true;
-        final name = j.kind == 'crew'
-            ? 'The analysis crew'
-            : j.kind[0].toUpperCase() + j.kind.substring(1);
+        final name = switch (j.kind) {
+          'crew' => 'The analysis crew',
+          'file_sync' => 'Writing to music files',
+          _ => j.kind[0].toUpperCase() + j.kind.substring(1),
+        };
         toast(
           j.state == 'failed'
               ? '${j.kind} failed: ${j.message ?? ''}'
@@ -1091,9 +1099,12 @@ class _StatusBar extends ConsumerWidget {
               final set = ref.watch(settingsProvider);
               final organise = set['organise_mode'] == true;
               final tags = set['allow_file_changes'] == true;
-              final writable = organise || tags;
+              final sync = set['sync_to_files'] == true;
+              final writable = organise || tags || sync;
               return Tooltip(
-                message: writable
+                message: sync
+                    ? 'Your changes to title, artist, album, genre, year, BPM and key are written into the music files, each after a verified backup, and can be rolled back. Turn it off in Settings → Changes to music files.'
+                    : writable
                     ? '${organise ? 'Organise Files mode' : 'Tag writing'} is on: music files can change, but only after a preview you approve, with a verified backup or restorable copy. Turn it off in Settings → Changes to music files.'
                     : 'Music files are only read. Tag writing and Organise Files mode are off.',
                 child: Row(
@@ -1105,7 +1116,9 @@ class _StatusBar extends ConsumerWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      writable
+                      sync
+                          ? 'Changes write to files'
+                          : writable
                           ? (organise ? 'Organise mode on' : 'Tag writing on')
                           : 'Source files read-only',
                       style: writable ? st().copyWith(color: t.warn) : st(),

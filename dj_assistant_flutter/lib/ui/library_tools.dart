@@ -629,7 +629,9 @@ class _HealthFixState extends ConsumerState<HealthFix> {
 
     return PageFrame(
       title: label,
-      subtitle: "Fill in what's missing. Values are saved to DJ Assistant's catalogue only — your music files and Serato are not changed.",
+      subtitle: ref.watch(settingsProvider)['sync_to_files'] == true
+          ? "Fill in what's missing. Values are saved to DJ Assistant and written into the music files (backed up first; Settings → Changes to music files)."
+          : "Fill in what's missing. Values are saved to DJ Assistant's catalogue only — your music files and Serato are not changed.",
       actions: [
         TextButton.icon(
           onPressed: widget.onBack,

@@ -94,9 +94,12 @@ class SafeWriteService {
   /// The account's data folder; backups go to `<dataDir>/backups/<day>/`.
   final String dataDir;
 
-  /// Tag writing is allowed by its own switch, or as part of Organise Files mode.
+  /// Tag writing is allowed by its own switch, by write-through (file_sync.dart)
+  /// or as part of Organise Files mode.
   bool get enabled =>
-      cat.getSetting('allow_file_changes') == '1' || organiseModeOn(cat);
+      cat.getSetting('allow_file_changes') == '1' ||
+      cat.getSetting('sync_to_files') == '1' ||
+      organiseModeOn(cat);
 
   /// The exact preview for writing [values] (field → value, null to remove) to
   /// each track. Nothing is written.

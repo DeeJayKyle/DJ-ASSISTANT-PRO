@@ -26,7 +26,7 @@ The app is focused on **music analysis** and **DJ crate building**. The sidebar 
 
 **Taggers (new)** — MusicBrainz Picard, OneTagger, Mp3tag and beets working hand in hand, **on copies only**. Choose tracks (missing tags, a crate, or a Library selection via *Tag with tools…*) and DJ Assistant makes a workspace in its data folder with separate copies per tool. OneTagger (Beatport, Traxsource, Juno Download, MusicBrainz: genre, style, label, BPM, key, date) and beets (MusicBrainz releases; own config and library inside the workspace, so your beets setup is untouched) run by themselves; Picard (AcoustID fingerprints) and Mp3tag open on their copies for you to check and save, then *Collect*. Everything the tools changed is merged into Suggestions: values several tools agree on score higher, disagreements are spelled out. Install the tools yourself; the page finds them on PATH or in their usual Windows folders, or you set the path. The tools go online themselves, not DJ Assistant.
 
-**Suggestions — review first (new default in 2.4)** — fixes from file names, folders, spellings, analysis and the online services you turn on, each with the current value, suggestion, source, evidence and confidence. Approve or reject one at a time, or tick a batch. Accepting changes the catalogue only, never the file, and **Undo restores the exact previous value**. See [Auto-prep and suggestions](#auto-prep-and-suggestions).
+**Suggestions — review first (new default in 2.4)** — fixes from file names, folders, spellings, analysis and the online services you turn on, each with the current value, suggestion, source, evidence and confidence. Approve or reject one at a time, or tick a batch. Accepting changes the catalogue (and the file too, with write-through on), and **Undo restores the exact previous value**. See [Auto-prep and suggestions](#auto-prep-and-suggestions).
 
 **Organise Files mode (opt-in, off by default)** — edit tags in the files, rename and move files or folders, replace a track with a better file, remove exact duplicates and bad files. See [Organise Files](#organise-files).
 
@@ -56,7 +56,17 @@ Auto-prep runs after scans and imports (switch in Settings → Library). It anal
 | Fill empty fields | Fills empty fields from the best evidence. Never replaces a value you already have. |
 | Apply confident fixes | The behaviour before 2.4: fills empty fields and replaces existing values at or above the confidence slider (default 85%). |
 
-All three only touch DJ Assistant's catalogue, never the files. From 2.4 every accepted suggestion records what it replaced and who accepted it ("by you" or "automatic"), so **Undo** under Suggestions → Accepted (or **Undo automatic changes…** in Settings) puts the exact previous value back, unless you have changed it since. Values accepted before 2.4 show as "earlier" and can't be undone exactly, because their previous values weren't kept.
+All three change DJ Assistant's catalogue; the files change only with write-through on (below). From 2.4 every accepted suggestion records what it replaced and who accepted it ("by you" or "automatic"), so **Undo** under Suggestions → Accepted (or **Undo automatic changes…** in Settings) puts the exact previous value back, unless you have changed it since. Values accepted before 2.4 show as "earlier" and can't be undone exactly, because their previous values weren't kept.
+
+## Write your changes into the music files (new)
+
+Settings → Changes to music files → **Write my changes into the music files** (off by default). With it on, every change to a track's title, artist, album, genre, year, BPM or key in DJ Assistant — your edits, the Health fixer, approved suggestions, the Analysis Crew's fixes, and Undo — is also written into the file's own tags, so Serato, rekordbox and every other app see it. When you switch it on you can also write the values you changed earlier.
+
+- Written in the background, one file at a time, through the safe tag writer: the file must be unchanged since it was read, a verified backup is made first, the audio must hash identically afterwards, and every other tag (Serato's cues, loops, beatgrids) must stay byte for byte.
+- MP3 and FLAC get every field; M4A everything except BPM and key; WAV, AIFF, Ogg and video files are skipped (their values stay in DJ Assistant).
+- Keys are written in your notation (Camelot "8A" or musical "Am").
+- Clearing a value, or undoing a suggestion, puts back what the file said before DJ Assistant first wrote to it.
+- Every write is in the change log with its backup and can be rolled back (Settings → Changes to music files, or Organise Files → History). The status bar says "Changes write to files" while it is on.
 
 ## Organise Files
 
@@ -72,7 +82,7 @@ Test on copies of your music first.
 
 ## Safety
 
-- Music files are only read unless you turn on tag writing or Organise Files mode (both off by default). Quick Prep, Gig Pack and exports only create new files and folders.
+- Music files are only read unless you turn on write-through, tag writing or Organise Files mode (all off by default). Quick Prep, Gig Pack and exports only create new files and folders.
 - Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato adds a new `.crate` file in `_Serato_/Subcrates`, never overwriting one.
 - The AI assistant has no tool that changes, moves or deletes files, and cannot change the file-change switches or the suggestion mode.
 

@@ -11,6 +11,7 @@ import '../core/inbox.dart' show InboxService, inboxCrateName;
 import '../core/diag_log.dart';
 import '../core/limits.dart';
 import '../core/export.dart' show openFolder;
+import '../core/file_sync.dart';
 import '../core/updater.dart';
 import '../online/http_online.dart';
 import 'assistant_panel.dart';
@@ -21,10 +22,10 @@ import 'theme.dart';
 import 'widgets.dart';
 
 const safetyPoints = [
-  'Your music is only read unless you turn on tag writing or Organise Files mode below. Both are off by default.',
+  'Your music is only read unless you turn on writing your changes into the files, tag writing or Organise Files mode below. All are off by default.',
   'With either on, nothing happens silently: every change is listed in a preview, you approve it one by one or in batches, a verified backup or restorable copy is kept, and it can be undone.',
   'Files are never permanently deleted except when you empty the Removed files area yourself, after seeing what is in it.',
-  'Metadata suggestions wait for your review unless you choose otherwise. Accepting one changes the catalogue only, never the file, and can be undone.',
+  'Metadata suggestions wait for your review unless you choose otherwise. Accepting one changes the catalogue (and, with write-through on, the file\'s tags, backed up first) and can be undone.',
   "Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato only adds a new .crate file. Serato crates and history can be imported read-only.",
   "Your ratings, energy, tags, crates, sets and notes stay in DJ Assistant's own catalogue on this computer.",
   'Only folders you choose are scanned. Personal files are a separate, opt-in module.',
@@ -355,10 +356,104 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           gap,
           Panel(
             title: 'Changes to music files',
-            subtitle: 'Both off by default. Every change is previewed and approved by you, backed up and verified, and can be undone. Test on copies of your music first.',
+            subtitle: 'All off by default. Every change is backed up and verified, and can be undone. Test on copies of your music first.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Write my changes into the music files'),
+                  subtitle: Text(
+                    'When you (or an approved suggestion, the crew, or Undo) change a track\'s title, artist, album, genre, year, BPM or key here, the file\'s own tags change too, so Serato, rekordbox and every other app see it. Written in the background, one file at a time: verified backup first, audio checked bit for bit, Serato\'s cues and beatgrids kept. MP3, FLAC and M4A (M4A: no BPM/key). Roll back any write below.',
+                    style: TextStyle(color: t.faint, fontSize: DjType.small),
+                  ),
+                  value: st['sync_to_files'] == true,
+                  onChanged: (v) async {
+                    if (!v) return _set('sync_to_files', false);
+                    final pick = await showDialog<String>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text(
+                          'Write changes into your music files?',
+                        ),
+                        content: const SizedBox(
+                          width: 460,
+                          child: Text(
+                            'From now on, changes you make to title, artist, album, genre, year, BPM and key in DJ Assistant are written into the files themselves. Each file is backed up and verified first and every write can be rolled back.\n\n'
+                            'You can also write the values you changed earlier in DJ Assistant into their files now.',
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c),
+                            child: const Text('Cancel'),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(c, 'new'),
+                            child: const Text('Only new changes'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(c, 'all'),
+                            child: const Text('Also write earlier changes'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (pick == null) return;
+                    _set('sync_to_files', true);
+                    if (pick == 'all') {
+                      final n = enqueueAllEdited(s.cat);
+                      toast(
+                        n == 0 ? 'Nothing to write yet.' : 'Writing your earlier changes to their files in the background.',
+                      );
+                    }
+                  },
+                ),
+                if (st['sync_to_files'] == true)
+                  Builder(
+                    builder: (_) {
+                      final queued = fileSyncQueued(s.cat);
+                      final last = lastFileSync(s.cat);
+                      final job = s.jobs.status('file_sync');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: Space.x3),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (job.state == 'running')
+                              ProgressLine(
+                                label: 'Writing to music files…',
+                                done: job.done,
+                                total: job.total,
+                              ),
+                            Text(
+                              [
+                                if (queued > 0)
+                                  '$queued track(s) waiting to be written.',
+                                if (last != null)
+                                  'Last: ${last['written']} written, ${last['skipped']} already up to date or not writable, ${last['failed']} failed · ${fmtDateTime(last['at'] as int?)}.',
+                                if (queued == 0 && last == null)
+                                  'Nothing written yet.',
+                              ].join(' '),
+                              style: TextStyle(
+                                color: t.muted,
+                                fontSize: DjType.small,
+                              ),
+                            ),
+                            for (final e
+                                in ((last?['errors'] as List?) ?? const []))
+                              Text(
+                                '$e',
+                                style: TextStyle(
+                                  color: t.danger,
+                                  fontSize: DjType.small,
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 sw(
                   'allow_file_changes',
                   'Write tags to music files',
