@@ -1,11 +1,14 @@
 import 'dart:convert';
 
+import '../analysis/analysis.dart' as an;
+import '../analysis/beatgrid.dart' show foldBpmForGenre;
 import 'analysis_store.dart';
 import 'autoprep.dart';
 import 'catalogue.dart';
 import 'health.dart';
 import 'jobs.dart';
 import 'keys.dart';
+import 'limits.dart';
 import 'suggestions.dart';
 import 'taggers.dart';
 
@@ -384,6 +387,47 @@ Future<String?> _taggers(CrewBoard b, JobProgress ctx) async {
 
 const _judgeMark = ' · Judge: ';
 
+/// Half/double time can't be heard, but the genre settles it: tracks whose
+/// analysed tempo sits outside their genre's range (when an octave fits)
+/// are analysed again with the genre as a hint, so tempo and beatgrid stay
+/// consistent. Only with Settings → BPM range on automatic.
+int _relisten(CrewBoard b) {
+  final cat = b.cat;
+  final range = cat.getSetting('bpm_range');
+  if (range != null && range != 'auto') return 0;
+  final rows = cat.db.select(
+    'SELECT a.track_id AS id, a.bpm, t.path, t.file_size, t.file_mtime, '
+    'COALESCE(u.genre, t.genre) AS genre FROM analysis a '
+    'JOIN tracks t ON t.id=a.track_id LEFT JOIN track_user u ON u.track_id=t.id '
+    "WHERE a.status='ok' AND a.bpm IS NOT NULL AND t.presence='present' "
+    'AND COALESCE(u.genre, t.genre) IS NOT NULL',
+  );
+  final store = AnalysisStore(cat);
+  final minutes = limitOf(cat, 'analysis_minutes');
+  var n = 0;
+  for (final r in rows) {
+    final bpm = (r['bpm'] as num).toDouble(), genre = r['genre'] as String;
+    if (foldBpmForGenre(bpm, genre) == null) continue;
+    try {
+      store.storeResult(
+        r['id'] as int,
+        r['file_size'] as int,
+        r['file_mtime'] as int?,
+        an.analyseFile(
+          r['path'] as String,
+          seconds: minutes == null ? null : minutes * 60.0,
+          genre: genre,
+        ),
+      );
+      n++;
+    } on Object {
+      // unreadable now (drive gone): keep what we had
+    }
+  }
+  if (n > 0) store.rescaleEnergy();
+  return n;
+}
+
 /// Whether two BPMs are the same tempo, allowing half/double time.
 bool sameTempo(double a, double b) {
   for (final f in const [1.0, 2.0, 0.5]) {
@@ -396,14 +440,17 @@ bool sameTempo(double a, double b) {
 ///  * The same value from several agents: confidence +0.06 per extra agent.
 ///  * Different values for the same field: −0.05 and the rivals are named.
 ///  * BPM and key against what the Listener heard: agreement +0.08, a
-///    half/double tempo or relative key +0.02, a clash −0.15.
+///    half/double tempo or relative key +0.02, a clash −0.15, each scaled
+///    by how sure the Listener was (×0.5 at no confidence, ×1 when certain).
 /// Each suggestion is judged once per evidence version (an agent refreshing a
 /// suggestion resets its evidence, so it is judged afresh).
 String? _judge(CrewBoard b) {
   final cat = b.cat;
+  final relistened = _relisten(b);
   final rows = cat.db.select(
     'SELECT s.id, s.track_id, s.field, s.suggested_value, s.source, s.evidence, '
-    's.confidence, a.bpm AS a_bpm, a.camelot AS a_key, a.status AS a_status '
+    's.confidence, a.bpm AS a_bpm, a.camelot AS a_key, a.status AS a_status, '
+    'a.bpm_confidence AS a_bpm_conf, a.key_confidence AS a_key_conf '
     'FROM suggestions s LEFT JOIN analysis a ON a.track_id=s.track_id '
     "WHERE s.status='pending'",
   );
@@ -441,34 +488,39 @@ String? _judge(CrewBoard b) {
       notes.add('$rivals other value(s) suggested');
     }
     if (r['a_status'] == 'ok' && source != 'analysis') {
+      // the audio's say counts as much as the Listener was sure of it
+      double sure(Object? c) =>
+          0.5 + 0.5 * ((c as num?)?.toDouble() ?? 0.5).clamp(0.0, 1.0);
       if (field == 'bpm' && r['a_bpm'] != null) {
         final heard = (r['a_bpm'] as num).toDouble();
+        final w = sure(r['a_bpm_conf']);
         final said = double.tryParse(value);
         if (said != null) {
           if ((heard - said).abs() <= 1.5) {
-            delta += 0.08;
+            delta += 0.08 * w;
             notes.add('the audio agrees (${rustNumber(heard)} BPM)');
           } else if (sameTempo(heard, said)) {
-            delta += 0.02;
+            delta += 0.02 * w;
             notes.add('half/double of the audio (${rustNumber(heard)} BPM)');
           } else {
-            delta -= 0.15;
+            delta -= 0.15 * w;
             notes.add('the audio says ${rustNumber(heard)} BPM');
           }
         }
       }
       if (field == 'key' && r['a_key'] != null) {
         final heard = r['a_key'] as String;
+        final w = sure(r['a_key_conf']);
         final said = normalizeKey(value);
         if (said != null) {
           if (said == heard) {
-            delta += 0.08;
+            delta += 0.08 * w;
             notes.add('the audio agrees ($heard)');
           } else if (_relative(said, heard)) {
-            delta += 0.02;
+            delta += 0.02 * w;
             notes.add('relative key of the audio ($heard)');
           } else {
-            delta -= 0.15;
+            delta -= 0.15 * w;
             notes.add('the audio hears $heard');
           }
         }
@@ -486,10 +538,15 @@ String? _judge(CrewBoard b) {
       [conf, '$evidence$_judgeMark${notes.join('; ')}', id],
     );
   }
-  b.reports['judge']!.summary = judged == 0
-      ? 'Nothing new to cross-check.'
-      : 'Cross-checked $judged suggestion(s): $raised more certain, '
-            '$lowered less certain.';
+  b.reports['judge']!.summary = [
+    judged == 0
+        ? 'Nothing new to cross-check.'
+        : 'Cross-checked $judged suggestion(s): $raised more certain, '
+              '$lowered less certain.',
+    if (relistened > 0)
+      'Had the Listener re-time $relistened track(s) to their genre '
+          '(half/double time).',
+  ].join(' ');
   return null;
 }
 

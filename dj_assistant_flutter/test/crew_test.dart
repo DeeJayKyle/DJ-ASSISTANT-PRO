@@ -87,7 +87,8 @@ void main() {
       track = idOf('Low Tide.flac');
       cat.db.execute(
         'INSERT OR REPLACE INTO analysis (track_id, method, version, analysed_at, '
-        "status, bpm, camelot) VALUES (?, 'test', 1, 0, 'ok', 124.0, '8A')",
+        "status, bpm, camelot, bpm_confidence, key_confidence) "
+        "VALUES (?, 'test', 1, 0, 'ok', 124.0, '8A', 1.0, 1.0)",
         [track],
       );
     });

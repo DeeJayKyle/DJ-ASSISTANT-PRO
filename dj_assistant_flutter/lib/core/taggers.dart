@@ -215,12 +215,65 @@ Map<String, String> tagValues(AudioMeta m) {
   };
 }
 
-/// How two values compare for agreement (case, accents and spacing ignored).
-String agreeKey(String field, String v) => switch (field) {
-  'bpm' => rustNumber(((double.tryParse(v) ?? 0) * 2).round() / 2),
-  'key' => normalizeKey(v) ?? fold(v),
-  _ => fold(v).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).join(' '),
-};
+/// How two values compare for agreement: the same fact written the way
+/// different tools write it compares equal. Case, accents and spacing never
+/// matter; then per field:
+///  * title: "(Original Mix)" is no version, brackets [ ] equal ( ), and a
+///    featured artist in the title is ignored;
+///  * artist: "feat.", "ft.", "featuring", "&", "and", "x", "," all join
+///    names, in any order;
+///  * genre: "Hip-Hop" = "Hip Hop" = "HipHop", "R&B" = "RnB";
+///  * label: "Records", "Recordings", "Music", "Ltd" endings are dropped;
+///  * year: the first four digits ("2019-05-03" = "2019");
+///  * BPM to the half beat; keys as Camelot codes.
+String agreeKey(String field, String v) {
+  String words(String x) =>
+      x.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).join(' ');
+  final f = fold(v);
+  switch (field) {
+    case 'bpm':
+      return rustNumber(((double.tryParse(v) ?? 0) * 2).round() / 2);
+    case 'key':
+      return normalizeKey(v) ?? f;
+    case 'year' || 'original_year':
+      return RegExp(r'\d{4}').firstMatch(v)?[0] ?? f;
+    case 'title':
+      var t = f.replaceAll('[', '(').replaceAll(']', ')');
+      t = t.replaceAll(RegExp(r'\(\s*(feat\.?|ft\.?|featuring)\s[^)]*\)'), '');
+      t = t.replaceAll(
+        RegExp(r'\s(feat\.?|ft\.?|featuring)\s.*?(?=\(|$)'),
+        ' ',
+      );
+      t = t.replaceAll(RegExp(r'\(\s*original( mix)?\s*\)'), '');
+      return words(t);
+    case 'artist':
+      final names =
+          f
+              .split(
+                RegExp(
+                  r'\s+(?:feat\.?|ft\.?|featuring|&|and|x|vs\.?)\s+|\s*,\s*',
+                ),
+              )
+              .map(words)
+              .where((n) => n.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
+      return names.join(' + ');
+    case 'genre':
+      return f.replaceAll('&', 'n').replaceAll(RegExp(r'[^a-z0-9]'), '');
+    case 'record_label':
+      var l = words(f);
+      for (var i = 0; i < 2; i++) {
+        l = l.replaceFirst(
+          RegExp(r'\s+(records|recordings|music|ltd\.?|limited|label|inc\.?)$'),
+          '',
+        );
+      }
+      return l;
+  }
+  return words(f);
+}
 
 /// One tool's finding for a track: field → the value it wrote.
 typedef Findings = Map<int, Map<String, String>>;

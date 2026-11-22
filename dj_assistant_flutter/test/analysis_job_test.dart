@@ -94,8 +94,10 @@ void main() {
           continue; // tied raw energy: checked as a group below
         }
         if (k == 'version') {
-          // 2.1 adds the whole-file beatgrid; everything 1.x stores is unchanged
-          expect(y, 2, reason: '$name version');
+          // 2.1 added the whole-file beatgrid (version 2); 2.5's key
+          // detector (key.dart, measured by the precision benchmark) is
+          // version 3, so libraries are re-analysed once
+          expect(y, 3, reason: '$name version');
         } else if (k == 'peak_dbfs' && name == 'Driftwood.aiff') {
           expect(
             y,

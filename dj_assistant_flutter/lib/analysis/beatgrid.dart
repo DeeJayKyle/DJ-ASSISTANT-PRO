@@ -342,6 +342,82 @@ const bpmRanges = {
   '88-175': (88.0, 175.0),
 };
 
+/// Where each genre's tempo is usually counted (BPM, inclusive), most
+/// specific first. A detected tempo outside the range is folded by ×2 or ÷2
+/// when that lands inside it: whether a track is 87 or 174 BPM can't be
+/// heard, but its genre settles it (drum & bass is 174, hip hop 87).
+const genreTempoRanges = <(List<String>, double, double)>[
+  (
+    [
+      'drum & bass',
+      'drum and bass',
+      'drum n bass',
+      'dnb',
+      'd&b',
+      'jungle',
+      'neurofunk',
+      'liquid funk',
+    ],
+    160,
+    185,
+  ),
+  (['footwork', 'juke'], 150, 170),
+  (['hardstyle', 'hardcore', 'gabber', 'happy hardcore'], 145, 200),
+  (['dubstep', 'riddim', 'brostep'], 135, 152),
+  (['uk garage', 'ukg', '2-step', '2 step', 'speed garage'], 125, 140),
+  (['jersey club'], 130, 145),
+  (
+    ['afro house', 'deep house', 'tech house', 'house', 'nu disco', 'nu-disco'],
+    110,
+    135,
+  ),
+  (['amapiano', 'gqom'], 100, 128),
+  (['psytrance', 'trance'], 125, 150),
+  (['techno'], 118, 150),
+  (['baile funk', 'funk carioca'], 120, 140),
+  (['moombahton'], 100, 118),
+  (['reggaeton', 'dembow'], 85, 105),
+  (['dancehall'], 78, 112),
+  (
+    ['afrobeats', 'afrobeat', 'afropop', 'afro pop', 'afroswing', 'naija'],
+    88,
+    120,
+  ),
+  (['hip hop', 'hip-hop', 'hiphop', 'rap', 'boom bap', 'drill'], 65, 115),
+  (['r&b', 'rnb', 'r & b', 'neo soul', 'soul'], 58, 110),
+  (['disco', 'funk'], 98, 135),
+  (['reggae', 'dub'], 58, 100),
+];
+
+/// The tempo range for a genre tag, or null when it says nothing reliable.
+(double, double)? genreTempoRange(String? genre) {
+  if (genre == null) return null;
+  final g = ' ${genre.toLowerCase().replaceAll(RegExp(r'[/_]'), ' ')} ';
+  for (final (names, lo, hi) in genreTempoRanges) {
+    for (final n in names) {
+      // whole words only: "house" in "Afro House", not "lighthouse"
+      if (RegExp('(^|[^a-z])${RegExp.escape(n)}([^a-z]|\$)').hasMatch(g)) {
+        return (lo, hi);
+      }
+    }
+  }
+  return null;
+}
+
+/// [bpm] moved into its genre's range by ×2 / ÷2, or null when it is
+/// already there, the genre is unknown, or no octave fits.
+double? foldBpmForGenre(double bpm, String? genre) {
+  final r = genreTempoRange(genre);
+  if (r == null || bpm <= 0) return null;
+  final (lo, hi) = r;
+  if (bpm >= lo && bpm <= hi) return null;
+  for (final f in const [2.0, 0.5, 4.0, 0.25]) {
+    final v = bpm * f;
+    if (v >= lo && v <= hi) return v;
+  }
+  return null;
+}
+
 double foldBpm(double bpm, String? range) {
   final r = bpmRanges[range];
   if (r == null || bpm <= 0) return bpm;
