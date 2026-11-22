@@ -25,7 +25,7 @@ const shortcutGroups = <(String, List<(String, String)>)>[
       ('Alt + Left  /  Alt + Right', 'Back / forward'),
       ('Mouse back / forward buttons', 'Back / forward'),
       ('Ctrl + K  or  Ctrl + P', 'Go to a page by name'),
-      ('Ctrl + 1 … 9', 'Open the first nine pages in the sidebar'),
+      ('Ctrl + 1 … 4', 'Open Library, Analysis, Crates or Prep & Gigs'),
       ('Ctrl + ,', 'Settings'),
     ],
   ),

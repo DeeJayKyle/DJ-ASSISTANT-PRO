@@ -17,6 +17,7 @@ import 'format.dart';
 import 'screens.dart';
 import 'shortcuts_sheet.dart';
 import 'state.dart';
+import 'hubs.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -26,43 +27,16 @@ class _Nav {
   final IconData icon;
 }
 
-const _main = [
-  _Nav('quick', 'Quick Prep', Icons.bolt_outlined),
-  _Nav('library', 'Library', Icons.library_music_outlined),
-  _Nav('crates', 'Virtual Crates', Icons.inventory_2_outlined),
-  _Nav('duplicates', 'Duplicate Review', Icons.copy_all_outlined),
-  _Nav('activity', 'Scan Activity', Icons.refresh),
-  _Nav('health', 'Library Health', Icons.favorite_outline),
-  _Nav('organize', 'Organise Files', Icons.build_outlined),
-];
-const _create = [
-  _Nav('studio:stems', 'Stems', Icons.layers_outlined),
-  _Nav('studio:remix', 'Remix', Icons.shuffle),
-  _Nav('studio:dj', 'DJ Decks', Icons.headphones_outlined),
-  _Nav('studio:synth', 'Synth Lab', Icons.graphic_eq),
-  _Nav('studio:drums', 'Drum Lab', Icons.album_outlined),
-];
-const _prepare = [
-  _Nav('set-studio', 'Set Studio', Icons.queue_music_outlined),
-  _Nav('discovery', 'Discovery', Icons.explore_outlined),
-  _Nav('map', 'Library Map', Icons.scatter_plot_outlined),
-  _Nav('suggestions', 'Suggestions', Icons.auto_fix_high_outlined),
-  _Nav('gig', 'Gig Mode', Icons.sensors),
-  _Nav('gig-pack', 'Gig Pack', Icons.usb_outlined),
-  // Last, so Ctrl+1…9 still open the same pages as before.
-  _Nav('upgrades', 'Upgrades', Icons.high_quality_outlined),
-];
-
 class NavPage {
   const NavPage(this.id, this.label, this.icon);
   final String id, label;
   final IconData icon;
 }
 
-/// Every page in sidebar order (Ctrl+1…9 opens the first nine).
+/// Every page, hub by hub, for Go to (Ctrl+K). Ctrl+1…4 opens the hubs.
 final allPages = [
-  for (final n in [..._main, ..._create, ..._prepare])
-    NavPage(n.id, n.label, n.icon),
+  for (final h in hubs)
+    for (final x in h.tabs) NavPage(x.id, x.pageTitle ?? x.label, x.icon),
   const NavPage('settings', 'Settings', Icons.settings_outlined),
 ];
 
@@ -107,9 +81,12 @@ Future<void> showGoTo(BuildContext context, WidgetRef ref) async {
                             title: Text(p.label),
                             trailing: i == 0
                                 ? const Text('Enter')
-                                : (allPages.indexOf(p) < 9
-                                      ? Text('Ctrl+${allPages.indexOf(p) + 1}')
-                                      : null),
+                                : switch (hubs.indexWhere(
+                                    (h) => h.tabs.first.id == p.id,
+                                  )) {
+                                    -1 => null,
+                                    final n => Text('Ctrl+${n + 1}'),
+                                  },
                             onTap: () => Navigator.pop(c, p.id),
                           ),
                       ],
@@ -236,8 +213,16 @@ class _ShellState extends ConsumerState<Shell> {
     };
     final view = ref.watch(viewProvider);
     final chat = ref.watch(chatModeProvider);
-    final body = screenFor(view);
-    final studio = view.id.startsWith('studio:');
+    final hub = hubOf(view.id);
+    final page = screenFor(view);
+    final body = hub != null && hub.owns(view.id)
+        ? HubScope(
+            hub: hub,
+            current: view.id,
+            onSelect: (id) => ref.read(viewProvider.notifier).go(id),
+            child: page,
+          )
+        : page;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.f1): () =>
@@ -269,12 +254,12 @@ class _ShellState extends ConsumerState<Shell> {
             showGoTo(context, ref),
         const SingleActivator(LogicalKeyboardKey.comma, control: true): () =>
             ref.read(viewProvider.notifier).go('settings'),
-        for (final (i, n) in allPages.take(9).indexed)
+        for (final (i, h) in hubs.indexed)
           SingleActivator(
             LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i),
             control: true,
           ): () =>
-              ref.read(viewProvider.notifier).go(n.id),
+              ref.read(viewProvider.notifier).go(h.tabs.first.id),
       },
       // the mouse's back and forward side buttons
       child: Listener(
@@ -321,12 +306,7 @@ class _ShellState extends ConsumerState<Shell> {
                     final page = Expanded(
                       child: Stack(
                         children: [
-                          // Studio stays mounted once opened, so decks keep playing.
-                          Offstage(
-                            offstage: !studio,
-                            child: const StudioHost(),
-                          ),
-                          if (!studio) Positioned.fill(child: body),
+                          Positioned.fill(child: body),
                           if (overlay && chat == 'open')
                             Positioned(
                               top: 0,
@@ -708,12 +688,31 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         (stats['low_bitrate'] ?? 0);
     Widget item(_Nav n, {String? count, bool warn = false}) => _NavItem(
       nav: n,
-      selected: view.id == n.id || (n.id == 'library' && view.id == 'library'),
+      selected: view.id == n.id,
       rail: widget.rail,
       count: count,
       warn: warn,
       onTap: () => ref.read(viewProvider.notifier).go(n.id),
     );
+    final here = hubOf(view.id);
+    // One entry per hub; it opens the hub's first tab.
+    Widget hubItem(Hub h) {
+      final (count, warn) = switch (h.id) {
+        'hub:library' => (fmtNumber(stats['tracks'] ?? 0), false),
+        'hub:analysis' when pending > 0 => ('$pending', false),
+        'hub:analysis' when problems > 0 => ('$problems', true),
+        'hub:crates' when crates.isNotEmpty => ('${crates.length}', false),
+        _ => (null, false),
+      };
+      return _NavItem(
+        nav: _Nav(h.id, h.label, h.icon),
+        selected: identical(here, h),
+        rail: widget.rail,
+        count: widget.rail && h.id == 'hub:library' ? null : count,
+        warn: warn,
+        onTap: () => ref.read(viewProvider.notifier).go(h.tabs.first.id),
+      );
+    }
 
     Widget section(String label, {Widget? trailing}) => widget.rail
         ? const Padding(
@@ -790,20 +789,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: Space.x2),
           children: [
-            for (final n in _main)
-              item(
-                n,
-                count: n.id == 'health' && problems > 0 ? '$problems' : null,
-                warn: n.id == 'health',
-              ),
-            section(''),
-            for (final n in _create) item(n),
-            section(''),
-            for (final n in _prepare)
-              item(
-                n,
-                count: n.id == 'suggestions' && pending > 0 ? '$pending' : null,
-              ),
+            for (final h in hubs) hubItem(h),
             section(''),
             if (docs)
               item(
@@ -823,25 +809,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       child: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 8),
         children: [
-          for (final n in _main)
-            item(
-              n,
-              count: switch (n.id) {
-                'library' => fmtNumber(stats['tracks'] ?? 0),
-                'crates' => crates.isEmpty ? null : '${crates.length}',
-                'health' => problems > 0 ? '$problems' : null,
-                _ => null,
-              },
-              warn: n.id == 'health',
-            ),
-          section('Create'),
-          for (final n in _create) item(n),
-          section('Prepare'),
-          for (final n in _prepare)
-            item(
-              n,
-              count: n.id == 'suggestions' && pending > 0 ? '$pending' : null,
-            ),
+          for (final h in hubs) hubItem(h),
           section(
             'My crates',
             trailing: IconButton(

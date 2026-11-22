@@ -151,65 +151,6 @@ AssistantReply ruleAssistant(Catalogue cat, String message) {
       ['help', '?', 'what can you do', 'hi', 'hello', 'hey'].contains(msg)) {
     return AssistantReply(reply: assistantHelp, action: 'help');
   }
-  // Set planning: "plan a 2 hour wedding set", "90 minute warm up set"
-  if (msg.contains(' set') &&
-      (msg.contains('plan') ||
-          msg.contains('build') ||
-          msg.contains('make') ||
-          msg.contains('hour') ||
-          msg.contains('minute') ||
-          msg.contains('min '))) {
-    final words = msg.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    int? minutes;
-    for (var i = 0; i + 1 < words.length; i++) {
-      final n = _f64(words[i]);
-      if (n == null) continue;
-      final w = words[i + 1];
-      if (w.startsWith('hour') || w == 'h' || w == 'hr' || w == 'hrs') {
-        minutes = _sat(n * 60);
-      } else if (w.startsWith('min')) {
-        minutes = _sat(n);
-      }
-    }
-    final event = [
-      'wedding',
-      'club',
-      'festival',
-      'corporate',
-      'birthday',
-      'lounge',
-      'house party',
-      'private party',
-      'latin night',
-    ].where(msg.contains).firstOrNull;
-    final curve = msg.contains('warm')
-        ? 'warmup'
-        : msg.contains('peak')
-        ? 'peak'
-        : msg.contains('wedding')
-        ? 'wedding'
-        : (msg.contains('lounge') || msg.contains('chill'))
-        ? 'lounge'
-        : 'journey';
-    final clean = msg.contains('clean');
-    return AssistantReply(
-      reply: 'Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.',
-      action: 'navigate',
-      target: 'set-studio',
-      understood: [
-        'length ${minutes ?? 60} min',
-        'energy journey: $curve',
-        if (event != null) 'event: $event',
-        if (clean) 'clean tracks only',
-      ],
-      params: {
-        'duration_min': minutes ?? 60,
-        'event_type': event,
-        'curve': curve,
-        'clean_only': clean,
-      },
-    );
-  }
   for (final (words, target, reply) in [
     (
       ['gig mode', 'start gig', 'start a gig', 'requests'],
@@ -585,11 +526,4 @@ AssistantReply ruleAssistant(Catalogue cat, String message) {
     total: page.total,
     sample: page.rows,
   );
-}
-
-/// Rust's saturating `f64 as u32`.
-int _sat(double v) {
-  if (v.isNaN || v <= 0) return 0;
-  if (v >= 4294967295) return 4294967295;
-  return v.floor();
 }

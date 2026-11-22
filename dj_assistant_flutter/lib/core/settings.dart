@@ -59,16 +59,9 @@ class SettingsService {
       'accent': cat.getSetting('accent') ?? 'mint',
       'key_notation': cat.getSetting('key_notation') ?? 'camelot',
       'scan_video': _flag('scan_video', true),
-      'ai_gpu': _flag('ai_gpu', true),
       'bpm_range': bpmRanges.containsKey(cat.getSetting('bpm_range'))
           ? cat.getSetting('bpm_range')
           : 'auto',
-      'stems_cache': _flag('stems_cache', true),
-      'stems_cache_gb':
-          int.tryParse(cat.getSetting('stems_cache_gb') ?? '') ?? 20,
-      'studio_cores': int.tryParse(cat.getSetting('studio_cores') ?? '') ?? 0,
-      'audio_buffer_ms':
-          int.tryParse(cat.getSetting('audio_buffer_ms') ?? '') ?? 120,
       'premium_ui': _flag('premium_ui', false),
       'auto_prep': autoPrepEnabled(cat),
       'ui_prefs': prefs is Map ? prefs : <String, Object?>{},
@@ -90,8 +83,6 @@ class SettingsService {
     'learning_enabled',
     'auto_update',
     'scan_video',
-    'ai_gpu',
-    'stems_cache',
     'premium_ui',
     'auto_prep',
     'watch_enabled',
@@ -125,11 +116,6 @@ class SettingsService {
         choice(['glass', 'solid'], 'unknown surface style');
       case 'motion':
         choice(['full', 'reduced'], 'unknown motion setting');
-      case 'studio_cores':
-        // 0: automatic (every core but one)
-        final v = value is num ? value.toInt() : int.tryParse('$value');
-        if (v == null || v < 0) _bad('cores must be 0 (automatic) or more');
-        cat.setSetting(key, '$v');
       case 'inbox_downloads':
       case 'inbox_folder':
         final v = s().trim();
@@ -140,18 +126,6 @@ class SettingsService {
           bpmRanges.keys.toList(),
           'BPM range must be auto, 58-115, 68-135, 78-155 or 88-175',
         );
-      case 'stems_cache_gb':
-        final v = value is num ? value.toInt() : int.tryParse('$value');
-        if (v == null || v < 1 || v > 2000) {
-          _bad('prepared stems space must be between 1 and 2000 GB');
-        }
-        cat.setSetting(key, '$v');
-      case 'audio_buffer_ms':
-        final v = value is num ? value.toInt() : int.tryParse('$value');
-        if (v == null || v < 10) {
-          _bad('the audio buffer must be at least 10 ms');
-        }
-        cat.setSetting(key, '$v');
       case 'accent':
         choice([
           'mint',

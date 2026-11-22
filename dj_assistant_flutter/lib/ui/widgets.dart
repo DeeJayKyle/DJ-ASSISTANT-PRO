@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'hubs.dart';
 import 'theme.dart';
 
 /// A screen: title, optional subtitle and actions, then the body. Actions
@@ -48,13 +49,25 @@ class _PageFrameState extends State<PageFrame> {
       builder: (context, box) {
         final pad = Space.page(box.maxWidth);
         final narrow = box.maxWidth < 760;
+        // A page inside a hub shows the hub's name and tabs; its own title
+        // only when it says more than the tab (e.g. a live gig's name).
+        final hub = HubScope.maybeOf(context);
+        final tab = hub?.hub.tabs.where((x) => x.id == hub.current).firstOrNull;
         final titles = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Semantics(
               header: true,
-              child: Text(title, style: text.headlineSmall),
+              child: Text(hub?.hub.label ?? title, style: text.headlineSmall),
             ),
+            if (hub != null) ...[
+              const SizedBox(height: Space.x3),
+              HubTabs(scope: hub),
+              if (!(tab?.repeats(title) ?? false)) ...[
+                const SizedBox(height: Space.x3),
+                Text(title, style: text.titleMedium),
+              ],
+            ],
             if (subtitle != null) ...[
               const SizedBox(height: Space.x1),
               Text(subtitle, style: text.bodyMedium?.copyWith(color: t.faint)),

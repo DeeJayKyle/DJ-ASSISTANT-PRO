@@ -11,10 +11,8 @@ import 'settings_screen.dart';
 import 'upgrades_screen.dart';
 import 'state.dart';
 
-export 'studio/studio_host.dart' show StudioHost;
-
-/// The page for a view id (Studio pages live in [StudioHost], which stays
-/// mounted so decks keep playing while the DJ looks elsewhere).
+/// The page for a view id. Pages that are tabs of a hub (see hubs.dart) are
+/// wrapped in its HubScope by the shell.
 Widget screenFor(AppView v) => switch (v.id) {
   'crate' => LibraryScreen(
     key: ValueKey('crate${v.crateId}'),
@@ -27,7 +25,6 @@ Widget screenFor(AppView v) => switch (v.id) {
   'activity' => const ActivityScreen(),
   'health' => HealthScreen(fix: v.params?['fix'] as String?),
   'organize' => const OrganiseScreen(),
-  'set-studio' => SetStudioScreen(params: v.params),
   'discovery' => const DiscoveryScreen(),
   'map' => const LibraryMapScreen(),
   'suggestions' => const SuggestionsScreen(),

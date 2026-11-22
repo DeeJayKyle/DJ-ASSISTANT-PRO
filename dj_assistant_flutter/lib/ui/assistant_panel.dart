@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../assistant/agent.dart';
 import '../assistant/rule_assistant.dart';
 import '../core/crates.dart';
-import '../core/library_edit.dart';
 import 'state.dart';
-import 'studio/common.dart' show handoffProvider, songOf;
 import 'theme.dart';
 
 /// The assistant lives here for the whole session (the conversation survives
@@ -43,31 +41,12 @@ void applyUiAction(WidgetRef ref, Map<String, Object?> a) {
     v.go('library');
     return;
   }
-  if (a['type'] == 'open_studio') {
-    final page = '${a['page'] ?? 'stems'}';
-    final id = (a['track_id'] as num?)?.toInt();
-    final row = id == null ? null : ref.read(sessionProvider).library.row(id);
-    v.go('studio:$page');
-    if (row != null && const {'stems', 'remix', 'dj'}.contains(page)) {
-      ref
-          .read(handoffProvider.notifier)
-          .send(page, songOf(row), method: a['method'] as String?);
-    }
-    return;
-  }
   final view = '${a['view'] ?? 'library'}';
   switch (view) {
     case 'crate':
       v.go('crate', crateId: (a['crate_id'] as num?)?.toInt());
     case 'health-fix':
       v.go('health', params: {'fix': a['category'] ?? 'missing_genre'});
-    case 'set-studio':
-      v.go(
-        'set-studio',
-        params: a['set_params'] is Map
-            ? Map<String, Object?>.from(a['set_params']! as Map)
-            : null,
-      );
     default:
       v.go(view);
   }
@@ -86,11 +65,6 @@ const _commands = [
   ('/health', '', 'Open Library Health'),
   ('/dupes', '', 'Open Duplicate Review'),
   ('/crate', '<name>', 'Create an empty manual crate'),
-  (
-    '/set',
-    '<minutes> [journey|warmup|peak|wedding|lounge] [clean]',
-    'Open Set Studio pre-filled',
-  ),
   ('/gig', 'start [name] | end', 'Start or end gig mode'),
   ('/keys', 'camelot|musical', 'Choose how keys are shown'),
   ('/premium', 'on|off', 'Premium UI (Midnight Pro look)'),
@@ -237,36 +211,6 @@ class _AssistantPanelState extends ConsumerState<AssistantPanel> {
           done('Created the manual crate “$arg”. Add tracks from the library.');
           bump();
         }
-      case '/set':
-        final minutes =
-            int.tryParse(
-              rest.firstWhere(
-                (x) => RegExp(r'^\d+$').hasMatch(x),
-                orElse: () => '60',
-              ),
-            ) ??
-            60;
-        final curve = rest
-            .where(
-              (x) => [
-                'journey',
-                'warmup',
-                'peak',
-                'wedding',
-                'lounge',
-              ].contains(x),
-            )
-            .firstOrNull;
-        applyUiAction(ref, {
-          'type': 'open_view',
-          'view': 'set-studio',
-          'set_params': {
-            'duration_min': minutes,
-            'curve': ?curve,
-            if (rest.contains('clean')) 'clean_only': true,
-          },
-        });
-        done('Opened Set Studio for a $minutes-minute set.');
       case '/gig':
         if (rest.firstOrNull == 'end') {
           s.gig.end();
@@ -717,10 +661,6 @@ const pageAiSuggestions = <String, List<String>>{
     'Which low-bitrate tracks do I play most?',
     'How do I compare two versions by ear?',
   ],
-  'set-studio': [
-    'Plan a 3 hour club set from 118 to 128 BPM',
-    'Plan a wedding set with a clean-only filter',
-  ],
   'discovery': [
     'Follow the artists I play most',
     'What new releases do I not own yet?',
@@ -733,20 +673,6 @@ const pageAiSuggestions = <String, List<String>>{
     'Remove all limits',
     'Switch to the light theme',
   ],
-  'studio:stems': [
-    'Split my newest track into stems with AI',
-    'Split the most played track with the Fast method',
-  ],
-  'studio:remix': [
-    'Pick two songs in the same key for a mashup',
-    'Open my best 124 BPM track in Remix',
-  ],
-  'studio:dj': [
-    'Load two tracks that mix well on the decks',
-    'Which track should I play after this one?',
-  ],
-  'studio:synth': ['Open Synth Lab and suggest a sound for deep house'],
-  'studio:drums': ['Open Drum Lab and suggest a kit for Afrobeats'],
 };
 
 class _PageSuggestions extends StatelessWidget {

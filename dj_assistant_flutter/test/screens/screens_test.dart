@@ -30,7 +30,6 @@ const pages = [
   'health',
   'suggestions',
   'organize',
-  'set-studio',
   'discovery',
   'map',
   'gig',
@@ -38,11 +37,6 @@ const pages = [
   'files',
   'settings',
   'upgrades',
-  'studio:stems',
-  'studio:remix',
-  'studio:dj',
-  'studio:synth',
-  'studio:drums',
 ];
 const sizes = {
   // Small laptops at 125–150% scaling, and a narrow window (the assistant

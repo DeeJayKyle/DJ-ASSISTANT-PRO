@@ -11,14 +11,11 @@ import '../core/inbox.dart' show InboxService, inboxCrateName;
 import '../core/diag_log.dart';
 import '../core/limits.dart';
 import '../core/export.dart' show openFolder;
-import '../core/packs.dart';
 import '../core/updater.dart';
 import '../online/http_online.dart';
-import '../studio/stems_cache.dart';
 import 'assistant_panel.dart';
 import 'format.dart';
 import 'shortcuts_sheet.dart';
-import 'studio/common.dart' show errText, preparedStemsDir;
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -91,33 +88,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
       value: st[key] == true,
       onChanged: (v) => _set(key, v),
-    );
-    Widget number(String key, String title, String sub, String unit) => Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title),
-              Text(
-                sub,
-                style: TextStyle(color: t.faint, fontSize: DjType.small),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: Space.x3),
-        SizedBox(
-          width: 120,
-          child: TextFormField(
-            key: ValueKey('$key-${st[key]}'),
-            initialValue: '${st[key] ?? ''}',
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(suffixText: unit),
-            onFieldSubmitted: (v) => _set(key, int.tryParse(v.trim()) ?? v),
-          ),
-        ),
-      ],
     );
     Widget choice(String key, String title, List<(String, String)> opts) =>
         Padding(
@@ -298,82 +268,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           gap,
           const AutoImportPanel(),
           gap,
-          Panel(
-            title: 'Studio',
-            subtitle: 'How Stems, Remix and DJ Decks use this computer.',
-            child: Column(
-              children: [
-                sw(
-                  'ai_gpu',
-                  'Pro Stems AI on the graphics card',
-                  sub: 'Uses DirectML when this PC has a graphics card; off runs it on the processor.',
-                ),
-                number(
-                  'studio_cores',
-                  'Processor cores for the Fast split',
-                  '0 = automatic (every core but one).',
-                  'cores',
-                ),
-                sw(
-                  'stems_cache',
-                  'Keep prepared stems',
-                  sub: 'Each song is split once and its stems are kept on this computer (never beside your music), so it loads instantly next time. Stems → Prepare stems does a whole crate.',
-                ),
-                if (st['stems_cache'] != false) ...[
-                  number(
-                    'stems_cache_gb',
-                    'Space for prepared stems',
-                    'The songs used longest ago are removed to stay under this. A 5-minute song takes about 210 MB.',
-                    'GB',
-                  ),
-                  Builder(
-                    builder: (_) {
-                      final cache = StemsCache(preparedStemsDir(ref));
-                      final (bytes, n) = cache.usage();
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$n ${n == 1 ? 'song' : 'songs'} prepared, ${(bytes / StemsCache.gigabyte).toStringAsFixed(1)} GB used.',
-                              style: TextStyle(
-                                color: t.muted,
-                                fontSize: DjType.small,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: n == 0
-                                ? null
-                                : () async {
-                                    final ok = await confirm(
-                                      context,
-                                      title: 'Remove all prepared stems?',
-                                      message: 'Songs will be split again the next time they are used. Your music is not touched.',
-                                      ok: 'Remove',
-                                      danger: true,
-                                    );
-                                    if (!ok) return;
-                                    cache.clear();
-                                    setState(() {});
-                                    toast('Prepared stems removed.');
-                                  },
-                            child: const Text('Remove all'),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-                number(
-                  'audio_buffer_ms',
-                  'Audio buffer',
-                  'How far ahead audio is prepared. Lower answers knobs faster; raise it if playback crackles.',
-                  'ms',
-                ),
-              ],
-            ),
-          ),
-          gap,
           const LimitsPanel(),
           gap,
           Panel(
@@ -458,8 +352,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           gap,
           _aiPanel(context, s.cat),
-          gap,
-          _packsPanel(context, base),
           gap,
           Panel(
             title: 'Changes to music files',
@@ -873,56 +765,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ],
     );
   }
-
-  Widget _packsPanel(BuildContext context, String base) {
-    final s = ref.read(sessionProvider);
-    final t = DjTokens.of(context);
-    return Panel(
-      title: 'Packs',
-      subtitle: 'Big optional extras, downloaded once from DJ Assistant\'s GitHub releases, checked against known checksums, then offline. Shared by all accounts.',
-      child: Column(
-        children: [
-          for (final p in listPacks(base, s.jobs))
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('${p['name']} (${fmtBytes(p['size'] as int?)})'),
-              subtitle: Text(
-                '${p['description']}\n${p['credits']}',
-                style: TextStyle(color: t.faint, fontSize: DjType.small),
-              ),
-              isThreeLine: true,
-              trailing: p['installed'] == true
-                  ? TextButton(
-                      onPressed: () => guard(
-                        () => removePack(base, '${p['id']}'),
-                        done: 'Pack removed.',
-                        bump: ref,
-                      ),
-                      child: const Text('Remove'),
-                    )
-                  : FilledButton(
-                      onPressed: () {
-                        final pack = packById('${p['id']}')!;
-                        s.jobs
-                            .start(
-                              'pack:${pack.id}',
-                              packInstallJob(
-                                base,
-                                pack.id,
-                                packDownloader(s.onlineFactory),
-                              ),
-                            )
-                            .ignore();
-                        toast('Downloading ${pack.name}…');
-                        ref.read(versionProvider.notifier).bump();
-                      },
-                      child: const Text('Get'),
-                    ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Settings → Limits and batch sizes: every number that bounds a feature.
@@ -1089,7 +931,7 @@ class _AutoImportPanelState extends ConsumerState<AutoImportPanel> {
       toast(msg);
       ref.read(versionProvider.notifier).bump();
     } on Object catch (e) {
-      toast(errText(e), error: true);
+      toast(_errText(e), error: true);
     } finally {
       if (mounted) setState(() => checking = false);
     }
@@ -1250,4 +1092,9 @@ class RemovedSongsPanel extends ConsumerWidget {
             ),
     );
   }
+}
+
+String _errText(Object e) {
+  final s = '$e';
+  return s.startsWith('Exception: ') ? s.substring(11) : s;
 }

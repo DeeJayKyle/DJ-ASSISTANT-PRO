@@ -4,7 +4,6 @@ import 'dart:isolate';
 import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/assistant/quick_ai.dart';
 import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/packs.dart';
 import 'package:dj_assistant/online/online.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -28,20 +27,6 @@ void main() {
     expect(st.state, 'failed');
     expect(st.message, contains("couldn't start"));
     expect(jobs.running('x'), isFalse);
-  });
-
-  test('the Pro Stems AI download job starts in its isolate', () async {
-    final jobs = JobsController();
-    // offline: the job starts, tries to download, and says what went wrong
-    final st = await jobs
-        .start(
-          'pack:stems-ai',
-          packInstallJob(dir.path, 'stems-ai', packDownloader(NoOnline.new)),
-        )
-        .timeout(const Duration(seconds: 30));
-    expect(st.state, 'failed');
-    expect(st.message, isNot(contains("couldn't start")));
-    expect(st.message, contains('internet connection'));
   });
 
   test('the AI model download jobs start in their isolates', () async {

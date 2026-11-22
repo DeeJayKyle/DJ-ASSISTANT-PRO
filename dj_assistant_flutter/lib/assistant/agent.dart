@@ -231,11 +231,16 @@ final List<ToolDef> tools = [
     'Library tracks that would fit a crate but are not in it, with reasons.',
     () => _obj({'crate_id': _int()}, ['crate_id']),
   ),
-  ToolDef('list_sets', Tier.read, 'Saved sets from Set Studio.', _obj),
+  ToolDef(
+    'list_sets',
+    Tier.read,
+    'Saved sets (running orders usable in Gig Mode and Gig Pack).',
+    _obj,
+  ),
   ToolDef(
     'preview_set',
     Tier.read,
-    'Build a set plan without saving it: running order with transition notes. Use it to discuss options; open_view set-studio with params to let the DJ edit it, or save_set to keep it.',
+    'Build a set plan without saving it: running order with transition notes. Use it to discuss options, or save_set to keep it for Gig Mode and Gig Pack.',
     _setParams,
   ),
   ToolDef(
@@ -266,7 +271,7 @@ final List<ToolDef> tools = [
   ToolDef(
     'open_view',
     Tier.ui,
-    'Open a screen in the app. For set-studio you can pre-fill set parameters; for crate you need crate_id; for health-fix you need category (missing_core, missing_genre, missing_year, missing_album, missing_bpm, missing_key).',
+    'Open a screen in the app. For crate you need crate_id; for health-fix you need category (missing_core, missing_genre, missing_year, missing_album, missing_bpm, missing_key).',
     () => _obj(
       {
         'view': {
@@ -279,7 +284,7 @@ final List<ToolDef> tools = [
             'activity',
             'health',
             'health-fix',
-            'set-studio',
+            'map',
             'discovery',
             'suggestions',
             'gig',
@@ -293,7 +298,6 @@ final List<ToolDef> tools = [
         },
         'crate_id': _int(),
         'category': _str,
-        'set_params': {'type': 'object'},
       },
       ['view'],
     ),
@@ -417,7 +421,7 @@ final List<ToolDef> tools = [
   ToolDef(
     'save_set',
     Tier.act,
-    'Plan and save a set in Set Studio with these parameters.',
+    'Plan and save a set (running order) with these parameters, for Gig Mode and Gig Pack.',
     _setParams,
   ),
   ToolDef(
@@ -433,7 +437,7 @@ final List<ToolDef> tools = [
     _obj,
   ),
   // ---- every feature: suggestions, auto-prep, lookups, duplicates,
-  // discovery, limits, Studio, and every page
+  // discovery, limits, and every page
   ToolDef(
     'list_suggestions',
     Tier.read,
@@ -556,28 +560,9 @@ final List<ToolDef> tools = [
     ),
   ),
   ToolDef(
-    'open_studio',
-    Tier.ui,
-    'Open a Studio page. With track_id: stems splits that song (method fast or ai), remix selects it, dj loads it on a free deck.',
-    () => _obj(
-      {
-        'page': {
-          'type': 'string',
-          'enum': ['stems', 'remix', 'dj', 'synth', 'drums'],
-        },
-        'track_id': _int(),
-        'method': {
-          'type': 'string',
-          'enum': ['fast', 'ai'],
-        },
-      },
-      ['page'],
-    ),
-  ),
-  ToolDef(
     'change_setting',
     Tier.act,
-    'Change an app preference: theme (dark|light), key_notation (camelot|musical), premium_ui (true|false), motion (full|reduced), accent (mint|cyan|violet|amber|rose), surface (glass|solid), scan_video (true|false), low_bitrate_kbps (number), ai_gpu (true|false: Pro Stems AI on the graphics card), studio_cores (number, 0 = automatic), audio_buffer_ms (number).',
+    'Change an app preference: theme (dark|light), key_notation (camelot|musical), premium_ui (true|false), motion (full|reduced), accent (mint|cyan|violet|amber|rose), surface (glass|solid), scan_video (true|false), low_bitrate_kbps (number).',
     () => _obj(
       {
         'setting': {'type': 'string', 'enum': _assistantSettings},
@@ -597,9 +582,6 @@ const _assistantSettings = [
   'surface',
   'scan_video',
   'low_bitrate_kbps',
-  'ai_gpu',
-  'studio_cores',
-  'audio_buffer_ms',
 ];
 
 Tier? tierOf(String name) =>
@@ -959,7 +941,7 @@ class Agent {
         return app.gig.current();
       case 'get_settings':
         return app.settings.all()..remove('privacy_acknowledged');
-      case 'show_tracks' || 'open_view' || 'open_studio':
+      case 'show_tracks' || 'open_view':
         return {'ok': true, 'note': 'The app is now showing it to the DJ.'};
 
       case 'create_crate':

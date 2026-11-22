@@ -415,30 +415,4 @@ void main() {
     );
     f.deleteSync();
   });
-
-  test('Studio files: new folders and files only, never replacing a WAV', () {
-    final dir = studioNewFolder(out.path, 'Stems: Song?');
-    expect(p.basename(dir), 'Stems Song');
-    expect(
-      p.basename(studioNewFolder(out.path, 'Stems: Song?')),
-      'Stems Song (2)',
-    );
-    final f = studioWriteInto(dir, '../drums.wav', [1, 2, 3]);
-    expect(p.dirname(f), dir, reason: 'never outside the folder');
-    expect(
-      () => studioWriteInto(dir, 'drums.wav', [4]),
-      throwsA(isA<ExportException>()),
-    );
-    final path = p.join(out.path, 'mix.wav');
-    studioSave(path, [1]);
-    expect(
-      () => studioSave(path, [2], overwrite: true),
-      throwsA(isA<ExportException>()),
-      reason: 'an existing WAV could be music',
-    );
-    final kit = p.join(out.path, 'kit.json');
-    studioSave(kit, utf8.encode('{}'));
-    studioSave(kit, utf8.encode('{"a":1}'), overwrite: true);
-    expect(File(kit).readAsStringSync(), '{"a":1}');
-  });
 }

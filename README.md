@@ -10,6 +10,8 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 ## What it does (2.4)
 
+The app is focused on **music analysis** and **DJ crate building**. The sidebar has four hubs, each a page with tabs along the top: **Library** (Tracks · Map · Sources & scans), **Analysis** (Suggestions · Health · Duplicates · Upgrades), **Crates** (Virtual crates · Discovery) and **Prep & Gigs** (Quick Prep · Organise Files · Gig Mode · Gig Pack). Ctrl+1…4 opens them; Ctrl+K goes to any tab by name.
+
 **Library** — choose music folders and drives, or drag folders and files onto the window (files are copied into the Inbox, never moved); read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; accent-insensitive search; Genre / Decade / Format / Quality filters plus a rule builder; select with click, Ctrl/Shift-click, arrow keys, Ctrl+A and Ctrl+I; right-click for a menu; offline drives kept, never treated as deleted; folder watcher and optional Inbox auto-import of finished downloads.
 
 **Your catalogue** — energy (1–10), star ratings, colour, mood, tags, notes and your own title, artist, album, genre, year, original year, BPM, key, label and version. Stored in DJ Assistant only; the file's own tags stay visible separately.
@@ -30,11 +32,9 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 **Discovery** — tracks that fit a crate, gaps, alternatives to overplayed tracks, tracklist and playlist-file matching with a shopping list CSV, Last.fm similar artists and MusicBrainz new releases (both opt-in, each saying what it sends), and store search links. Recommendations come from your own library and the services you turn on; nothing is hard-coded.
 
-**Set Studio, Gig Mode & Gig Pack** — running orders with mix grades and rules; offline gig mode with requests, notes, play log and **Next up** (can follow Serato DJ 4's history, read from a copy); verified USB gig packs.
+**Gig Mode & Gig Pack** — offline gig mode with requests, notes, play log and **Next up** (can follow Serato DJ 4's history, read from a copy); verified USB gig packs.
 
 **Serato, rekordbox & history** — read-only import of Serato crates, Serato DJ 4 play history and history CSVs, and rekordbox XML playlists. Serato cues and beatgrids carried into rekordbox XML exports.
-
-**Studio** — Stems (fast DSP split, or Pro Stems AI from an optional pack), Remix, DJ Decks, Synth Lab and Drum Lab. Saves only new files.
 
 **Assistant** — open by default on the right. Drag its edge (or focus it and use ←/→) to resize, expand it to full width (Ctrl+Shift+J) or hide it (Ctrl+J); on a narrow window it floats over the page. The built-in helper and /commands work offline; an AI model (free online options, your own Claude/OpenAI/… key, any OpenAI-compatible server, or Ollama on this computer) is opt-in. Actions appear as cards that run only when you press Run. It can never change music files and cannot turn on file changes.
 

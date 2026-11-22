@@ -7,10 +7,9 @@ import 'library.dart';
 import 'library_edit.dart';
 import 'tags.dart';
 
-/// Exports (1.x `export.rs`): M3U8 playlists, CSV lists and text, plus the
-/// Studio's own files. They write only the new file the DJ chose; music files are
-/// never touched and an existing file is never replaced unless the save dialog
-/// asked (and an existing WAV is never replaced at all, since it could be music).
+/// Exports (1.x `export.rs`): M3U8 playlists, CSV lists and text. They write
+/// only the new file the DJ chose; music files are never touched and an
+/// existing file is never replaced unless the save dialog asked.
 class ExportException implements Exception {
   ExportException(this.message);
   final String message;
@@ -107,88 +106,6 @@ class ExportService {
     _guard(path, overwrite, ['txt', 'md']);
     _write(path, text);
   }
-}
-
-/// File types the Studio saves (stems, remixes, MIDI, instruments and kits).
-const studioExtensions = ['wav', 'mid', 'sfz', 'json'];
-
-void _studioGuard(String path, bool overwrite) {
-  final ext = _ext(path);
-  if (!studioExtensions.contains(ext)) {
-    _no('file must end with .${studioExtensions.join(' or .')}');
-  }
-  if (File(path).existsSync() && (!overwrite || ext == 'wav')) {
-    _no('a file with that name already exists; choose another name');
-  }
-}
-
-/// Saves one Studio file the DJ chose in a save dialog, beside the target first
-/// and then renamed, so a half-written file is never left behind.
-void studioSave(String path, List<int> bytes, {bool overwrite = false}) {
-  _studioGuard(path, overwrite);
-  final part = '$path.part';
-  try {
-    File(part).writeAsBytesSync(bytes, flush: true);
-    File(part).renameSync(path);
-  } catch (_) {
-    if (File(part).existsSync()) File(part).deleteSync();
-    rethrow;
-  }
-}
-
-String _safeSegment(String s) {
-  var t = String.fromCharCodes(
-    s.runes.map(
-      (r) =>
-          r < 0x20 ||
-              (r >= 0x7F && r <= 0x9F) ||
-              '<>:"/\\|?*'.contains(String.fromCharCode(r))
-          ? 0x20
-          : r,
-    ),
-  );
-  t = t.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).join(' ');
-  t = t.replaceAll(RegExp(r'^[. ]+|[. ]+$'), '');
-  return t.isEmpty ? 'Untitled' : String.fromCharCodes(t.runes.take(120));
-}
-
-/// Makes a NEW folder [name] in [parent] (" (2)", " (3)"… when taken).
-String studioNewFolder(String parent, String name) {
-  if (!Directory(parent).existsSync()) _no('choose a folder that exists');
-  final base = _safeSegment(name);
-  var dir = p.join(parent, base);
-  var n = 2;
-  while (FileSystemEntity.typeSync(dir) != FileSystemEntityType.notFound) {
-    dir = p.join(parent, '$base ($n)');
-    n++;
-  }
-  Directory(dir).createSync();
-  return dir;
-}
-
-/// Writes a new file inside a folder made by [studioNewFolder] (never outside it).
-String studioWriteInto(String folder, String rel, List<int> bytes) {
-  var path = folder;
-  for (final seg
-      in rel
-          .split(RegExp(r'[/\\]'))
-          .where((s) => s.isNotEmpty && s != '.' && s != '..')) {
-    path = p.join(path, _safeSegment(seg));
-  }
-  if (path == folder) _no('missing file name');
-  _studioGuard(path, false);
-  File(path).parent.createSync(recursive: true);
-  final f = File(path).openSync(mode: FileMode.writeOnlyAppend);
-  try {
-    if (f.lengthSync() != 0) {
-      _no('a file with that name already exists; choose another name');
-    }
-    f.writeFromSync(bytes);
-    f.flushSync();
-  } finally {
-    f.closeSync();
-  }
-  return path;
 }
 
 /// Opens a folder in Explorer (or the platform's file manager).

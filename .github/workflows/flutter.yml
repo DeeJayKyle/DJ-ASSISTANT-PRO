@@ -29,7 +29,7 @@ jobs:
       - run: flutter test
         env:
           SCREENSHOTS: ${{ runner.temp }}/screenshots
-      - name: Drive the real app (every page; split and play a song on Stems)
+      - name: Drive the real app (every page)
         working-directory: dj_assistant_flutter
         run: xvfb-run -a -s "-screen 0 1600x1000x24" flutter test integration_test -d linux --dart-define=SHOTS=${{ runner.temp }}/screenshots/app-linux
       - uses: actions/upload-artifact@v4
@@ -50,7 +50,7 @@ jobs:
       - run: flutter pub get
       - run: flutter test
       - run: flutter build windows --release
-      - name: Drive the real app on Windows (every page; split an MP3 and play it on Stems)
+      - name: Drive the real app on Windows (every page)
         shell: pwsh
         run: |
           flutter test integration_test -d windows --dart-define=SHOTS="$env:RUNNER_TEMP\app-windows"
@@ -61,48 +61,6 @@ jobs:
           name: dj-assistant-2-windows-app-screenshots
           path: ${{ runner.temp }}/app-windows/
           if-no-files-found: ignore
-      - name: The build ships ONNX Runtime 1.22 with DirectML (1.15 can't read the stems model)
-        shell: pwsh
-        run: |
-          $rel = 'build\windows\x64\runner\Release'
-          foreach ($f in 'onnxruntime.dll', 'onnxruntime_providers_shared.dll', 'DirectML.dll') {
-            if (-not (Test-Path "$rel\$f")) { throw "missing $f" }
-          }
-          $v = (Get-Item "$rel\onnxruntime.dll").VersionInfo.ProductVersion
-          Write-Host "onnxruntime.dll $v"
-          if (-not $v.StartsWith('1.22')) { throw "onnxruntime.dll is $v, expected 1.22" }
-      # Pro Stems AI with the real model, as the app runs it (the pack's URL and checksum).
-      - uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/stems-model
-          key: htdemucs-e5e425c17683f163a472462eb5f5a4ffcd11c31858d57fbd0833b012d8b88077
-      - name: Pro Stems AI model
-        shell: pwsh
-        run: |
-          $d = Join-Path $env:RUNNER_TEMP 'stems-model'
-          $m = Join-Path $d 'htdemucs_embedded.onnx'
-          New-Item -ItemType Directory -Force $d | Out-Null
-          if (-not (Test-Path $m)) {
-            Invoke-WebRequest 'https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO/releases/download/packs-1/htdemucs_embedded.onnx' -OutFile $m
-          }
-          $h = (Get-FileHash $m -Algorithm SHA256).Hash.ToLower()
-          if ($h -ne 'e5e425c17683f163a472462eb5f5a4ffcd11c31858d57fbd0833b012d8b88077') { Remove-Item $m; throw "model checksum $h" }
-          "DJ_AI_MODEL=$m" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-      - name: Test Pro Stems AI with the built ONNX Runtime
-        shell: pwsh
-        run: |
-          $rel = 'build\windows\x64\runner\Release'
-          # the app loads it from its own folder; the test points at the build
-          $env:DJ_ORT_DLL = (Resolve-Path "$rel\onnxruntime.dll").Path
-          flutter test test/ai_model_test.dart
-          if ($LASTEXITCODE -ne 0) { throw 'AI tests failed' }
-      - name: Get Pro Stems AI as the app does (Settings → Packs → Get)
-        shell: pwsh
-        env:
-          DJ_PACK_DOWNLOAD: "1"
-        run: |
-          flutter test test/pack_download_test.dart
-          if ($LASTEXITCODE -ne 0) { throw 'pack download failed' }
       - name: Build the installer
         shell: pwsh
         run: |

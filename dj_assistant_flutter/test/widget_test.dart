@@ -4,6 +4,7 @@ import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/core/accounts.dart';
 import 'package:dj_assistant/main.dart';
 import 'package:dj_assistant/online/online.dart';
+import 'package:dj_assistant/ui/hubs.dart';
 import 'package:dj_assistant/ui/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,7 +77,7 @@ void main() {
     await closeApp(tester, accounts);
   });
 
-  testWidgets('every Studio page opens', (tester) async {
+  testWidgets('every hub shows its tabs and opens each one', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -100,18 +101,24 @@ void main() {
       ),
     );
     await tester.pump();
-    for (final (id, title, text) in [
-      ('stems', 'Stems', 'Choose a song to split it into stems'),
-      ('remix', 'Remix', 'Export remix (WAV)'),
-      ('dj', 'DJ Decks', 'Empty deck'),
-      ('synth', 'Synth Lab', 'Describe an instrument'),
-      ('drums', 'Drum Lab', 'Describe a drum kit'),
-    ]) {
-      container.read(viewProvider.notifier).go('studio:$id');
-      await tester.pump();
-      await tester.pump();
-      expect(find.text(text), findsWidgets, reason: title);
+    for (final h in hubs) {
+      for (final tab in h.tabs) {
+        container.read(viewProvider.notifier).go(tab.id);
+        await tester.pump();
+        await tester.pump();
+        // the hub's name is the heading and every tab is offered
+        expect(find.text(h.label), findsWidgets, reason: tab.id);
+        for (final other in h.tabs) {
+          expect(find.text(other.label), findsWidgets, reason: tab.id);
+        }
+      }
     }
+    // a tab switches the page
+    container.read(viewProvider.notifier).go('suggestions');
+    await tester.pump();
+    await tester.tap(find.text('Duplicates').first);
+    await tester.pump();
+    expect(container.read(viewProvider).id, 'duplicates');
     expect(tester.takeException(), isNull);
     await closeApp(tester, accounts, container);
   });
