@@ -11,7 +11,7 @@ import 'package:path/path.dart' as p;
 import 'scanner_test.dart' show copyLibrary;
 
 /// The assistant can work every feature: suggestions, auto-prep, lookups,
-/// duplicates, Discovery, limits and the Studio.
+/// duplicates, Discovery, limits and opening pages.
 void main() {
   late Directory music;
   late AppSession app;
@@ -78,7 +78,7 @@ void main() {
     expect(limitOf(app.cat, 'autoprep_musicbrainz'), isNull);
   });
 
-  test('duplicates, Discovery and the Studio', () {
+  test('duplicates, Discovery and opening pages', () {
     final groups = (agent.runTool('duplicate_groups', const {})! as List)
         .cast<Map>();
     expect(groups, isNotEmpty);
@@ -106,10 +106,7 @@ void main() {
       }),
       isNotNull,
     );
-    expect(
-      agent.runTool('open_studio', const {'page': 'stems', 'track_id': 1}),
-      isA<Map>(),
-    );
+    expect(agent.runTool('open_view', const {'view': 'map'}), isA<Map>());
   });
 
   test('online lookups refuse until the service is on', () {

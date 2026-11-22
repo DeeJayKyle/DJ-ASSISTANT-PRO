@@ -170,18 +170,92 @@ String _stripTrackNumber(String s) {
   return t;
 }
 
-/// "Artist - Title (Version)" style file names (1.x `parse_filename`).
-(String, String)? parseFilename(String stem) {
-  final s = _stripTrackNumber(stem.replaceAll('_', ' '));
-  for (final sep in [' - ', ' – ', ' — ']) {
-    final i = s.indexOf(sep);
-    if (i >= 0) {
-      final a = s.substring(0, i).trim(),
-          t = s.substring(i + sep.length).trim();
-      if (a.isNotEmpty && t.isNotEmpty) return (a, t);
+/// What a file name says: artist and title, and the key and BPM DJ tools
+/// (Mixed In Key and similar) often put in front ("8A - 128 - Artist - Title").
+class ParsedName {
+  const ParsedName(this.artist, this.title, {this.camelot, this.bpm});
+  final String artist, title;
+  final String? camelot;
+  final double? bpm;
+}
+
+/// Bracketed or trailing download junk, never part of a title.
+final _junk = RegExp(
+  r'\s*[(\[]\s*(official\s+(music\s+)?(video|audio|visuali[sz]er|lyric\s+video)|'
+  r'lyrics?(\s+video)?|audio|visuali[sz]er|hq|hd|4k|\d{2,3}\s*kbps|'
+  r'free\s+download|out\s+now|music\s+video)\s*[)\]]',
+  caseSensitive: false,
+);
+final _site = RegExp(
+  r'\s*[(\[]?\s*(www\.)?[a-z0-9-]+\.(com|net|org|co|io|ng|za|me)\b\s*[)\]]?',
+  caseSensitive: false,
+);
+final _seps = RegExp(r'\s+[-–—]\s+');
+final _camelotPrefix = RegExp(
+  r'^(1[0-2]|[1-9])\s*([AB])\s*[-–—]\s*',
+  caseSensitive: false,
+);
+final _bpmPrefix = RegExp(
+  r'^(\d{2,3}(?:\.\d)?)\s*(?:bpm)?\s*[-–—]\s*',
+  caseSensitive: false,
+);
+final _energyPrefix = RegExp(
+  r'^energy\s*\d{1,2}\s*[-–—]\s*',
+  caseSensitive: false,
+);
+final _sidePrefix = RegExp(r'^[A-D][1-9]\s*[-–—.]\s*');
+
+/// A track number: "07.", "7)", "07 -", or a zero-padded "07 " (so "50 Cent"
+/// and "8A" are left alone).
+final _trackPrefix = RegExp(r'^(\d{1,3}\s*[.)]|\d{1,3}\s+[-–—]|0\d{1,2}\s)\s*');
+
+/// Parses "Artist - Title (Version)" file names: strips track numbers,
+/// vinyl sides ("A1 -"), key/BPM/energy prefixes, download junk ("(Official
+/// Video)", "[HQ]", web addresses) and "Artist - Album - 03 - Title" album
+/// paths. Versions in brackets ("(Extended Mix)", "(Clean)") are kept.
+ParsedName? parseFileName(String stem) {
+  var s = stem.replaceAll('_', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  s = s.replaceAll(_junk, '').replaceAll(_site, ' ').trim();
+  String? camelot;
+  double? bpm;
+  for (var guard = 0; guard < 4; guard++) {
+    final before = s;
+    if (_camelotPrefix.firstMatch(s) case final m?) {
+      camelot = '${m[1]}${m[2]!.toUpperCase()}';
+      s = s.substring(m.end);
     }
+    if (_bpmPrefix.firstMatch(s) case final m?) {
+      final v = double.parse(m[1]!);
+      if (v >= 55 && v <= 210) {
+        bpm = v;
+        s = s.substring(m.end);
+      }
+    }
+    if (_energyPrefix.firstMatch(s) case final m?) s = s.substring(m.end);
+    if (_sidePrefix.firstMatch(s) case final m?) s = s.substring(m.end);
+    if (_trackPrefix.firstMatch(s) case final m?) s = s.substring(m.end);
+    if (s == before) break;
   }
-  return null;
+  final parts = s.split(_seps).map((x) => x.trim()).toList();
+  if (parts.length < 2 || parts.any((x) => x.isEmpty)) return null;
+  var artist = parts.first, title = parts.sublist(1).join(' - ');
+  // "Artist - Album - 03 - Title": the title follows the track number
+  final num = parts.indexWhere((x) => RegExp(r'^\d{1,3}$').hasMatch(x), 1);
+  if (num > 0 && num < parts.length - 1) {
+    title = parts.sublist(num + 1).join(' - ');
+  }
+  if (!RegExp(r'\p{L}', unicode: true).hasMatch(artist)) return null;
+  artist = artist.trim();
+  title = title.trim();
+  if (artist.isEmpty || title.isEmpty) return null;
+  return ParsedName(artist, title, camelot: camelot, bpm: bpm);
+}
+
+/// "Artist - Title (Version)" style file names (1.x `parse_filename`, made
+/// stricter: see [parseFileName]).
+(String, String)? parseFilename(String stem) {
+  final p = parseFileName(stem);
+  return p == null ? null : (p.artist, p.title);
 }
 
 /// A year in brackets, "(2019)" or "[2019]", between 1900 and 2100.
@@ -452,6 +526,7 @@ class SuggestionsService {
     final before = count();
     final rows = cat.db.select(
       'SELECT t.id, COALESCE(u.title, t.title) AS title, COALESCE(u.artist, t.artist) AS artist, '
+      'COALESCE(u.musical_key, t.key_tag) AS cur_key, COALESCE(u.bpm, t.bpm_tag) AS cur_bpm, '
       'COALESCE(u.genre, t.genre) AS genre, COALESCE(u.year, t.year) AS year, t.file_name, t.rel_path '
       "FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id WHERE t.presence='present' AND t.read_status='ok'",
     );
@@ -500,7 +575,32 @@ class SuggestionsService {
           genre = r['genre'] as String?;
       final dot = file.lastIndexOf('.');
       final stem = dot > 0 ? file.substring(0, dot) : file;
-      final parsed = parseFilename(stem);
+      final named = parseFileName(stem);
+      final parsed = named == null ? null : (named.artist, named.title);
+      if (named?.camelot case final k? when r['cur_key'] == null) {
+        insertSuggestion(
+          cat,
+          id,
+          'key',
+          null,
+          k,
+          'File name',
+          'The file name starts with the key "$k" (as DJ tools write it).',
+          0.5,
+        );
+      }
+      if (named?.bpm case final b? when r['cur_bpm'] == null) {
+        insertSuggestion(
+          cat,
+          id,
+          'bpm',
+          null,
+          rustNumber(b),
+          'File name',
+          'The file name starts with the tempo "${rustNumber(b)}".',
+          0.5,
+        );
+      }
       if (parsed != null) {
         if (artist == null) {
           insertSuggestion(

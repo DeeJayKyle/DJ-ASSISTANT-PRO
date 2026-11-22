@@ -44,12 +44,6 @@ const limitDefs = <LimitDef>[
     unit: 'tracks',
   ),
   LimitDef(
-    'studio_minutes',
-    'Studio: longest song',
-    'Songs longer than this are not opened in Stems, Remix or DJ Decks. A whole song is held in memory (about 21 MB a minute, more while splitting).',
-    unit: 'minutes',
-  ),
-  LimitDef(
     'analysis_minutes',
     'Analysis: minutes read per track',
     'BPM, key, energy, loudness and cues are worked out from this much of each track. Without a limit the whole file is read (slower for long mixes).',
@@ -58,7 +52,7 @@ const limitDefs = <LimitDef>[
   LimitDef(
     'picker_results',
     'Song pickers: results shown',
-    'Songs listed in the Studio and Quick Prep song pickers.',
+    'Songs listed in the Gig Mode song picker.',
     unit: 'songs',
   ),
   LimitDef(

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.4.0+12
+version: 2.5.0+13
 
 environment:
   sdk: ^3.13.7
@@ -51,7 +51,6 @@ dependencies:
   unorm_dart: ^0.3.3
   cryptography: ^2.9.0
   intl: ^0.20.3
-  onnxruntime: ^1.4.1
 
 dev_dependencies:
   flutter_test:
@@ -91,6 +90,10 @@ flutter:
           weight: 600
         - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
+
+  # The app icon (tool/make_icon.py draws it and the Windows .ico).
+  assets:
+    - assets/icon/app_icon_256.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

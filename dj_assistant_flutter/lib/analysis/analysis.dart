@@ -5,6 +5,7 @@ import '../audio/pcm.dart';
 import 'beatgrid.dart';
 import 'chromaprint.dart';
 import 'fft.dart';
+import 'key.dart';
 import 'loudness.dart';
 
 /// Local audio analysis, ported from 1.x `analysis.rs`. Everything here is an
@@ -13,7 +14,7 @@ import 'loudness.dart';
 const method = 'dj-assistant-dsp';
 
 /// 2: whole-file beatgrid, BPM range and tuning-aware key (2.1).
-const version = 2;
+const version = 3;
 
 /// Longest stretch of audio decoded for analysis (keeps very long mixes fast).
 const maxSeconds = 15.0 * 60.0;
@@ -192,6 +193,14 @@ double _db(double x) => 20 * math.log(math.max(x, 1e-9)) / math.ln10;
   }
   return (out, sr / d);
 }
+
+/// The ~11 kHz mono copy tempo and key work on.
+(Float32List, double) downsampleForAnalysis(Float32List x, int sr) =>
+    _downsample(x, sr);
+
+/// Magnitude spectrogram frames (Hann window), for key detection.
+List<Float64List> spectrogramFrames(Float32List x, int n, int hop) =>
+    _spectrogram(x, n, hop);
 
 final _ffts = <int, Fft>{};
 final _hanns = <int, Float64List>{};
@@ -374,34 +383,6 @@ const _camelotMinor = [
   '3A',
   '10A',
 ];
-const _major = [
-  6.35,
-  2.23,
-  3.48,
-  2.33,
-  4.38,
-  4.09,
-  2.52,
-  5.19,
-  2.39,
-  3.66,
-  2.29,
-  2.88,
-];
-const _minor = [
-  6.33,
-  2.68,
-  3.52,
-  5.38,
-  2.60,
-  3.53,
-  2.54,
-  4.75,
-  3.98,
-  2.69,
-  3.34,
-  3.17,
-];
 
 /// How far the music sits from A = 440 Hz, in semitones (−0.5…0.5): the
 /// weighted circular mean of where spectral peaks fall between semitones,
@@ -428,62 +409,24 @@ const _minor = [
   return (math.atan2(s, c) / (2 * math.pi), math.sqrt(c * c + s * s) / w);
 }
 
-/// Key from chroma and Krumhansl profiles: (name, Camelot, confidence,
-/// tuning in cents). Music tuned 20 cents or more away from A = 440 Hz
-/// (pitched vinyl rips, older recordings) is read on its own tuning, so its
-/// notes are not split between neighbouring semitones.
+/// Key (version 3, see key.dart): (name, Camelot, confidence, tuning in
+/// cents). Music tuned 20 cents or more away from A = 440 Hz (pitched vinyl
+/// rips, older recordings) is read on its own tuning.
 (String, String, double, double)? _key(Float32List x, double sr) {
-  const n = 4096;
-  final spec = _spectrogram(x, n, n ~/ 2);
-  if (spec.isEmpty) return null;
-  final (tune, strength) = estimateTuning(spec, sr, n);
-  final shift = tune.abs() >= 0.2 && strength >= 0.2 ? tune : 0.0;
-  final chroma = Float64List(12);
-  final pcs = Int32List(n ~/ 2);
-  for (var k = 1; k < n ~/ 2; k++) {
-    final f = k * sr / n;
-    if (f < 65 || f > 1760) {
-      pcs[k] = -1;
-      continue;
-    }
-    final midi = 12 * math.log(f / 440) / math.ln2 + 69 - shift;
-    pcs[k] = midi.round() % 12;
-  }
-  for (final frame in spec) {
-    for (var k = 1; k < frame.length; k++) {
-      if (pcs[k] >= 0) chroma[pcs[k]] += math.sqrt(frame[k]);
-    }
-  }
-  double corr(List<double> profile, int root) {
-    final p = [for (var i = 0; i < 12; i++) profile[(i + 12 - root) % 12]];
-    final mc = chroma.reduce((a, b) => a + b) / 12,
-        mp = p.reduce((a, b) => a + b) / 12;
-    var num = 0.0, dc = 0.0, dp = 0.0;
-    for (var i = 0; i < 12; i++) {
-      num += (chroma[i] - mc) * (p[i] - mp);
-      dc += (chroma[i] - mc) * (chroma[i] - mc);
-      dp += (p[i] - mp) * (p[i] - mp);
-    }
-    return (dc == 0 || dp == 0) ? 0 : num / math.sqrt(dc * dp);
-  }
-
-  final scores = <(double, int, bool)>[];
-  for (var r = 0; r < 12; r++) {
-    scores.add((corr(_major, r), r, false));
-    scores.add((corr(_minor, r), r, true));
-  }
-  // Stable sort, highest first (as 1.x sort_by).
-  final idx = List.generate(scores.length, (i) => i)
-    ..sort((a, b) {
-      final c = scores[b].$1.compareTo(scores[a].$1);
-      return c != 0 ? c : a.compareTo(b);
-    });
-  final (best, root, minor) = scores[idx[0]];
-  if (best <= 0.2) return null;
-  final conf = ((best - scores[idx[1]].$1) * 5 + math.max(0, best - 0.5)).clamp(
-    0.0,
-    1.0,
-  );
+  const params = KeyParams();
+  final sal = noteSalience(x, sr, params);
+  if (sal == null) return null;
+  final (salience, tune, _) = sal;
+  final k = bestKey(chromaFromSalience(salience, params), params.profile);
+  if (k == null) return null;
+  final (root, minor, best, second) = k;
+  var conf = ((best - second) * 5 + math.max(0, best - 0.5)).clamp(0.0, 1.0);
+  // One or two pitch classes (a tone, a drum loop with a bass note) can't
+  // establish a key: say so in the confidence.
+  final chroma = chromaFromSalience(salience, params);
+  final top = chroma.reduce(math.max);
+  final active = chroma.where((v) => v >= 0.1 * top).length;
+  if (active < 3) conf *= 0.5;
   return (
     '${_notes[root]} ${minor ? 'minor' : 'major'}',
     minor ? _camelotMinor[root] : _camelotMajor[root],
@@ -502,7 +445,7 @@ double _rms(Float32List x, int s, int e) {
 
 /// Runs every analysis stage on decoded audio. [bpmRange] is one of
 /// [bpmRanges] ('auto' or null keeps this app's own half/double-time rule).
-Analysis analyseDecoded(Decoded d, {String? bpmRange}) {
+Analysis analyseDecoded(Decoded d, {String? bpmRange, String? genre}) {
   final sr = d.sampleRate.toDouble();
   final x = d.mono;
   final a = Analysis()
@@ -622,7 +565,12 @@ Analysis analyseDecoded(Decoded d, {String? bpmRange}) {
   final t = _tempo(oenv, fr);
   if (t != null) {
     final (detected, conf) = t;
-    final bpm = (foldBpm(detected, bpmRange) * 10).round() / 10;
+    // A chosen BPM range wins; otherwise the genre decides half/double time.
+    final ranged = foldBpm(detected, bpmRange);
+    final byGenre = (bpmRange == null || bpmRange == 'auto')
+        ? foldBpmForGenre(ranged, genre)
+        : null;
+    final bpm = ((byGenre ?? ranged) * 10).round() / 10;
     a
       ..bpm = bpm
       ..bpmConfidence = (conf * 100).round() / 100;
@@ -785,7 +733,9 @@ Analysis analyseFile(
   String path, {
   double? seconds = maxSeconds,
   String? bpmRange,
+  String? genre,
 }) => analyseDecoded(
   decode(path, seconds: seconds, tap: FingerprintTap()),
   bpmRange: bpmRange,
+  genre: genre,
 );

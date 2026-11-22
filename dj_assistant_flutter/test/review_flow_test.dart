@@ -111,7 +111,11 @@ void main() {
     await settle(tester);
     expect(find.text('Suggestions now wait for you'), findsOneWidget);
 
+    await tester.ensureVisible(find.bySemanticsLabel('Select all shown'));
+    await settle(tester);
     await tester.tap(find.bySemanticsLabel('Select all shown'));
+    await settle(tester);
+    await tester.ensureVisible(find.text('Approve selected'));
     await settle(tester);
     await tester.tap(find.text('Approve selected'));
     await settle(tester);
@@ -122,10 +126,16 @@ void main() {
       'you',
     });
 
+    await tester.ensureVisible(find.textContaining('Accepted ('));
+    await settle(tester);
     await tester.tap(find.textContaining('Accepted ('));
     await settle(tester);
     expect(find.text('by you'), findsWidgets);
+    await tester.ensureVisible(find.bySemanticsLabel('Select all shown'));
+    await settle(tester);
     await tester.tap(find.bySemanticsLabel('Select all shown'));
+    await settle(tester);
+    await tester.ensureVisible(find.text('Undo selected'));
     await settle(tester);
     await tester.tap(find.text('Undo selected'));
     await settle(tester);

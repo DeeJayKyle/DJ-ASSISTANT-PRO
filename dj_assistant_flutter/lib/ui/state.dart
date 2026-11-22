@@ -99,7 +99,7 @@ class ViewNotifier extends Notifier<AppView> {
   static const _limit = 50;
 
   @override
-  AppView build() => const AppView('library');
+  AppView build() => const AppView('home');
 
   bool get canGoBack => _back.isNotEmpty;
   bool get canGoForward => _forward.isNotEmpty;
@@ -184,6 +184,12 @@ class OrganiseTargetNotifier extends Notifier<(String, List<int>)?> {
   (String, List<int>)? build() => null;
   void set((String, List<int>)? v) => state = v;
 }
+
+/// Tracks sent from the Library to Analysis → Taggers (label, ids), or null.
+final taggerTargetProvider =
+    NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(
+      OrganiseTargetNotifier.new,
+    );
 
 final organiseTargetProvider =
     NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(

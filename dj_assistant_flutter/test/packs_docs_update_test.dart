@@ -3,12 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
-import 'package:crypto/crypto.dart' as c;
 import 'package:cryptography/cryptography.dart';
 import 'package:dj_assistant/core/catalogue.dart';
 import 'package:dj_assistant/core/docs.dart';
 import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/packs.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/updater.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,91 +23,6 @@ void main() {
   tearDown(() {
     expectNoOpenFiles(tmp);
     tmp.deleteSync(recursive: true);
-  });
-
-  group('packs (1.x packs.rs)', () {
-    test('the catalogue is well formed', () {
-      for (final x in packs) {
-        for (final f in x.files) {
-          expect(f.url, startsWith(packsRelease));
-          expect(f.url, endsWith(f.name));
-          expect(f.sha256.length, 64);
-          expect(
-            f.name.contains(RegExp(r'[/\\]')) || f.name.contains('..'),
-            isFalse,
-          );
-        }
-      }
-    });
-
-    test(
-      'installs, resumes and verifies; removes only its own folder',
-      () async {
-        final body = Uint8List.fromList([
-          for (var i = 0; i < 300000; i++) i % 251,
-        ]);
-        final pack = Pack('test-pack', 'Test', '', '', [
-          PackFile(
-            'model.bin',
-            'https://example.test/model.bin',
-            body.length,
-            c.sha256.convert(body).toString(),
-          ),
-        ]);
-        Downloader serve(Uint8List data) => (url, dest, progress) async {
-          final f = File(dest);
-          final have = f.existsSync() ? f.lengthSync() : 0;
-          final out = f.openSync(mode: FileMode.append);
-          for (var o = have; o < data.length; o += 65536) {
-            out.writeFromSync(
-              data,
-              o,
-              o + 65536 > data.length ? data.length : o + 65536,
-            );
-            if (!progress(out.lengthSync())) break;
-          }
-          out.closeSync();
-        };
-        // an interrupted earlier download left half the file behind
-        final d = Directory(packDir(tmp.path, pack.id))
-          ..createSync(recursive: true);
-        File(p.join(d.path, 'model.bin.part'))
-            .writeAsBytesSync(body.sublist(0, 150000));
-        await installPack(tmp.path, pack, serve(body), LocalProgress());
-        expect(packInstalled(tmp.path, pack), isTrue);
-        expect(File(p.join(d.path, 'model.bin')).readAsBytesSync(), body);
-        expect(File(p.join(d.path, 'model.bin.part')).existsSync(), isFalse);
-        // a corrupted download is rejected and not installed
-        final t2 = Directory.systemTemp.createTempSync('dja_');
-        final bad = Uint8List.fromList(body)..[1000] ^= 1;
-        await expectLater(
-          installPack(t2.path, pack, serve(bad), LocalProgress()),
-          throwsA(isA<PackException>()),
-        );
-        expect(packInstalled(t2.path, pack), isFalse);
-        expect(
-          File(p.join(packDir(t2.path, pack.id), 'model.bin')).existsSync(),
-          isFalse,
-        );
-        t2.deleteSync(recursive: true);
-        File(p.join(tmp.path, 'keep.txt')).writeAsStringSync('x');
-        removePack(tmp.path, 'stems-ai');
-        expect(File(p.join(tmp.path, 'keep.txt')).existsSync(), isTrue);
-        expect(
-          () => removePack(tmp.path, 'nope'),
-          throwsA(isA<PackException>()),
-        );
-      },
-    );
-
-    test('file paths need an installed pack and a catalogue file', () {
-      expect(
-        packFilePath(tmp.path, 'stems-ai', 'htdemucs_embedded.onnx'),
-        isNull,
-      );
-      expect(packFilePath(tmp.path, 'stems-ai', '../../secret'), isNull);
-      expect(packFilePath(tmp.path, 'nope', 'x'), isNull);
-    });
   });
 
   group('personal files (1.x docs.rs)', () {

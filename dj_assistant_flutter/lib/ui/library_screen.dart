@@ -12,6 +12,7 @@ import '../core/library_edit.dart';
 import '../core/rules.dart';
 import 'format.dart';
 import 'rules_ui.dart';
+import 'crew_screen.dart' show crewTargetProvider;
 import 'state.dart';
 import 'theme.dart';
 import 'track_detail.dart';
@@ -278,6 +279,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           value: 'write',
           child: Text('Write tags to files…'),
         ),
+        const PopupMenuItem(
+          value: 'crew',
+          child: Text('Analyse with the crew…'),
+        ),
+        const PopupMenuItem(
+          value: 'taggers',
+          child: Text('Tag with Picard, OneTagger, Mp3tag, beets…'),
+        ),
         const PopupMenuItem(value: 'organise', child: Text('Organise…')),
         if (ids.length == 1)
           const PopupMenuItem(
@@ -322,6 +331,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         _invert(s, eff);
       case 'write':
         await showWriteDialog(context, ref, ids);
+      case 'crew':
+        ref.read(crewTargetProvider.notifier).set((
+          '${plural(ids.length, 'selected track')} from the Library',
+          ids,
+        ));
+        ref.read(viewProvider.notifier).go('crew');
+      case 'taggers':
+        _taggers(ids);
       case 'organise':
         _organise(ids);
       case 'replace':
@@ -329,6 +346,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       case 'delete':
         await _delete(context, ids);
     }
+  }
+
+  void _taggers(List<int> ids) {
+    ref.read(taggerTargetProvider.notifier).set((
+      '${plural(ids.length, 'selected track')} from the Library',
+      ids,
+    ));
+    ref.read(viewProvider.notifier).go('taggers');
   }
 
   void _organise(List<int> ids) {
@@ -437,15 +462,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final t = DjTokens.of(context);
     final stats = ref.watch(statsProvider);
     if (!_scoped && (stats['roots'] ?? 0) == 0) {
-      return EmptyState(
-        icon: Icons.library_music_outlined,
-        title:
-            'Welcome, ${ref.watch(accountsProvider).accounts.where((a) => a.id == ref.watch(accountsProvider).currentId).firstOrNull?.name ?? 'DJ'}',
-        message: 'Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never writes to Serato.',
-        action: FilledButton.icon(
-          onPressed: () => addMusicFolders(ref),
-          icon: const Icon(Icons.create_new_folder_outlined),
-          label: const Text('Add music folders'),
+      return PageFrame(
+        title: 'Music Library',
+        scroll: false,
+        child: EmptyState(
+          icon: Icons.library_music_outlined,
+          title:
+              'Welcome, ${ref.watch(accountsProvider).accounts.where((a) => a.id == ref.watch(accountsProvider).currentId).firstOrNull?.name ?? 'DJ'}',
+          message: 'Add the folders that hold your music. DJ Assistant reads them to build a searchable catalogue on this computer. It never changes, moves or deletes your files, and never writes to Serato.',
+          action: FilledButton.icon(
+            onPressed: () => addMusicFolders(ref),
+            icon: const Icon(Icons.create_new_folder_outlined),
+            label: const Text('Add music folders'),
+          ),
         ),
       );
     }
@@ -1006,6 +1035,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               onPressed: () => showWriteDialog(context, ref, ids),
               icon: const Icon(Icons.edit_note, size: 18),
               label: const Text('Write tags to files…'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _taggers(ids),
+              icon: const Icon(Icons.auto_awesome_motion_outlined, size: 18),
+              label: const Text('Tag with tools…'),
             ),
             OutlinedButton.icon(
               onPressed: () => _organise(ids),

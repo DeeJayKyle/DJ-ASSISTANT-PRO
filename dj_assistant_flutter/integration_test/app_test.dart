@@ -15,31 +15,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 
-/// Drives the real app on Windows (CI): every page opens, then on Stems a
-/// song is split with Fast and played through the sound card (or the page
-/// says there is no sound output). With `--dart-define=SHOTS=folder` each
-/// step is saved as a screenshot.
+/// Drives the real app (CI, Linux and Windows): every page opens without an
+/// error. With `--dart-define=SHOTS=folder` each page is saved as a
+/// screenshot.
 const shots = String.fromEnvironment('SHOTS');
 const pages = [
+  'home',
   'library',
   'quick',
   'crates',
   'duplicates',
   'activity',
   'health',
+  'crew',
   'suggestions',
+  'taggers',
   'organize',
-  'set-studio',
   'discovery',
   'gig',
   'gig-pack',
   'upgrades',
   'settings',
-  'studio:remix',
-  'studio:dj',
-  'studio:synth',
-  'studio:drums',
-  'studio:stems',
 ];
 
 void main() {
@@ -109,15 +105,6 @@ void main() {
       } while (DateTime.now().isBefore(end));
     }
 
-    Future<bool> until(bool Function() ok, {int seconds = 120}) async {
-      final end = DateTime.now().add(Duration(seconds: seconds));
-      while (DateTime.now().isBefore(end)) {
-        if (ok()) return true;
-        await wait(200);
-      }
-      return ok();
-    }
-
     for (final page in pages) {
       container.read(viewProvider.notifier).go(page);
       await wait(800);
@@ -125,53 +112,6 @@ void main() {
       await shot(page.replaceAll(':', '-'));
     }
 
-    // Stems: pick a song, split it with Fast, play it.
-    await tester.tap(find.text('Fast').first);
-    await wait(100);
-    // on Windows an MP3, so the real app decodes through Media Foundation
-    final title = Platform.isWindows ? 'Basement Hours' : 'Low Tide';
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Song to split'),
-      title,
-    );
-    await wait(400);
-    await tester.tap(find.text(title).last);
-    await wait(300);
-    await shot('stems-splitting');
-    expect(
-      await until(() => find.text('Play').evaluate().isNotEmpty),
-      isTrue,
-      reason: 'the split finished',
-    );
-    await tester.ensureVisible(find.text('Play').first);
-    await wait(300);
-    await shot('stems-ready');
-    await tester.tap(find.text('Play').first);
-    final played = await until(
-      () =>
-          find.text('Pause').evaluate().isNotEmpty ||
-          find.textContaining('No sound output').evaluate().isNotEmpty,
-      seconds: 15,
-    );
-    expect(played, isTrue, reason: 'Play either plays or says why not');
-    final noSound = find
-        .textContaining('No sound output')
-        .evaluate()
-        .isNotEmpty;
-    if (!noSound) {
-      // the playhead moves: one second in, the readout says so
-      expect(
-        await until(
-          () => find.textContaining('0:01 / 0:02').evaluate().isNotEmpty,
-          seconds: 5,
-        ),
-        isTrue,
-        reason: 'the playhead advanced',
-      );
-      await shot('stems-playing');
-    }
-    // ignore: avoid_print
-    print(noSound ? 'no audio device: Stems said so' : 'stems played');
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox());

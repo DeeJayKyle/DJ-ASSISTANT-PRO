@@ -83,9 +83,6 @@ if ($Version -ne '2.0.0') {
   Run $Setup '/P /UPDATE'
   Check ((Get-ItemProperty $key).DisplayVersion -eq $Version) "2.0.0 updated to $Version"
   Check (Test-Path (Join-Path $data 'keep-me.txt')) 'app data kept across the 2.x update'
-  $ort = (Get-Item (Join-Path $dir 'onnxruntime.dll')).VersionInfo.ProductVersion
-  Check ($ort.StartsWith('1.22')) "the update replaced ONNX Runtime ($ort)"
-  Check (Test-Path (Join-Path $dir 'DirectML.dll')) 'DirectML installed'
   Smoke
 }
 Write-Host 'Installer checks passed.'

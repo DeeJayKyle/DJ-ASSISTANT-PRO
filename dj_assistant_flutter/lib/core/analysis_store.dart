@@ -239,6 +239,16 @@ class AnalysisStore {
       .where((r) => only == null || only.contains(r.$1))
       .toList();
 
+  /// The track's genre as the DJ sees it (catalogue, else file tag): the
+  /// tempo hint for half/double time.
+  String? genreOf(int id) =>
+      cat.db.select(
+            'SELECT COALESCE(u.genre, t.genre) AS g FROM tracks t '
+            'LEFT JOIN track_user u ON u.track_id=t.id WHERE t.id=?',
+            [id],
+          ).firstOrNull?['g']
+          as String?;
+
   Map<String, Object?> summary() {
     final r = cat.db
         .select(
@@ -280,6 +290,7 @@ JobBody analysisJob(String dbPath, {List<int>? only, bool force = false}) =>
                 path,
                 seconds: minutes == null ? null : minutes * 60.0,
                 bpmRange: bpmRange,
+                genre: store.genreOf(id),
               ),
             );
             ctx.tick();

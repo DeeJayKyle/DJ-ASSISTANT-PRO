@@ -1,3 +1,39 @@
+DJ Assistant 2.5.0
+
+**A cleaner app, built around analysis and crates**
+- The Studio (Stems, Remix, DJ Decks, Synth Lab, Drum Lab) and Set Studio are gone, and with them the 180 MB Pro Stems AI download. Saved sets still work in Gig Mode and Gig Pack.
+- Four hubs instead of 19 pages: **Library** (Tracks, Map, Sources & scans), **Analysis** (Analyse, Suggestions, Taggers, Health, Duplicates, Upgrades), **Crates** (Virtual crates, Discovery) and **Prep & Gigs** (Quick Prep, Organise Files, Gig Mode, Gig Pack).
+- The app opens on **Home**, a colourful bento overview. Every tile, number and line is a link; right-click a tile for its links.
+- Each hub has its own colour. Hover a hub, tab or link to see what it does and its shortcut. Every tab shows "See also" links.
+- New keys: Ctrl+0 Home, Ctrl+1…4 the hubs, Ctrl+Tab / Ctrl+Shift+Tab (or the mouse wheel over the tabs) switch tabs. F1 lists them all.
+- New app icon.
+
+**The Analysis Crew** (Analysis → Analyse)
+- One button runs every analyser as a team: **Scout** finds what needs doing, **Listener** analyses the audio, **Detective** reads file and folder names, **Librarian** asks the online services you switched on, **Taggers** run OneTagger and beets, **Judge** cross-checks them all, **Clerk** files the results.
+- Where agents agree, confidence goes up; where a tag disagrees with the audio, it goes down, and the reason is written into the suggestion.
+- Each agent shows live progress, says what it did or why it skipped, and can be switched off. Auto-prep after a scan is the same crew.
+
+**Picard, OneTagger, Mp3tag and beets** (Analysis → Taggers, or Library → *Tag with tools…*)
+- Each tool works on its own copies of the tracks, never on your music. OneTagger and beets run by themselves; Picard and Mp3tag open on their copies and you press *Collect* when you've saved.
+- What they find is merged into Suggestions: values several tools agree on score higher, disagreements are spelled out.
+- Install the tools yourself; the page finds them or you set their path. The tools go online themselves, not DJ Assistant.
+
+**More precise**
+- **Keys:** a new detector reads the right key far more often: 84–87 % exact on our test set, up from 64 %. Your library is re-analysed once.
+- **Tempo:** the genre settles half or double time, so drum & bass reads 174 and hip hop 87. Tracks are re-timed when a genre arrives later.
+- **File names:** "8A - 128 - Artist - Title" (Mixed In Key style), vinyl sides, "(Official Video)", "[HQ]" and web addresses are understood; the key and BPM in a name become suggestions checked against the audio.
+- **Duplicates:** audio fingerprints confirm "possible duplicates", and same-named tracks with different audio are no longer grouped.
+- "ft." and "feat.", "Hip-Hop" and "Hip Hop", "Defected Records" and "Defected" now count as the same answer.
+
+**Write your changes into the music files** (off by default)
+- Settings → Changes to music files → *Write my changes into the music files*. Then edits, approved suggestions, the crew's fixes and Undo also change the file's title, artist, album, genre, year, BPM and key, so Serato and rekordbox see them.
+- Written in the background, each file after a verified backup, with the audio and Serato's cues and beatgrids checked byte for byte. Every write can be rolled back. Undo puts back what the file said before.
+- MP3 and FLAC: all of those fields. M4A: all but BPM and key. Other formats keep their values in DJ Assistant.
+
+**Please note:** test writing to files on copies of a few tracks first. The installer is signed for automatic updates but not code-signed, so Windows SmartScreen may show an "unknown publisher" warning.
+
+---
+
 DJ Assistant 2.4.0
 
 **Suggestions wait for you**

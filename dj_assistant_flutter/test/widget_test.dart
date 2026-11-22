@@ -4,8 +4,10 @@ import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/core/accounts.dart';
 import 'package:dj_assistant/main.dart';
 import 'package:dj_assistant/online/online.dart';
+import 'package:dj_assistant/ui/hubs.dart';
 import 'package:dj_assistant/ui/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -55,28 +57,31 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Quick Prep'), findsWidgets);
-    expect(find.text('DJ Decks'), findsWidgets);
-    await tester.scrollUntilVisible(
-      find.text('Settings'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    // Home first: the hubs in the sidebar and the bento tiles
+    for (final x in ['Home', 'Library', 'Analysis', 'Crates', 'Prep & Gigs']) {
+      expect(find.text(x), findsWidgets, reason: x);
+    }
+    expect(find.text('Your library'), findsOneWidget);
+    expect(find.text('DJ Decks'), findsNothing);
+    await tester.ensureVisible(find.text('Settings').first);
     await tester.tap(find.text('Settings').first);
     await tester.pump();
     expect(find.text('Appearance'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('Virtual Crates'),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('Virtual Crates').first);
+    await tester.ensureVisible(find.text('Crates').first);
+    await tester.tap(find.text('Crates').first);
     await tester.pump();
+    expect(find.text('Virtual crates'), findsWidgets);
+    // Ctrl+Tab steps to the hub's next tab
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(find.text('See also'), findsWidgets);
     expect(find.byType(Scaffold), findsWidgets);
     await closeApp(tester, accounts);
   });
 
-  testWidgets('every Studio page opens', (tester) async {
+  testWidgets('every hub shows its tabs and opens each one', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -100,18 +105,24 @@ void main() {
       ),
     );
     await tester.pump();
-    for (final (id, title, text) in [
-      ('stems', 'Stems', 'Choose a song to split it into stems'),
-      ('remix', 'Remix', 'Export remix (WAV)'),
-      ('dj', 'DJ Decks', 'Empty deck'),
-      ('synth', 'Synth Lab', 'Describe an instrument'),
-      ('drums', 'Drum Lab', 'Describe a drum kit'),
-    ]) {
-      container.read(viewProvider.notifier).go('studio:$id');
-      await tester.pump();
-      await tester.pump();
-      expect(find.text(text), findsWidgets, reason: title);
+    for (final h in hubs) {
+      for (final tab in h.tabs) {
+        container.read(viewProvider.notifier).go(tab.id);
+        await tester.pump();
+        await tester.pump();
+        // the hub's name is the heading and every tab is offered
+        expect(find.text(h.label), findsWidgets, reason: tab.id);
+        for (final other in h.tabs) {
+          expect(find.text(other.label), findsWidgets, reason: tab.id);
+        }
+      }
     }
+    // a tab switches the page
+    container.read(viewProvider.notifier).go('suggestions');
+    await tester.pump();
+    await tester.tap(find.text('Duplicates').first);
+    await tester.pump();
+    expect(container.read(viewProvider).id, 'duplicates');
     expect(tester.takeException(), isNull);
     await closeApp(tester, accounts, container);
   });

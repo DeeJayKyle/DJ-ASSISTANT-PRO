@@ -23,8 +23,16 @@ void main() {
   // offset/block-size header twice, so the audio is shifted by 4 samples and the
   // last 4 "samples" are the bytes of the following "ID3 " chunk header (0x4944 =
   // −4.8 dBFS). The real peak is −18.1 dBFS (ffmpeg agrees).
+  //
+  // Key confidence (2.5, key.dart): the new detector reads every fixture's
+  // key as 1.x did, but scores confidence on its own chroma; for the
+  // single-sine fixtures below it is halved because one pitch class can't
+  // establish a key. Precision is measured on test/precision_bench_test.
+  const toneKey = {'key_confidence': 0.17};
   const corrections = {
-    'library/Lossless/Driftwood.aiff': {'peak_dbfs': -18.1},
+    'library/Lossless/Driftwood.aiff': {'peak_dbfs': -18.1, ...toneKey},
+    'library/Lossless/Low Tide.flac': toneKey,
+    'library/Lossless/untagged recording.wav': toneKey,
   };
 
   for (final e in golden.entries) {

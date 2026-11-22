@@ -11,23 +11,21 @@ import '../core/inbox.dart' show InboxService, inboxCrateName;
 import '../core/diag_log.dart';
 import '../core/limits.dart';
 import '../core/export.dart' show openFolder;
-import '../core/packs.dart';
+import '../core/file_sync.dart';
 import '../core/updater.dart';
 import '../online/http_online.dart';
-import '../studio/stems_cache.dart';
 import 'assistant_panel.dart';
 import 'format.dart';
 import 'shortcuts_sheet.dart';
-import 'studio/common.dart' show errText, preparedStemsDir;
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
 const safetyPoints = [
-  'Your music is only read unless you turn on tag writing or Organise Files mode below. Both are off by default.',
+  'Your music is only read unless you turn on writing your changes into the files, tag writing or Organise Files mode below. All are off by default.',
   'With either on, nothing happens silently: every change is listed in a preview, you approve it one by one or in batches, a verified backup or restorable copy is kept, and it can be undone.',
   'Files are never permanently deleted except when you empty the Removed files area yourself, after seeing what is in it.',
-  'Metadata suggestions wait for your review unless you choose otherwise. Accepting one changes the catalogue only, never the file, and can be undone.',
+  'Metadata suggestions wait for your review unless you choose otherwise. Accepting one changes the catalogue (and, with write-through on, the file\'s tags, backed up first) and can be undone.',
   "Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato only adds a new .crate file. Serato crates and history can be imported read-only.",
   "Your ratings, energy, tags, crates, sets and notes stay in DJ Assistant's own catalogue on this computer.",
   'Only folders you choose are scanned. Personal files are a separate, opt-in module.',
@@ -91,33 +89,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
       value: st[key] == true,
       onChanged: (v) => _set(key, v),
-    );
-    Widget number(String key, String title, String sub, String unit) => Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title),
-              Text(
-                sub,
-                style: TextStyle(color: t.faint, fontSize: DjType.small),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: Space.x3),
-        SizedBox(
-          width: 120,
-          child: TextFormField(
-            key: ValueKey('$key-${st[key]}'),
-            initialValue: '${st[key] ?? ''}',
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(suffixText: unit),
-            onFieldSubmitted: (v) => _set(key, int.tryParse(v.trim()) ?? v),
-          ),
-        ),
-      ],
     );
     Widget choice(String key, String title, List<(String, String)> opts) =>
         Padding(
@@ -298,82 +269,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           gap,
           const AutoImportPanel(),
           gap,
-          Panel(
-            title: 'Studio',
-            subtitle: 'How Stems, Remix and DJ Decks use this computer.',
-            child: Column(
-              children: [
-                sw(
-                  'ai_gpu',
-                  'Pro Stems AI on the graphics card',
-                  sub: 'Uses DirectML when this PC has a graphics card; off runs it on the processor.',
-                ),
-                number(
-                  'studio_cores',
-                  'Processor cores for the Fast split',
-                  '0 = automatic (every core but one).',
-                  'cores',
-                ),
-                sw(
-                  'stems_cache',
-                  'Keep prepared stems',
-                  sub: 'Each song is split once and its stems are kept on this computer (never beside your music), so it loads instantly next time. Stems → Prepare stems does a whole crate.',
-                ),
-                if (st['stems_cache'] != false) ...[
-                  number(
-                    'stems_cache_gb',
-                    'Space for prepared stems',
-                    'The songs used longest ago are removed to stay under this. A 5-minute song takes about 210 MB.',
-                    'GB',
-                  ),
-                  Builder(
-                    builder: (_) {
-                      final cache = StemsCache(preparedStemsDir(ref));
-                      final (bytes, n) = cache.usage();
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$n ${n == 1 ? 'song' : 'songs'} prepared, ${(bytes / StemsCache.gigabyte).toStringAsFixed(1)} GB used.',
-                              style: TextStyle(
-                                color: t.muted,
-                                fontSize: DjType.small,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: n == 0
-                                ? null
-                                : () async {
-                                    final ok = await confirm(
-                                      context,
-                                      title: 'Remove all prepared stems?',
-                                      message: 'Songs will be split again the next time they are used. Your music is not touched.',
-                                      ok: 'Remove',
-                                      danger: true,
-                                    );
-                                    if (!ok) return;
-                                    cache.clear();
-                                    setState(() {});
-                                    toast('Prepared stems removed.');
-                                  },
-                            child: const Text('Remove all'),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-                number(
-                  'audio_buffer_ms',
-                  'Audio buffer',
-                  'How far ahead audio is prepared. Lower answers knobs faster; raise it if playback crackles.',
-                  'ms',
-                ),
-              ],
-            ),
-          ),
-          gap,
           const LimitsPanel(),
           gap,
           Panel(
@@ -459,14 +354,106 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           gap,
           _aiPanel(context, s.cat),
           gap,
-          _packsPanel(context, base),
-          gap,
           Panel(
             title: 'Changes to music files',
-            subtitle: 'Both off by default. Every change is previewed and approved by you, backed up and verified, and can be undone. Test on copies of your music first.',
+            subtitle: 'All off by default. Every change is backed up and verified, and can be undone. Test on copies of your music first.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Write my changes into the music files'),
+                  subtitle: Text(
+                    'When you (or an approved suggestion, the crew, or Undo) change a track\'s title, artist, album, genre, year, BPM or key here, the file\'s own tags change too, so Serato, rekordbox and every other app see it. Written in the background, one file at a time: verified backup first, audio checked bit for bit, Serato\'s cues and beatgrids kept. MP3, FLAC and M4A (M4A: no BPM/key). Roll back any write below.',
+                    style: TextStyle(color: t.faint, fontSize: DjType.small),
+                  ),
+                  value: st['sync_to_files'] == true,
+                  onChanged: (v) async {
+                    if (!v) return _set('sync_to_files', false);
+                    final pick = await showDialog<String>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text(
+                          'Write changes into your music files?',
+                        ),
+                        content: const SizedBox(
+                          width: 460,
+                          child: Text(
+                            'From now on, changes you make to title, artist, album, genre, year, BPM and key in DJ Assistant are written into the files themselves. Each file is backed up and verified first and every write can be rolled back.\n\n'
+                            'You can also write the values you changed earlier in DJ Assistant into their files now.',
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c),
+                            child: const Text('Cancel'),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(c, 'new'),
+                            child: const Text('Only new changes'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(c, 'all'),
+                            child: const Text('Also write earlier changes'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (pick == null) return;
+                    _set('sync_to_files', true);
+                    if (pick == 'all') {
+                      final n = enqueueAllEdited(s.cat);
+                      toast(
+                        n == 0 ? 'Nothing to write yet.' : 'Writing your earlier changes to their files in the background.',
+                      );
+                    }
+                  },
+                ),
+                if (st['sync_to_files'] == true)
+                  Builder(
+                    builder: (_) {
+                      final queued = fileSyncQueued(s.cat);
+                      final last = lastFileSync(s.cat);
+                      final job = s.jobs.status('file_sync');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: Space.x3),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (job.state == 'running')
+                              ProgressLine(
+                                label: 'Writing to music files…',
+                                done: job.done,
+                                total: job.total,
+                              ),
+                            Text(
+                              [
+                                if (queued > 0)
+                                  '$queued track(s) waiting to be written.',
+                                if (last != null)
+                                  'Last: ${last['written']} written, ${last['skipped']} already up to date or not writable, ${last['failed']} failed · ${fmtDateTime(last['at'] as int?)}.',
+                                if (queued == 0 && last == null)
+                                  'Nothing written yet.',
+                              ].join(' '),
+                              style: TextStyle(
+                                color: t.muted,
+                                fontSize: DjType.small,
+                              ),
+                            ),
+                            for (final e
+                                in ((last?['errors'] as List?) ?? const []))
+                              Text(
+                                '$e',
+                                style: TextStyle(
+                                  color: t.danger,
+                                  fontSize: DjType.small,
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 sw(
                   'allow_file_changes',
                   'Write tags to music files',
@@ -873,56 +860,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ],
     );
   }
-
-  Widget _packsPanel(BuildContext context, String base) {
-    final s = ref.read(sessionProvider);
-    final t = DjTokens.of(context);
-    return Panel(
-      title: 'Packs',
-      subtitle: 'Big optional extras, downloaded once from DJ Assistant\'s GitHub releases, checked against known checksums, then offline. Shared by all accounts.',
-      child: Column(
-        children: [
-          for (final p in listPacks(base, s.jobs))
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('${p['name']} (${fmtBytes(p['size'] as int?)})'),
-              subtitle: Text(
-                '${p['description']}\n${p['credits']}',
-                style: TextStyle(color: t.faint, fontSize: DjType.small),
-              ),
-              isThreeLine: true,
-              trailing: p['installed'] == true
-                  ? TextButton(
-                      onPressed: () => guard(
-                        () => removePack(base, '${p['id']}'),
-                        done: 'Pack removed.',
-                        bump: ref,
-                      ),
-                      child: const Text('Remove'),
-                    )
-                  : FilledButton(
-                      onPressed: () {
-                        final pack = packById('${p['id']}')!;
-                        s.jobs
-                            .start(
-                              'pack:${pack.id}',
-                              packInstallJob(
-                                base,
-                                pack.id,
-                                packDownloader(s.onlineFactory),
-                              ),
-                            )
-                            .ignore();
-                        toast('Downloading ${pack.name}…');
-                        ref.read(versionProvider.notifier).bump();
-                      },
-                      child: const Text('Get'),
-                    ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Settings → Limits and batch sizes: every number that bounds a feature.
@@ -1089,7 +1026,7 @@ class _AutoImportPanelState extends ConsumerState<AutoImportPanel> {
       toast(msg);
       ref.read(versionProvider.notifier).bump();
     } on Object catch (e) {
-      toast(errText(e), error: true);
+      toast(_errText(e), error: true);
     } finally {
       if (mounted) setState(() => checking = false);
     }
@@ -1250,4 +1187,9 @@ class RemovedSongsPanel extends ConsumerWidget {
             ),
     );
   }
+}
+
+String _errText(Object e) {
+  final s = '$e';
+  return s.startsWith('Exception: ') ? s.substring(11) : s;
 }

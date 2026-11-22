@@ -185,12 +185,12 @@ void main() {
       expect(imported, 1);
       final crate = InboxService(app.cat).inboxCrate();
       expect(CratesService(app.cat).count(crate.id), 1);
-      // auto-prep was started for the new track
+      // auto-prep (the Analysis Crew) was started for the new track
       final end = DateTime.now().add(const Duration(seconds: 60));
-      while (app.jobs.running('auto_prep') && DateTime.now().isBefore(end)) {
+      while (app.jobs.running('crew') && DateTime.now().isBefore(end)) {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       }
-      expect(app.jobs.status('auto_prep').state, 'completed');
+      expect(app.jobs.status('crew').state, 'completed');
       // nothing new: nothing happens
       expect(await app.inbox.runNow(), isNot(contains('Imported')));
       // gig mode pauses it

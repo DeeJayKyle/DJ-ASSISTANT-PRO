@@ -4,7 +4,7 @@
     "reply": {
       "action": "help",
       "filters": null,
-      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
+      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
       "sample": [],
       "target": null,
       "text": null,
@@ -17,7 +17,7 @@
     "reply": {
       "action": "help",
       "filters": null,
-      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
+      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
       "sample": [],
       "target": null,
       "text": null,
@@ -30,7 +30,7 @@
     "reply": {
       "action": "help",
       "filters": null,
-      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"plan a 2 hour wedding set\"  • \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
+      "reply": "I'm a local, rule-based helper (not an AI model). I can turn requests like these into library filters:\n• \"afrobeats from the 2010s energy 6-8 no live\"\n• \"house 120-128 bpm\"  • \"key 8A\"  • \"clean 90s hip hop\"\n• \"low bitrate\"  • \"lossless\"  • \"missing genre\"\n• \"show duplicates\"  • \"library health\"  • \"scan\"\n• \"gig mode\"  • \"gig pack\"  • \"suggestions\"\nEverything stays on this computer. I can't edit files, tags or Serato data.",
       "sample": [],
       "target": null,
       "text": null,
@@ -254,75 +254,6 @@
       "total": 21,
       "understood": [
         "excluding tracks marked clean"
-      ]
-    }
-  },
-  {
-    "message": "plan a 2 hour clean wedding set",
-    "reply": {
-      "action": "navigate",
-      "filters": null,
-      "params": {
-        "clean_only": true,
-        "curve": "wedding",
-        "duration_min": 120,
-        "event_type": "wedding"
-      },
-      "reply": "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.",
-      "sample": [],
-      "target": "set-studio",
-      "text": null,
-      "total": null,
-      "understood": [
-        "length 120 min",
-        "energy journey: wedding",
-        "event: wedding",
-        "clean tracks only"
-      ]
-    }
-  },
-  {
-    "message": "90 minute warm up set",
-    "reply": {
-      "action": "navigate",
-      "filters": null,
-      "params": {
-        "clean_only": false,
-        "curve": "warmup",
-        "duration_min": 90,
-        "event_type": null
-      },
-      "reply": "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.",
-      "sample": [],
-      "target": "set-studio",
-      "text": null,
-      "total": null,
-      "understood": [
-        "length 90 min",
-        "energy journey: warmup"
-      ]
-    }
-  },
-  {
-    "message": "build a peak club set",
-    "reply": {
-      "action": "navigate",
-      "filters": null,
-      "params": {
-        "clean_only": false,
-        "curve": "peak",
-        "duration_min": 60,
-        "event_type": "club"
-      },
-      "reply": "Opening Set Studio with these settings. Review them and press Generate — the plan is a suggestion you can edit.",
-      "sample": [],
-      "target": "set-studio",
-      "text": null,
-      "total": null,
-      "understood": [
-        "length 60 min",
-        "energy journey: peak",
-        "event: club"
       ]
     }
   },

@@ -1,5 +1,6 @@
 import 'analysis_store.dart';
 import 'catalogue.dart';
+import 'file_sync.dart';
 import 'library.dart';
 import 'serato_cues.dart';
 import 'serato_tags.dart';
@@ -134,6 +135,8 @@ extension LibraryEdits on LibraryService {
       db.execute('ROLLBACK');
       rethrow;
     }
+    // With write-through on, the files follow (written in the background).
+    enqueueFileSync(cat, ids, patch.keys);
     return n;
   }
 
@@ -232,6 +235,14 @@ extension LibraryEdits on LibraryService {
               as int,
       'crates':
           cat.db.select('SELECT COUNT(*) AS n FROM crates').first['n'] as int,
+      'analysed':
+          cat.db
+                  .select(
+                    "SELECT COUNT(*) AS n FROM analysis a JOIN tracks t ON t.id=a.track_id "
+                    "WHERE a.status='ok' AND t.presence='present'",
+                  )
+                  .first['n']
+              as int,
     };
   }
 

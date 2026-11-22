@@ -8,7 +8,9 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 > **Current release: DJ Assistant 2.x (Flutter), in [`dj_assistant_flutter/`](dj_assistant_flutter/).** It is what the Releases page publishes and what installs update to. The 1.x app (React + Tauri + Rust, in `src/`, `src-tauri/` and `crates/`) stopped at 1.8.1 and is kept for reference and for the shared catalogue schema; see [Legacy 1.x](#legacy-1x-react--tauri) below.
 
-## What it does (2.4)
+## What it does (2.5)
+
+The app is focused on **music analysis** and **DJ crate building**. The sidebar has four hubs, each a page with tabs along the top: **Library** (Tracks · Map · Sources & scans), **Analysis** (Analyse · Suggestions · Taggers · Health · Duplicates · Upgrades), **Crates** (Virtual crates · Discovery) and **Prep & Gigs** (Quick Prep · Organise Files · Gig Mode · Gig Pack). The app opens on **Home**, a colourful bento overview where every tile and line is a link (right-click a tile for its links). Ctrl+0 is Home, Ctrl+1…4 open the hubs, Ctrl+Tab / Ctrl+Shift+Tab or the mouse wheel over the tabs switch tabs, Ctrl+K goes to any tab by name, and hovering a hub, tab or link explains it.
 
 **Library** — choose music folders and drives, or drag folders and files onto the window (files are copied into the Inbox, never moved); read-only background scanning with pause/resume/cancel; tags and technical properties for MP3, FLAC, WAV, AIFF, M4A (AAC/ALAC), Ogg, Opus and more; accent-insensitive search; Genre / Decade / Format / Quality filters plus a rule builder; select with click, Ctrl/Shift-click, arrow keys, Ctrl+A and Ctrl+I; right-click for a menu; offline drives kept, never treated as deleted; folder watcher and optional Inbox auto-import of finished downloads.
 
@@ -18,9 +20,13 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 **Quick Prep** — a fast lane for a folder of fresh downloads: clean names, build a playlist, organise into gig folders, split by genre; exported as verified copies, a ZIP or playlists pointing at the originals. Tags are only ever written into the new copies.
 
-**Audio analysis (local)** — BPM with half/double alternatives, whole-file beatgrid, key with Camelot code, energy, loudness (LUFS), peak, clipping, silence, intro/outro, cue ideas, waveform and fingerprint. Shown as estimates; your values always win. Serato's own BPM, beatgrid, hot cues and saved loops are read from the file tags (never written).
+**Audio analysis (local)** — BPM with half/double alternatives (the genre settles half or double time: drum & bass reads 174, hip hop 87), whole-file beatgrid, key with Camelot code (2.5 detector: 84–87 % exact on the precision benchmark, up from 64 %; see docs/TESTING.md), energy, loudness (LUFS), peak, clipping, silence, intro/outro, cue ideas, waveform and fingerprint. Shown as estimates; your values always win. Serato's own BPM, beatgrid, hot cues and saved loops are read from the file tags (never written).
 
-**Suggestions — review first (new default in 2.4)** — fixes from file names, folders, spellings, analysis and the online services you turn on, each with the current value, suggestion, source, evidence and confidence. Approve or reject one at a time, or tick a batch. Accepting changes the catalogue only, never the file, and **Undo restores the exact previous value**. See [Auto-prep and suggestions](#auto-prep-and-suggestions).
+**Analyse: the Analysis Crew (new)** — one button (and auto-prep after every scan) runs every analyser as a team of agents, each with a role: **Scout** finds what needs doing, **Listener** analyses the audio, **Detective** reads file and folder names, **Librarian** asks the online services you switched on, **Taggers** run OneTagger and beets on copies, **Judge** cross-checks them all (agreement raises confidence, a tag that disagrees with the audio lowers it, half/double tempo and relative keys understood, reasons written into the evidence) and **Clerk** files the results review-first. Each agent shows live status, can be switched off and says why it skipped.
+
+**Taggers (new)** — MusicBrainz Picard, OneTagger, Mp3tag and beets working hand in hand, **on copies only**. Choose tracks (missing tags, a crate, or a Library selection via *Tag with tools…*) and DJ Assistant makes a workspace in its data folder with separate copies per tool. OneTagger (Beatport, Traxsource, Juno Download, MusicBrainz: genre, style, label, BPM, key, date) and beets (MusicBrainz releases; own config and library inside the workspace, so your beets setup is untouched) run by themselves; Picard (AcoustID fingerprints) and Mp3tag open on their copies for you to check and save, then *Collect*. Everything the tools changed is merged into Suggestions: values several tools agree on score higher, disagreements are spelled out. Install the tools yourself; the page finds them on PATH or in their usual Windows folders, or you set the path. The tools go online themselves, not DJ Assistant.
+
+**Suggestions — review first (new default in 2.4)** — fixes from file names, folders, spellings, analysis and the online services you turn on, each with the current value, suggestion, source, evidence and confidence. Approve or reject one at a time, or tick a batch. Accepting changes the catalogue (and the file too, with write-through on), and **Undo restores the exact previous value**. See [Auto-prep and suggestions](#auto-prep-and-suggestions).
 
 **Organise Files mode (opt-in, off by default)** — edit tags in the files, rename and move files or folders, replace a track with a better file, remove exact duplicates and bad files. See [Organise Files](#organise-files).
 
@@ -30,11 +36,9 @@ BPM and key data provided by [GetSongBPM](https://getsongbpm.com).
 
 **Discovery** — tracks that fit a crate, gaps, alternatives to overplayed tracks, tracklist and playlist-file matching with a shopping list CSV, Last.fm similar artists and MusicBrainz new releases (both opt-in, each saying what it sends), and store search links. Recommendations come from your own library and the services you turn on; nothing is hard-coded.
 
-**Set Studio, Gig Mode & Gig Pack** — running orders with mix grades and rules; offline gig mode with requests, notes, play log and **Next up** (can follow Serato DJ 4's history, read from a copy); verified USB gig packs.
+**Gig Mode & Gig Pack** — offline gig mode with requests, notes, play log and **Next up** (can follow Serato DJ 4's history, read from a copy); verified USB gig packs.
 
 **Serato, rekordbox & history** — read-only import of Serato crates, Serato DJ 4 play history and history CSVs, and rekordbox XML playlists. Serato cues and beatgrids carried into rekordbox XML exports.
-
-**Studio** — Stems (fast DSP split, or Pro Stems AI from an optional pack), Remix, DJ Decks, Synth Lab and Drum Lab. Saves only new files.
 
 **Assistant** — open by default on the right. Drag its edge (or focus it and use ←/→) to resize, expand it to full width (Ctrl+Shift+J) or hide it (Ctrl+J); on a narrow window it floats over the page. The built-in helper and /commands work offline; an AI model (free online options, your own Claude/OpenAI/… key, any OpenAI-compatible server, or Ollama on this computer) is opt-in. Actions appear as cards that run only when you press Run. It can never change music files and cannot turn on file changes.
 
@@ -52,7 +56,17 @@ Auto-prep runs after scans and imports (switch in Settings → Library). It anal
 | Fill empty fields | Fills empty fields from the best evidence. Never replaces a value you already have. |
 | Apply confident fixes | The behaviour before 2.4: fills empty fields and replaces existing values at or above the confidence slider (default 85%). |
 
-All three only touch DJ Assistant's catalogue, never the files. From 2.4 every accepted suggestion records what it replaced and who accepted it ("by you" or "automatic"), so **Undo** under Suggestions → Accepted (or **Undo automatic changes…** in Settings) puts the exact previous value back, unless you have changed it since. Values accepted before 2.4 show as "earlier" and can't be undone exactly, because their previous values weren't kept.
+All three change DJ Assistant's catalogue; the files change only with write-through on (below). From 2.4 every accepted suggestion records what it replaced and who accepted it ("by you" or "automatic"), so **Undo** under Suggestions → Accepted (or **Undo automatic changes…** in Settings) puts the exact previous value back, unless you have changed it since. Values accepted before 2.4 show as "earlier" and can't be undone exactly, because their previous values weren't kept.
+
+## Write your changes into the music files (new)
+
+Settings → Changes to music files → **Write my changes into the music files** (off by default). With it on, every change to a track's title, artist, album, genre, year, BPM or key in DJ Assistant — your edits, the Health fixer, approved suggestions, the Analysis Crew's fixes, and Undo — is also written into the file's own tags, so Serato, rekordbox and every other app see it. When you switch it on you can also write the values you changed earlier.
+
+- Written in the background, one file at a time, through the safe tag writer: the file must be unchanged since it was read, a verified backup is made first, the audio must hash identically afterwards, and every other tag (Serato's cues, loops, beatgrids) must stay byte for byte.
+- MP3 and FLAC get every field; M4A everything except BPM and key; WAV, AIFF, Ogg and video files are skipped (their values stay in DJ Assistant).
+- Keys are written in your notation (Camelot "8A" or musical "Am").
+- Clearing a value, or undoing a suggestion, puts back what the file said before DJ Assistant first wrote to it.
+- Every write is in the change log with its backup and can be rolled back (Settings → Changes to music files, or Organise Files → History). The status bar says "Changes write to files" while it is on.
 
 ## Organise Files
 
@@ -68,7 +82,7 @@ Test on copies of your music first.
 
 ## Safety
 
-- Music files are only read unless you turn on tag writing or Organise Files mode (both off by default). Quick Prep, Gig Pack and exports only create new files and folders.
+- Music files are only read unless you turn on write-through, tag writing or Organise Files mode (all off by default). Quick Prep, Gig Pack and exports only create new files and folders.
 - Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato adds a new `.crate` file in `_Serato_/Subcrates`, never overwriting one.
 - The AI assistant has no tool that changes, moves or deletes files, and cannot change the file-change switches or the suggestion mode.
 

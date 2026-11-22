@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
+
+import '../analysis/chromaprint.dart' show fingerprintSimilarity;
 
 import 'blake3.dart';
 import 'catalogue.dart';
@@ -14,6 +17,23 @@ import 'library.dart';
 /// * `alternate`: same artist + title, different version labels (remix, live,
 ///   clean, radio edit…). Probably intentional.
 const durationToleranceMs = 2000;
+
+/// Audio fingerprints this similar (0–1, the share of the shorter track that
+/// matches) are the same recording; this dissimilar, different recordings.
+const sameRecordingAt = 0.5, differentRecordingBelow = 0.2;
+
+/// What two fingerprints say: (true = same recording, false = different,
+/// null = can't tell), with the similarity.
+(bool?, double?) fingerprintVerdict(List<int>? a, List<int>? b) {
+  if (a == null || b == null || a.length < 20 || b.length < 20) {
+    return (null, null);
+  }
+  final s = fingerprintSimilarity(a, b);
+  if (s >= sameRecordingAt) return (true, s);
+  if (s < differentRecordingBelow) return (false, s);
+  return (null, s);
+}
+
 const dupDecisions = [
   'not_duplicate',
   'intentional_version',
@@ -78,6 +98,22 @@ class DuplicatesService {
     );
     return true;
   }
+
+  final _fps = <int, List<int>?>{};
+
+  /// A track's stored audio fingerprint (from analysis), or null.
+  List<int>? fingerprintOf(int id) => _fps.putIfAbsent(id, () {
+    final r = cat.db.select(
+      "SELECT fingerprint FROM analysis WHERE track_id=? AND status='ok'",
+      [id],
+    );
+    final b = r.firstOrNull?['fingerprint'] as Uint8List?;
+    if (b == null || b.length < 4) return null;
+    final d = ByteData.sublistView(b);
+    return [
+      for (var i = 0; i + 4 <= b.length; i += 4) d.getUint32(i, Endian.little),
+    ];
+  });
 
   List<TrackRow> _rows(List<int> ids) {
     final page = LibraryService(cat).search(
@@ -161,7 +197,14 @@ class DuplicatesService {
             final dj = ms[j].$2;
             if (!used[j] &&
                 dj != null &&
-                (di - dj).abs() <= durationToleranceMs) {
+                (di - dj).abs() <= durationToleranceMs &&
+                // same name and length but clearly different audio: not a
+                // duplicate (a different recording, mislabelled or a cover)
+                fingerprintVerdict(
+                      fingerprintOf(ms[i].$1),
+                      fingerprintOf(ms[j].$1),
+                    ).$1 !=
+                    false) {
               used[j] = true;
               cluster.add(ms[j].$1);
             }
@@ -174,12 +217,32 @@ class DuplicatesService {
           final vtxt = v.key.isEmpty
               ? 'no version label'
               : 'version label "${v.key}"';
+          // the weakest pair decides what the fingerprints prove
+          double? weakest;
+          var unknown = false;
+          for (var a = 0; a < cluster.length; a++) {
+            for (var b = a + 1; b < cluster.length; b++) {
+              final (same, sim) = fingerprintVerdict(
+                fingerprintOf(cluster[a]),
+                fingerprintOf(cluster[b]),
+              );
+              if (same != true || sim == null) {
+                unknown = true;
+              } else if (weakest == null || sim < weakest) {
+                weakest = sim;
+              }
+            }
+          }
+          final audio = !unknown && weakest != null
+              ? ' Audio fingerprints match (${(weakest * 100).round()} %): '
+                    'very likely the same recording.'
+              : ' Contents were not proven identical.';
           groups.add(
             DupGroup(
               'possible',
               key,
               'Same artist ("$artist") and title ("$title") after normalising case/accents/featuring credits, $vtxt, '
-                  'and durations within ${durationToleranceMs ~/ 1000} s. Contents were not proven identical.',
+                  'and durations within ${durationToleranceMs ~/ 1000} s.$audio',
               dec[key],
               _rows(cluster),
             ),

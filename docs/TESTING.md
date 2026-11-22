@@ -90,6 +90,24 @@ The sections below describe the 1.x test suites and manual checks. They remain v
 | SQL-like text in new inputs | `new_text_inputs_cannot_execute_sql` |
 | Assistant routes v1 requests | `assistant_routes_v1_requests` |
 
+### Precision benchmark (2.5)
+
+`dj_assistant_flutter/tool/make_bench.py` generates music-like tracks with a known tempo and key: eight genres (hip hop, R&B, afrobeats, amapiano, house, techno, drum & bass, dancehall) with drum patterns and swing, bass lines on the chord roots, harmonic-rich chords on common progressions (including the relative-major/minor and harmonic-minor traps), melodies resolving to the tonic, noise and detuned sources. `test/precision_bench_test.dart` measures tempo (exact within 2 %, with the half/double alternative, octave) and key (exact and the MIREX weighted score); `test/key_sweep_test.dart` compares key-detection variants. Two independent sets (80 tracks, seed 7, used to choose; 60 tracks, seed 11, used to check):
+
+| | 2.4 | 2.5 (set 1 / set 2) |
+|---|---|---|
+| Key exact | 63.8 % | 83.8 % / 86.7 % |
+| Key MIREX score | 73.0 % | 88.1 % / 90.2 % |
+| Tempo exact, genre tagged | 85.0 % / 80.0 % | 100 % / 100 % |
+| Tempo exact, untagged | 85.0 % / 80.0 % | unchanged (half/double alternative offered: 98.8 % / 95.0 %) |
+
+```bash
+python3 tool/make_bench.py /tmp/bench 80 45 7
+DJ_BENCH=/tmp/bench flutter test test/precision_bench_test.dart
+```
+
+Synthetic audio is a proxy: real-music accuracy should still be checked on a library with trusted keys and tempos.
+
 ### Analysis accuracy (manual check on a generated demo library)
 
 `scripts/make-demo-library.sh` creates 20 three-minute synthetic tracks with known tempo and key. Result at release: tempo 19/20 exact (the other reported at double tempo with the correct half-time alternative), key 17/20 (misses were major keys read as a related minor), energy spread 2–9 in a sensible order. Real-music accuracy still needs checking on Herbie's library.

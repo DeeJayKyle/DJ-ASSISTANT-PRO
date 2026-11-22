@@ -4,9 +4,12 @@ import 'dart:ui' as ui;
 import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/core/accounts.dart';
 import 'package:dj_assistant/core/crates.dart';
+import 'package:dj_assistant/core/crew.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
 import 'package:dj_assistant/core/suggestions.dart';
+import 'package:dj_assistant/core/tag_writer.dart';
+import 'package:dj_assistant/core/taggers.dart';
 import 'package:dj_assistant/main.dart';
 import 'package:dj_assistant/online/online.dart';
 import 'package:dj_assistant/ui/state.dart';
@@ -22,15 +25,17 @@ import 'package:path/path.dart' as p;
 /// to write them (CI uploads them for review); each page must also lay out
 /// without overflow or exceptions at every size.
 const pages = [
+  'home',
   'library',
   'quick',
   'crates',
   'duplicates',
   'activity',
   'health',
+  'crew',
   'suggestions',
+  'taggers',
   'organize',
-  'set-studio',
   'discovery',
   'map',
   'gig',
@@ -38,11 +43,6 @@ const pages = [
   'files',
   'settings',
   'upgrades',
-  'studio:stems',
-  'studio:remix',
-  'studio:dj',
-  'studio:synth',
-  'studio:drums',
 ];
 const sizes = {
   // Small laptops at 125–150% scaling, and a narrow window (the assistant
@@ -141,6 +141,37 @@ void main() {
       await tester.runAsync(() async {
         RootsService(session.cat).add(lib.path);
         await runScan(session.cat);
+        // Taggers with something to show: two tools' findings
+        final ids = session.taggers.incompleteTracks(limit: 6);
+        final ws = session.taggers.create(ids, label: 'Missing tags');
+        ToolRunner tool(Map<String, String> tags) =>
+            (exe, args, {environment, workingDirectory}) async {
+              for (final f in Directory(
+                workingDirectory!,
+              ).listSync(recursive: true).whereType<File>()) {
+                final kind = writableKind(f.path);
+                if (kind != null) writeTagsInPlace(f.path, kind, tags);
+              }
+              return ProcessResult(0, 0, '', '');
+            };
+        await runAutomaticTool(
+          ws,
+          'onetagger',
+          'onetagger-cli',
+          run: tool({'genre': 'Afro House', 'bpm': '122', 'key': '8A'}),
+        );
+        await runAutomaticTool(
+          ws,
+          'beets',
+          'beet',
+          run: tool({'genre': 'Afro House', 'year': '2019'}),
+        );
+        session.taggers.merge(ws);
+        // the Analysis Crew has run once
+        await session.jobs.start(
+          'crew',
+          crewJob(CrewPlan(dbPath: session.dbPath, dataDir: session.dataDir)),
+        );
       });
       session.settings.set('theme', theme);
       container.read(versionProvider.notifier).bump();
