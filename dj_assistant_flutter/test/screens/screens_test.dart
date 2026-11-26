@@ -3,12 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/core/accounts.dart';
-import 'package:dj_assistant/core/crates.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
-import 'package:dj_assistant/core/suggestions.dart';
-import 'package:dj_assistant/core/tag_writer.dart';
-import 'package:dj_assistant/core/taggers.dart';
 import 'package:dj_assistant/main.dart';
 import 'package:dj_assistant/online/online.dart';
 import 'package:dj_assistant/ui/state.dart';
@@ -25,23 +21,16 @@ import 'package:path/path.dart' as p;
 /// without overflow or exceptions at every size.
 const pages = [
   'home',
-  'library',
-  'quick',
+  'serato',
+  'templates',
   'crates',
-  'duplicates',
-  'activity',
-  'health',
-  'crew',
+  'library',
+  'analyse',
   'suggestions',
-  'taggers',
-  'organize',
-  'discovery',
-  'map',
-  'gig',
-  'gig-pack',
-  'files',
+  'health',
+  'activity',
   'settings',
-  'upgrades',
+  'backups',
 ];
 const sizes = {
   // Small laptops at 125–150% scaling, and a narrow window (the assistant
@@ -107,9 +96,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('dja_screens');
     lib = Directory(p.join(dir.path, 'Music'))..createSync();
-    final src = Directory(
-      p.join('test', 'fixtures', 'library'),
-    );
+    final src = Directory(p.join('test', 'fixtures', 'library'));
     for (final f in src.listSync(recursive: true).whereType<File>()) {
       final to = File(p.join(lib.path, p.relative(f.path, from: src.path)));
       to.parent.createSync(recursive: true);
@@ -119,7 +106,74 @@ void main() {
   tearDown(() => dir.deleteSync(recursive: true));
 
   for (final theme in ['dark', 'light']) {
+    testWidgets('every page lays out ($theme)', (tester) async {
+      final accounts = AccountsService.open(p.join(dir.path, 'data'));
+      final container = ProviderContainer(
+        overrides: [
+          accountsProvider.overrideWithValue(accounts),
+          sessionFactoryProvider.overrideWithValue(
+            (db) => AppSession(
+              dbPath: db,
+              online: NoOnline(),
+              secrets: MemorySecrets(),
+            ),
+          ),
+        ],
+      );
+      final key = GlobalKey();
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final session = container.read(sessionProvider);
+      await tester.runAsync(() async {
+        RootsService(session.cat).add(lib.path);
+        await runScan(session.cat);
+      });
+      session.settings.set('theme', theme);
+      container.read(versionProvider.notifier).bump();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: RepaintBoundary(
+            key: key,
+            child: const DjAssistantApp(checkUpdates: false),
+          ),
+        ),
+      );
+      final problems = <String>[];
+      for (final MapEntry(key: sizeName, value: size) in sizes.entries) {
+        tester.view.physicalSize = size;
+        for (final page in pages) {
+          container.read(viewProvider.notifier).go(page);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          for (
+            Object? e = tester.takeException();
+            e != null;
+            e = tester.takeException()
+          ) {
+            problems.add('$page at $sizeName: ${'$e'.split('\n').first}');
+          }
+          if (out != null) {
+            await tester.runAsync(() async {
+              final b =
+                  key.currentContext!.findRenderObject()!
+                      as RenderRepaintBoundary;
+              final img = await b.toImage();
+              final png = await img.toByteData(format: ui.ImageByteFormat.png);
+              final f = File(p.join(out, '$theme-$sizeName-$page.png'))
+                ..parent.createSync(recursive: true);
+              f.writeAsBytesSync(png!.buffer.asUint8List());
+            });
+          }
+        }
+      }
+      await tester.pumpWidget(const SizedBox());
+      container.dispose();
+      expect(problems, isEmpty, reason: problems.join('\n'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      accounts.close();
+    }, timeout: const Timeout(Duration(minutes: 10)));
   }
-
-
 }

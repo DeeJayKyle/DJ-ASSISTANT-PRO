@@ -8,7 +8,6 @@ import 'package:dj_assistant/main.dart';
 import 'package:dj_assistant/online/online.dart';
 import 'package:dj_assistant/ui/state.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -147,7 +146,6 @@ void main() {
     expect(hashes(music), before, reason: 'files are never touched');
     await stop(tester);
   });
-
 
   testWidgets('undo every automatic change from Settings', (tester) async {
     await start(tester);

@@ -1,14 +1,11 @@
-
 import 'package:dj_assistant/core/taggers.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 
 /// External taggers: every tool works on its own copies, the originals are
 /// never written, and what the tools find is merged into review-first
 /// suggestions with agreement raising confidence.
 void main() {
   group('merging what the tools found', () {
-
     test('the same fact written differently agrees', () {
       void same(String f, String a, String b) =>
           expect(agreeKey(f, a), agreeKey(f, b), reason: '$f: $a = $b');

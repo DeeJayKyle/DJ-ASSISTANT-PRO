@@ -2,11 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:archive/archive_io.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/updater.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,8 +20,7 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  group('personal files (1.x docs.rs)', () {
-  });
+  group('personal files (1.x docs.rs)', () {});
 
   group('updater', () {
     /// Signs like minisign / Tauri (prehashed "ED" or plain "Ed").

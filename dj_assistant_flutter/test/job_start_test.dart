@@ -1,11 +1,8 @@
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:dj_assistant/app/session.dart';
 import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/online/online.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
 
 /// 2.0.3: "Get Pro Stems AI" stayed on Downloading forever. The job closure
 /// was written inline in the Settings page, so it captured the page's state;
@@ -27,5 +24,4 @@ void main() {
     expect(st.message, contains("couldn't start"));
     expect(jobs.running('x'), isFalse);
   });
-
 }

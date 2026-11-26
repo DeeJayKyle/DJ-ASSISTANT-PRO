@@ -43,13 +43,7 @@ void main() {
 
   test('broken files fail with a readable error', () {
     for (final name in ['truncated.flac', 'corrupt.mp3', 'empty.mp3']) {
-      final path = p.join(
-        'test',
-        'fixtures',
-        'library',
-        'Broken',
-        name,
-      );
+      final path = p.join('test', 'fixtures', 'library', 'Broken', name);
       if (name.endsWith('.mp3') && Platform.isWindows) continue;
       expect(
         () => openPcm(path),

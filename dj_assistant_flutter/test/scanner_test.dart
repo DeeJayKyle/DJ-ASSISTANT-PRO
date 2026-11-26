@@ -12,12 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 final fixtures = p.normalize(
-  p.join(
-    Directory.current.path,
-    'test',
-    'fixtures',
-    'library',
-  ),
+  p.join(Directory.current.path, 'test', 'fixtures', 'library'),
 );
 
 /// A private copy of the fixture library, so tests can delete and unplug folders.

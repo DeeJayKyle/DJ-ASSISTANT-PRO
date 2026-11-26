@@ -14,12 +14,7 @@ void main() {
 
 void parity(String set, String goldenFile) {
   final fixtures = p.normalize(
-    p.join(
-      Directory.current.path,
-      'test',
-      'fixtures',
-      set,
-    ),
+    p.join(Directory.current.path, 'test', 'fixtures', set),
   );
   final golden = (jsonDecode(
     File('test/golden/$goldenFile').readAsStringSync(),

@@ -1,18 +1,13 @@
 import 'dart:io';
 
-import 'package:dj_assistant/core/autoprep.dart';
 import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/library.dart';
-import 'package:dj_assistant/core/library_edit.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
-import 'package:dj_assistant/core/suggestions.dart';
 import 'package:dj_assistant/core/watcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import 'scanner_test.dart' show copyLibrary, hashes;
+import 'scanner_test.dart' show copyLibrary;
 
 /// Ports of 1.x `folder_watcher_notices_new_files_without_touching_them` and
 /// `auto_prep_analyses_and_applies_recommended_fixes_after_a_scan`.
@@ -53,7 +48,4 @@ void main() {
     expect(w.pending(), isEmpty);
     w.stop();
   });
-
-
-
 }

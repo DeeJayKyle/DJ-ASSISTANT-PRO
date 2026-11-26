@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:dj_assistant/core/catalogue.dart';
 import 'package:dj_assistant/core/file_sync.dart';
-import 'package:dj_assistant/core/jobs.dart';
 import 'package:dj_assistant/core/library.dart';
 import 'package:dj_assistant/core/library_edit.dart';
 import 'package:dj_assistant/core/roots.dart';

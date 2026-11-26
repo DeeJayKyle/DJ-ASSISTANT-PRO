@@ -29,15 +29,8 @@ void main() {
       'Driftwood.aiff',
       'untagged recording.wav',
     ]) {
-      File(
-        p.join(
-          'test',
-          'fixtures',
-          'library',
-          'Lossless',
-          f,
-        ),
-      ).copySync(p.join(music.path, f));
+      File(p.join('test', 'fixtures', 'library', 'Lossless', f))
+          .copySync(p.join(music.path, f));
     }
     dbPath = p.join(tmp.path, 'catalogue.sqlite3');
     cat = Catalogue.open(dbPath);

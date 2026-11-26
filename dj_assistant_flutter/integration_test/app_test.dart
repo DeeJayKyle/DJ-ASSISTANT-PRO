@@ -21,34 +21,25 @@ import 'package:path/path.dart' as p;
 const shots = String.fromEnvironment('SHOTS');
 const pages = [
   'home',
-  'library',
-  'quick',
+  'serato',
+  'templates',
   'crates',
-  'duplicates',
-  'activity',
-  'health',
-  'crew',
+  'library',
+  'analyse',
   'suggestions',
-  'taggers',
-  'organize',
-  'discovery',
-  'gig',
-  'gig-pack',
-  'upgrades',
+  'health',
+  'activity',
   'settings',
+  'backups',
 ];
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('pages open, and a song splits and plays on Stems', (
-    tester,
-  ) async {
+  testWidgets('every page opens in the real app', (tester) async {
     final dir = Directory.systemTemp.createTempSync('dja_it');
     final lib = Directory(p.join(dir.path, 'Music'))..createSync();
-    final src = Directory(
-      p.join('test', 'fixtures', 'library'),
-    );
+    final src = Directory(p.join('test', 'fixtures', 'library'));
     for (final f in src.listSync(recursive: true).whereType<File>()) {
       final to = File(p.join(lib.path, p.relative(f.path, from: src.path)));
       to.parent.createSync(recursive: true);

@@ -1,11 +1,5 @@
-import 'dart:convert';
-import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:io';
 
-import 'package:dj_assistant/analysis/analysis.dart' as an;
-import 'package:dj_assistant/core/analysis_store.dart';
-import 'package:dj_assistant/core/autoprep.dart';
 import 'package:dj_assistant/core/catalogue.dart';
 import 'package:dj_assistant/core/jobs.dart';
 import 'package:dj_assistant/core/library.dart';
@@ -16,7 +10,6 @@ import 'package:dj_assistant/core/suggestions.dart';
 import 'package:dj_assistant/core/settings.dart';
 import 'package:dj_assistant/online/consensus.dart';
 import 'package:dj_assistant/online/http_online.dart';
-import 'package:dj_assistant/online/lookups.dart';
 import 'package:dj_assistant/online/online.dart';
 import 'package:dj_assistant/online/parsers.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -337,41 +330,3 @@ void main() {
     expect(LibraryService(cat).row(id)!.year, 2001);
   });
 }
-
-/// A 16-bit mono WAV with a few tones (long enough to fingerprint).
-void _writeWav(File f, int secs) {
-  const sr = 22050;
-  final n = sr * secs;
-  final data = BytesBuilder();
-  for (var i = 0; i < n; i++) {
-    final t = i / sr;
-    final fr = [220.0, 330.0, 440.0, 550.0][(t * 2).toInt() % 4];
-    final v = (_sin(2 * 3.141592653589793 * fr * t) * 0.4 * 32767).toInt();
-    data.add([v & 0xff, (v >> 8) & 0xff]);
-  }
-  final d = data.toBytes();
-  final h = ByteData(44);
-  void s(int o, String x) {
-    for (var i = 0; i < 4; i++) {
-      h.setUint8(o + i, x.codeUnitAt(i));
-    }
-  }
-
-  s(0, 'RIFF');
-  h.setUint32(4, 36 + d.length, Endian.little);
-  s(8, 'WAVE');
-  s(12, 'fmt ');
-  h
-    ..setUint32(16, 16, Endian.little)
-    ..setUint16(20, 1, Endian.little)
-    ..setUint16(22, 1, Endian.little)
-    ..setUint32(24, sr, Endian.little)
-    ..setUint32(28, sr * 2, Endian.little)
-    ..setUint16(32, 2, Endian.little)
-    ..setUint16(34, 16, Endian.little);
-  s(36, 'data');
-  h.setUint32(40, d.length, Endian.little);
-  f.writeAsBytesSync([...h.buffer.asUint8List(), ...d]);
-}
-
-double _sin(double x) => math.sin(x);

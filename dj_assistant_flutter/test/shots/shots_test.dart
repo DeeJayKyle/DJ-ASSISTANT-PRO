@@ -27,7 +27,9 @@ Future<void> _fonts() async {
   for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
     loader.addFont(
       Future.value(
-        ByteData.sublistView(File('assets/fonts/Inter-$w.ttf').readAsBytesSync()),
+        ByteData.sublistView(
+          File('assets/fonts/Inter-$w.ttf').readAsBytesSync(),
+        ),
       ),
     );
   }
@@ -37,8 +39,9 @@ Future<void> _fonts() async {
   icons.addFont(
     Future.value(
       ByteData.sublistView(
-        File('$sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
-            .readAsBytesSync(),
+        File(
+          '$sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+        ).readAsBytesSync(),
       ),
     ),
   );
@@ -58,7 +61,11 @@ void main() {
       overrides: [
         accountsProvider.overrideWithValue(accounts),
         sessionFactoryProvider.overrideWithValue(
-          (db) => AppSession(dbPath: db, online: NoOnline(), secrets: MemorySecrets()),
+          (db) => AppSession(
+            dbPath: db,
+            online: NoOnline(),
+            secrets: MemorySecrets(),
+          ),
         ),
       ],
     );
@@ -83,20 +90,30 @@ void main() {
       SeratoLibrary.isRunning = () => false;
       final lib = s.seratoLibraryFor(serato.path);
       final paths = [
-        for (final r in s.cat.db.select('SELECT path, genre FROM tracks ORDER BY id'))
+        for (final r in s.cat.db.select(
+          'SELECT path, genre FROM tracks ORDER BY id',
+        ))
           (r['path'] as String, r['genre'] as String?),
       ];
-      List<String> of(String g) => [for (final x in paths) if (x.$2 == g) x.$1];
+      List<String> of(String g) => [
+        for (final x in paths)
+          if (x.$2 == g) x.$1,
+      ];
       lib.save('Afrobeats', of('Afrobeats'));
       lib.save('Afrobeats%%Peak time', of('Afrobeats').take(3).toList());
       lib.save('House', of('House'));
       lib.save('House%%Deep', of('House').take(1).toList());
       lib.save('Warm up', [for (final x in paths.take(6)) x.$1]);
-      lib.save('Wedding%%Dinner', [for (final x in paths.skip(6).take(4)) x.$1]);
+      lib.save('Wedding%%Dinner', [
+        for (final x in paths.skip(6).take(4)) x.$1,
+      ]);
       lib.save('Wedding%%Dance floor', [for (final x in paths.take(8)) x.$1]);
     });
     container.read(versionProvider.notifier).bump();
-    final pages = (Platform.environment['SHOTS'] ?? 'home,serato,templates,crates,library,analyse,suggestions,health,activity,settings,backups').split(',');
+    final pages =
+        (Platform.environment['SHOTS'] ??
+                'home,serato,templates,crates,library,analyse,suggestions,health,activity,settings,backups')
+            .split(',');
     Directory('build/shots').createSync(recursive: true);
     for (final id in pages) {
       container.read(viewProvider.notifier).go(id);
@@ -104,7 +121,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 200));
       }
       await tester.runAsync(() async {
-        final b = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final b =
+            key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         final img = await b.toImage();
         final png = await img.toByteData(format: ui.ImageByteFormat.png);
         File('build/shots/$id.png').writeAsBytesSync(png!.buffer.asUint8List());
@@ -112,7 +130,9 @@ void main() {
     }
     await tester.pumpWidget(const SizedBox());
     container.dispose();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 500)),
+    );
     accounts.close();
   }, timeout: const Timeout(Duration(minutes: 5)));
 }

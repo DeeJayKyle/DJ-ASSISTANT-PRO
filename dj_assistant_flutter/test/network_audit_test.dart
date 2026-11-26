@@ -54,27 +54,24 @@ void main() {
     expect(on, ['updates']);
   });
 
-  test(
-    'Analyse sends nothing online until an analyser is turned on',
-    () async {
-      final ids = [
-        for (final r in app.cat.db.select('SELECT id FROM tracks'))
-          r['id'] as int,
-      ];
-      expect(ids, isNotEmpty);
-      expect(activeAnalysers(app.cat, app.secrets), isEmpty);
-      await analyseOnline(
-        app.cat,
-        online,
-        app.secrets,
-        ids,
-        LocalProgress(),
-        spacingMs: 0,
-      );
-      await pumpEventQueue();
-      expect(sent, isEmpty);
-    },
-  );
+  test('Analyse sends nothing online until an analyser is turned on', () async {
+    final ids = [
+      for (final r in app.cat.db.select('SELECT id FROM tracks'))
+        r['id'] as int,
+    ];
+    expect(ids, isNotEmpty);
+    expect(activeAnalysers(app.cat, app.secrets), isEmpty);
+    await analyseOnline(
+      app.cat,
+      online,
+      app.secrets,
+      ids,
+      LocalProgress(),
+      spacingMs: 0,
+    );
+    await pumpEventQueue();
+    expect(sent, isEmpty);
+  });
 
   test('turning a service on is what allows its requests', () async {
     app.settings.setService('musicbrainz', true);

@@ -44,85 +44,88 @@ void main() {
         );
   }
 
-  test('off when switched off; preview, apply, verified backup, exact rollback', () {
-    cat.setSetting('sync_to_files', '0');
-    expect(
-      () => sw.preview([id], {'genre': 'Afro Pop'}),
-      throwsA(isA<SafeWriteException>()),
-    );
-    cat
-      ..setSetting('allow_file_changes', '1')
-      ..setSetting('write_backups', '1');
-    final original = target.readAsBytesSync();
-    final audioBefore = audioHash(target.path, 'mp3');
+  test(
+    'off when switched off; preview, apply, verified backup, exact rollback',
+    () {
+      cat.setSetting('sync_to_files', '0');
+      expect(
+        () => sw.preview([id], {'genre': 'Afro Pop'}),
+        throwsA(isA<SafeWriteException>()),
+      );
+      cat
+        ..setSetting('allow_file_changes', '1')
+        ..setSetting('write_backups', '1');
+      final original = target.readAsBytesSync();
+      final audioBefore = audioHash(target.path, 'mp3');
 
-    final plan = sw.preview([id], {'genre': 'Afro Pop', 'bpm': '105'});
-    expect(plan.single.changes['genre'], (null, 'Afro Pop'));
-    expect(plan.single.changes['bpm'], ('104', '105'));
-    expect(plan.single.warnings.first, contains('Serato'));
-    expect(
-      target.readAsBytesSync(),
-      original,
-      reason: 'a preview writes nothing',
-    );
+      final plan = sw.preview([id], {'genre': 'Afro Pop', 'bpm': '105'});
+      expect(plan.single.changes['genre'], (null, 'Afro Pop'));
+      expect(plan.single.changes['bpm'], ('104', '105'));
+      expect(plan.single.warnings.first, contains('Serato'));
+      expect(
+        target.readAsBytesSync(),
+        original,
+        reason: 'a preview writes nothing',
+      );
 
-    final res = sw.apply(plan);
-    expect(res.single['status'], 'done', reason: '$res');
-    expect(audioHash(target.path, 'mp3'), audioBefore);
-    expect(
-      containsGeob(target),
-      isTrue,
-      reason: 'the Serato GEOB frame must survive',
-    );
-    final now = readWritableTags(target.path, 'mp3');
-    expect(now['genre'], 'Afro Pop');
-    expect(now['bpm'], '105');
-    final log = sw.log();
-    final backup = log.first['backup_path'] as String;
-    expect(
-      File(backup).readAsBytesSync(),
-      original,
-      reason: 'the backup is the exact original',
-    );
-    expect(log.first['changes'], {
-      'bpm': ['104', '105'],
-      'genre': [null, 'Afro Pop'],
-    });
-    expect(
-      Directory(music.path)
-          .listSync()
-          .where((e) => p.basename(e.path).startsWith('.')),
-      isEmpty,
-      reason: 'no temporary files are left behind',
-    );
+      final res = sw.apply(plan);
+      expect(res.single['status'], 'done', reason: '$res');
+      expect(audioHash(target.path, 'mp3'), audioBefore);
+      expect(
+        containsGeob(target),
+        isTrue,
+        reason: 'the Serato GEOB frame must survive',
+      );
+      final now = readWritableTags(target.path, 'mp3');
+      expect(now['genre'], 'Afro Pop');
+      expect(now['bpm'], '105');
+      final log = sw.log();
+      final backup = log.first['backup_path'] as String;
+      expect(
+        File(backup).readAsBytesSync(),
+        original,
+        reason: 'the backup is the exact original',
+      );
+      expect(log.first['changes'], {
+        'bpm': ['104', '105'],
+        'genre': [null, 'Afro Pop'],
+      });
+      expect(
+        Directory(music.path)
+            .listSync()
+            .where((e) => p.basename(e.path).startsWith('.')),
+        isEmpty,
+        reason: 'no temporary files are left behind',
+      );
 
-    // The file changed since the preview: refused, nothing written.
-    final plan2 = sw.preview([id], {'genre': 'X'});
-    final edited = target.readAsBytesSync();
-    target.writeAsBytesSync([...edited, 0]);
-    final res2 = sw.apply(plan2);
-    expect(res2.single['status'], 'failed');
-    expect(res2.single['message'], contains('changed since the preview'));
-    expect(target.readAsBytesSync(), [...edited, 0]);
+      // The file changed since the preview: refused, nothing written.
+      final plan2 = sw.preview([id], {'genre': 'X'});
+      final edited = target.readAsBytesSync();
+      target.writeAsBytesSync([...edited, 0]);
+      final res2 = sw.apply(plan2);
+      expect(res2.single['status'], 'failed');
+      expect(res2.single['message'], contains('changed since the preview'));
+      expect(target.readAsBytesSync(), [...edited, 0]);
 
-    // Rollback refuses while the file differs from what was written…
-    final change = log.first['id'] as int;
-    expect(() => sw.rollback(change), throwsA(isA<SafeWriteException>()));
-    // …and restores the exact original bytes once it matches again.
-    target.writeAsBytesSync(edited);
-    sw.rollback(change);
-    expect(
-      target.readAsBytesSync(),
-      original,
-      reason: 'rollback restores the exact original bytes',
-    );
-    expect(
-      () => sw.rollback(change),
-      throwsA(isA<SafeWriteException>()),
-      reason: 'only once',
-    );
-    expect(sw.log().first['action'], 'rollback');
-  });
+      // Rollback refuses while the file differs from what was written…
+      final change = log.first['id'] as int;
+      expect(() => sw.rollback(change), throwsA(isA<SafeWriteException>()));
+      // …and restores the exact original bytes once it matches again.
+      target.writeAsBytesSync(edited);
+      sw.rollback(change);
+      expect(
+        target.readAsBytesSync(),
+        original,
+        reason: 'rollback restores the exact original bytes',
+      );
+      expect(
+        () => sw.rollback(change),
+        throwsA(isA<SafeWriteException>()),
+        reason: 'only once',
+      );
+      expect(sw.log().first['action'], 'rollback');
+    },
+  );
 
   test('a write that cannot be verified leaves the original untouched', () {
     cat.setSetting('allow_file_changes', '1');

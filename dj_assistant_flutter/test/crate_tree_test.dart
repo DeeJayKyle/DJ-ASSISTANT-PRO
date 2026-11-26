@@ -83,8 +83,18 @@ void main() {
         rules: {
           'match': 'any',
           'rules': [
-            {'kind': 'condition', 'field': 'genre', 'op': 'equals', 'value': 'House'},
-            {'kind': 'condition', 'field': 'genre', 'op': 'equals', 'value': 'Techno'},
+            {
+              'kind': 'condition',
+              'field': 'genre',
+              'op': 'equals',
+              'value': 'House',
+            },
+            {
+              'kind': 'condition',
+              'field': 'genre',
+              'op': 'equals',
+              'value': 'Techno',
+            },
           ],
         },
       ),

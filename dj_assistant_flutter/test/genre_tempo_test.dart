@@ -1,16 +1,6 @@
-import 'dart:io';
-
 import 'package:dj_assistant/analysis/analysis.dart' show analyseFile;
 import 'package:dj_assistant/analysis/beatgrid.dart';
-import 'package:dj_assistant/core/analysis_store.dart';
-import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/roots.dart';
-import 'package:dj_assistant/core/scanner.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
-
-import 'scanner_test.dart' show copyLibrary, hashes;
 
 /// Half or double time can't be heard; the genre settles it.
 void main() {
@@ -42,5 +32,4 @@ void main() {
     );
     expect(slow.bpm, 90.0);
   });
-
 }

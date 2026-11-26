@@ -50,24 +50,6 @@ void main() {
     });
   });
 
-  group('dropped music', () {
-    late Directory music, outside;
-    late Catalogue cat;
-    setUp(() async {
-      music = copyLibrary();
-      outside = Directory(p.join(music.parent.path, 'Downloads'))..createSync();
-      cat = Catalogue.open(p.join(music.parent.path, 'data', 'c.sqlite3'));
-      RootsService(cat).add(music.path);
-      cat.setSetting('inbox_folder', p.join(music.parent.path, 'Inbox'));
-      await runScan(cat);
-    });
-    tearDown(() {
-      cat.close();
-      music.parent.deleteSync(recursive: true);
-    });
-
-  });
-
   test('navigation remembers back and forward', () {
     final c = ProviderContainer();
     addTearDown(c.dispose);
