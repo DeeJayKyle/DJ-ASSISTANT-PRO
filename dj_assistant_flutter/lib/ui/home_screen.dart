@@ -27,7 +27,6 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(sessionProvider);
     final stats = ref.watch(statsProvider);
-    final pending = ref.watch(pendingSuggestionsProvider);
     final crates = ref.watch(cratesProvider).where((c) => c.kind != 'folder');
     final online = ref.watch(onlineOnProvider);
     final t = DjTokens.of(context);
@@ -44,13 +43,20 @@ class HomeScreen extends ConsumerWidget {
       );
     }
 
-    final lib = hubs[0], ana = hubs[1], cr = hubs[2], prep = hubs[3];
+    final lib = hubs[0], ana = hubs[1], cr = hubs[2];
     final tracks = stats['tracks'] ?? 0;
-    final analysed = stats['analysed'] ?? 0;
-    final low = stats['low_bitrate'] ?? 0;
-    final problems = (stats['errors'] ?? 0) + (stats['missing'] ?? 0) + low;
-    final pct = tracks == 0 ? 0.0 : (analysed / tracks).clamp(0.0, 1.0);
-    final gig = s.gig.current();
+    final checked = s.cat.db
+        .select('SELECT COUNT(*) AS n FROM catalog_checked')
+        .first['n'] as int;
+    final problems = (stats['errors'] ?? 0) + (stats['missing'] ?? 0);
+    final pct = tracks == 0 ? 0.0 : (checked / tracks).clamp(0.0, 1.0);
+    final serato = s.seratoLibrary;
+    var seratoCrates = 0;
+    try {
+      seratoCrates = serato?.crates().length ?? 0;
+    } on Object {
+      // unreadable folder: shown as none
+    }
 
     final tiles = <BentoTile>[
       BentoTile(
@@ -65,12 +71,10 @@ class HomeScreen extends ConsumerWidget {
             ? 'No tracks yet. Add a music folder to start.'
             : '${fmtLongDuration(stats['total_duration_ms'] ?? 0)} of music · '
                   '${fmtBytes(stats['total_bytes'])} · '
-                  '${stats['lossless'] ?? 0} lossless · '
                   '${stats['roots'] ?? 0} '
                   '${stats['roots'] == 1 ? 'folder' : 'folders'}',
         links: [
           page('library', label: 'Browse tracks'),
-          page('map', label: 'Tempo × energy map'),
           if ((stats['roots'] ?? 0) == 0)
             page('activity', label: 'Add a music folder')
           else
@@ -79,31 +83,19 @@ class HomeScreen extends ConsumerWidget {
       ),
       BentoTile(
         color: ana.color(context),
-        icon: Icons.graphic_eq,
+        icon: Icons.travel_explore_outlined,
         title: 'Analysis',
-        hint:
-            'BPM, key, energy, loudness, cues and waveform, worked out on '
-            'this computer.',
-        onOpen: () => nav.go('crew'),
+        hint: tabOf('analyse')!.hint,
+        onOpen: () => nav.go('analyse'),
         value: '${(pct * 100).round()}%',
-        caption: '${fmtNumber(analysed)} of ${fmtNumber(tracks)} analysed',
+        caption:
+            '${fmtNumber(checked)} of ${fmtNumber(tracks)} checked online · '
+            '${online.isEmpty ? 'no analysers on' : '${online.length} analyser(s) on'}',
         progress: pct,
         links: [
-          page('crew', label: 'Run the analysis crew'),
-          page('map', label: 'See the results'),
+          page('analyse', label: 'Analyse'),
+          page('suggestions', label: 'See changes'),
         ],
-      ),
-      BentoTile(
-        color: ana.color(context),
-        icon: Icons.auto_fix_high_outlined,
-        title: 'Suggestions',
-        hint: tabOf('suggestions')!.hint,
-        onOpen: () => nav.go('suggestions'),
-        value: fmtNumber(pending),
-        caption: pending == 0
-            ? 'Nothing waiting for review.'
-            : 'fixes waiting for your review',
-        links: [page('suggestions', label: 'Review suggestions')],
       ),
       BentoTile(
         color: problems > 0 ? t.warn : t.ok,
@@ -114,26 +106,37 @@ class HomeScreen extends ConsumerWidget {
         value: fmtNumber(problems),
         caption: problems == 0
             ? 'No problems found.'
-            : '${stats['missing'] ?? 0} missing · ${stats['errors'] ?? 0} '
-                  'unreadable · $low low bitrate',
+            : '${stats['missing'] ?? 0} missing · ${stats['errors'] ?? 0} unreadable',
+        links: [page('health', label: 'Open Health')],
+      ),
+      BentoTile(
+        span: 2,
+        color: cr.color(context),
+        icon: Icons.album_outlined,
+        title: 'Serato crates',
+        hint: tabOf('serato')!.hint,
+        onOpen: () => nav.go('serato'),
+        value: fmtNumber(seratoCrates),
+        caption: serato == null
+            ? 'No _Serato_ folder found yet.'
+            : 'crates in ${serato.dir}',
         links: [
-          page('health', label: 'Open Health'),
-          page('duplicates', label: 'Find duplicates'),
-          if (low > 0) page('upgrades', label: 'Upgrade $low tracks'),
+          page('serato', label: 'Reorganise Serato crates'),
+          page('crates', label: 'Build a new crate'),
         ],
       ),
       BentoTile(
         color: cr.color(context),
         icon: cr.icon,
-        title: 'Crates',
-        hint: cr.hint,
+        title: 'Crate builder',
+        hint: tabOf('crates')!.hint,
         onOpen: () => nav.go('crates'),
         value: fmtNumber(crates.length),
         caption: crates.isEmpty
             ? 'No crates yet. Start from a template.'
-            : 'virtual crates',
+            : 'crates ready to save to Serato',
         links: [
-          for (final c in crates.take(4))
+          for (final c in crates.take(3))
             BentoLink(
               c.name,
               () => nav.go('crate', crateId: c.id),
@@ -147,20 +150,7 @@ class HomeScreen extends ConsumerWidget {
             'crates',
             label: crates.isEmpty ? 'Create a crate' : 'All crates',
           ),
-          page('discovery', label: 'Find tracks that fit'),
         ],
-      ),
-      BentoTile(
-        span: 2,
-        color: prep.color(context),
-        icon: prep.icon,
-        title: gig == null ? 'Prep & gigs' : 'Gig live: ${gig['name']}',
-        hint: prep.hint,
-        onOpen: () => nav.go(gig == null ? 'quick' : 'gig'),
-        caption: gig == null
-            ? 'Prepare new downloads, organise files, then pack a USB and play.'
-            : 'Gig Mode is on: background work is paused.',
-        links: [for (final x in prep.tabs) page(x.id)],
       ),
       BentoTile(
         span: 2,
@@ -170,7 +160,7 @@ class HomeScreen extends ConsumerWidget {
         hint: 'Every shortcut is listed under F1.',
         onOpen: () => showShortcuts(context),
         lines: const [
-          ('Ctrl+0 · Ctrl+1…4', 'Home · Library, Analysis, Crates, Prep'),
+          ('Ctrl+0 · Ctrl+1…3', 'Home · Library, Analysis, Crates'),
           ('Ctrl+Tab · Ctrl+Shift+Tab', 'Next or previous tab'),
           ('Ctrl+K', 'Go to any page by name'),
           ('Alt+← / → · mouse side buttons', 'Back and forward'),
@@ -190,11 +180,11 @@ class HomeScreen extends ConsumerWidget {
         color: homeColor(context),
         icon: Icons.settings_outlined,
         title: 'Settings',
-        hint: 'Look, library, online services and the assistant.',
+        hint: 'Look, library, Serato folder, writing to files, reset.',
         onOpen: () => nav.go('settings'),
         value: '${online.length}',
         caption: online.isEmpty
-            ? 'online services on (all off)'
+            ? 'online analysers on (all off)'
             : 'online: ${online.join(', ')}',
         links: [
           BentoLink(

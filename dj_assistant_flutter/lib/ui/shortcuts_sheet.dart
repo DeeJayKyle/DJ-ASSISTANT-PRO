@@ -8,12 +8,6 @@ const shortcutGroups = <(String, List<(String, String)>)>[
     'Everywhere',
     [
       ('F1  or  Ctrl + /', 'Show these shortcuts'),
-      ('Ctrl + J', 'Open or close the assistant'),
-      ('Ctrl + Shift + J', 'Expand the assistant to full width, or back'),
-      (
-        'Drag the assistant’s edge  ·  focus it and press Left / Right',
-        'Make the assistant wider or narrower',
-      ),
       ('Tab  /  Shift + Tab', 'Move between controls'),
       ('Enter  or  Space', 'Press the focused button'),
       ('Esc', 'Close a dialog or menu'),
@@ -26,7 +20,7 @@ const shortcutGroups = <(String, List<(String, String)>)>[
       ('Mouse back / forward buttons', 'Back / forward'),
       ('Ctrl + K  or  Ctrl + P', 'Go to a page by name'),
       ('Ctrl + 0', 'Home (the bento overview)'),
-      ('Ctrl + 1 … 4', 'Open Library, Analysis, Crates or Prep & Gigs'),
+      ('Ctrl + 1 … 3', 'Open Library, Analysis or Crates'),
       (
         'Ctrl + Tab / Ctrl + Shift + Tab',
         'Next or previous tab in a hub (also Ctrl + Page Down / Up)',
@@ -45,7 +39,7 @@ const shortcutGroups = <(String, List<(String, String)>)>[
       ('Double-click  or  Enter', 'Open the song’s details'),
       (
         'Right-click',
-        'Menu: details, crate, select all, invert, tags, organise, replace, delete',
+        'Menu: details, crate, analyse online, select all, invert, remove',
       ),
       ('Up / Down', 'Move the selection'),
       ('Shift + Up / Down', 'Grow the selection'),
@@ -54,30 +48,10 @@ const shortcutGroups = <(String, List<(String, String)>)>[
       ('Ctrl + A', 'Select all songs in this view'),
       ('Ctrl + I', 'Invert the selection'),
       ('Esc', 'Clear the selection'),
-      ('Delete', 'Delete the selected songs (asks first)'),
+      ('Delete', 'Remove the selected songs from the library (asks first)'),
       ('Ctrl + F', 'Search'),
     ],
   ),
-  (
-    'Remix',
-    [
-      ('Ctrl + Z', 'Undo'),
-      ('Ctrl + Shift + Z  or  Ctrl + Y', 'Redo'),
-      ('Ctrl + D', 'Duplicate the selected clip'),
-      ('Delete', 'Remove the selected clip'),
-    ],
-  ),
-  (
-    'Synth Lab',
-    [
-      (
-        'A W S E D F T G Y H U J K O L P ;',
-        'Play notes (like a piano keyboard)',
-      ),
-      ('Z  /  X', 'Octave down / up'),
-    ],
-  ),
-  ('Drum Lab', [('The key shown on each pad', 'Play that pad')]),
 ];
 
 Future<void> showShortcuts(BuildContext context) => showDialog<void>(

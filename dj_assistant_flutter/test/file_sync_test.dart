@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/crew.dart';
 import 'package:dj_assistant/core/file_sync.dart';
 import 'package:dj_assistant/core/jobs.dart';
 import 'package:dj_assistant/core/library.dart';
@@ -159,30 +158,4 @@ void main() {
     expect(s + f, 1);
   });
 
-  test('the crew writes the fixes it applies', () async {
-    cat
-      ..setSetting(syncSetting, '1')
-      ..setSetting('fix_mode', 'fill_empty');
-    final jobs = JobsController();
-    final st = await jobs.start(
-      'crew',
-      crewJob(CrewPlan(dbPath: db, dataDir: music.parent.path)),
-    );
-    await jobs.shutdown();
-    expect(st.state, 'completed', reason: st.message);
-    final clerk = ((st.result! as Map)['agents'] as List)
-        .cast<Map>()
-        .firstWhere((a) => a['id'] == 'clerk');
-    expect(clerk['summary'], contains('music file'));
-    cat.close();
-    cat = Catalogue.open(db);
-    expect(fileSyncQueued(cat), 0);
-    final last = lastFileSync(cat)!;
-    expect(
-      (last['written'] as int) + (last['skipped'] as int),
-      greaterThan(0),
-      reason: 'every applied fix went through the writer',
-    );
-    expect(last['failed'], 0);
-  });
 }

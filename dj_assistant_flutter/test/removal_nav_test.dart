@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/inbox.dart';
 import 'package:dj_assistant/core/removal.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/scanner.dart';
@@ -67,27 +66,6 @@ void main() {
       music.parent.deleteSync(recursive: true);
     });
 
-    test('outside files are copied into the Inbox; library files used', () {
-      final src =
-          cat.db
-                  .select(
-                    "SELECT path FROM tracks WHERE file_name='Mirrorball.ogg'",
-                  )
-                  .first['path']
-              as String;
-      final dropped = File(src).copySync(p.join(outside.path, 'New.ogg'));
-      final note = File(p.join(outside.path, 'readme.txt'))
-        ..writeAsStringSync('hi');
-      final (got, notes) = InboxService(cat)
-          .importFiles([dropped.path, src, note.path, '/nope/x.mp3']);
-      expect(got.length, 2);
-      expect(got, contains(src), reason: 'already in the library');
-      final copy = got.firstWhere((x) => x != src);
-      expect(p.isWithin(p.join(music.parent.path, 'Inbox'), copy), isTrue);
-      expect(File(copy).readAsBytesSync(), dropped.readAsBytesSync());
-      expect(dropped.existsSync(), isTrue, reason: 'originals stay');
-      expect(notes.length, 2);
-    });
   });
 
   test('navigation remembers back and forward', () {

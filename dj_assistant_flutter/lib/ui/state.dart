@@ -11,7 +11,6 @@ import '../core/crates.dart';
 import '../core/limits.dart';
 import '../core/library_edit.dart';
 import '../core/roots.dart';
-import '../online/online.dart';
 
 /// Where 1.x keeps its data (Tauri's app data folder for
 /// `com.deejaykyle.djassistant`), so 2.0 opens the same catalogues.
@@ -52,8 +51,25 @@ class SessionNotifier extends Notifier<AppSession> {
         (s.lastScan?.state == 'running');
     ref.onDispose(s.close);
     if (s.watcher.enabled) s.watcher.start();
-    s.inbox.start(); // does nothing unless auto-import is on
     return s;
+  }
+
+  /// Empties the open account: library, crates, analysis, changes and
+  /// settings. Music files and Serato's files are not touched.
+  Future<void> resetAccount() async {
+    final accounts = ref.read(accountsProvider);
+    final id = accounts.currentId;
+    await state.close();
+    if (id != null) accounts.wipeAccount(id);
+    ref.invalidateSelf();
+  }
+
+  /// Deletes all app data (every account) and starts again from nothing.
+  Future<void> resetEverything() async {
+    final accounts = ref.read(accountsProvider);
+    await state.close();
+    accounts.wipeAll();
+    ref.invalidateSelf();
   }
 
   /// Opens another account (closing this one).
@@ -178,41 +194,7 @@ final libraryQueryProvider =
       LibraryQueryNotifier.new,
     );
 
-/// Tracks sent from the Library to Organise Files (label, ids), or null.
-class OrganiseTargetNotifier extends Notifier<(String, List<int>)?> {
-  @override
-  (String, List<int>)? build() => null;
-  void set((String, List<int>)? v) => state = v;
-}
 
-/// Tracks sent from the Library to Analysis → Taggers (label, ids), or null.
-final taggerTargetProvider =
-    NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(
-      OrganiseTargetNotifier.new,
-    );
-
-final organiseTargetProvider =
-    NotifierProvider<OrganiseTargetNotifier, (String, List<int>)?>(
-      OrganiseTargetNotifier.new,
-    );
-
-/// Assistant panel: open, full width or hidden.
-class ChatModeNotifier extends Notifier<String> {
-  @override
-  String build() {
-    final s = ref.watch(sessionProvider);
-    return s.cat.getSetting('chat_open') == '0' ? 'hidden' : 'open';
-  }
-
-  void set(String mode) {
-    state = mode;
-    ref.read(sessionProvider).settings.set('chat_open', mode != 'hidden');
-  }
-}
-
-final chatModeProvider = NotifierProvider<ChatModeNotifier, String>(
-  ChatModeNotifier.new,
-);
 
 // ---- data, re-read whenever the version is bumped
 
@@ -290,15 +272,6 @@ String _plain(Object e) {
   final s = '$e';
   return s.startsWith('Exception: ') ? s.substring(11) : s;
 }
-
-extension OnlineOff on AppSession {
-  bool get anyOnline => settings.services().any(
-    (s) => s['enabled'] == true && s['id'] != 'updates',
-  );
-}
-
-/// The online layer used by sessions made in tests (none).
-Online noOnline() => NoOnline();
 
 /// Rows shown in long lists (Settings → Limits); null shows them all.
 int? listRows(WidgetRef ref) =>

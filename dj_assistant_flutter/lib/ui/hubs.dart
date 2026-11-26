@@ -69,7 +69,7 @@ const homeDark = Color(0xFF5EEAD4), homeLight = Color(0xFF0F766E);
 Color homeColor(BuildContext context) =>
     Theme.of(context).brightness == Brightness.light ? homeLight : homeDark;
 
-/// The app's hubs in sidebar order (Ctrl+1…4 opens them).
+/// The app's hubs in sidebar order (Ctrl+1…3 opens them).
 const hubs = <Hub>[
   Hub(
     'hub:library',
@@ -85,23 +85,15 @@ const hubs = <Hub>[
         Icons.library_music_outlined,
         pageTitle: 'Music Library',
         hint: 'Search, filter, select and edit every track. Ctrl+F searches.',
-        related: ['crates', 'suggestions', 'health'],
-      ),
-      HubTab(
-        'map',
-        'Map',
-        Icons.scatter_plot_outlined,
-        pageTitle: 'Library Map',
-        hint: 'Every analysed track by tempo and energy, coloured by key.',
-        related: ['library', 'crates'],
+        related: ['analyse', 'serato'],
       ),
       HubTab(
         'activity',
         'Sources & scans',
         Icons.refresh,
         pageTitle: 'Scan Activity',
-        hint: 'Add music folders, scan them and run audio analysis.',
-        related: ['health', 'suggestions'],
+        hint: 'Add music folders and scan them. New songs are tagged automatically.',
+        related: ['analyse', 'health'],
       ),
     ],
   ),
@@ -109,59 +101,36 @@ const hubs = <Hub>[
     'hub:analysis',
     'Analysis',
     Icons.insights_outlined,
-    'Check and fix your metadata: BPM, key, genre, quality and duplicates.',
+    'BPM and key from Serato; genre, year and tags from online sources.',
     Color(0xFFA78BFA),
     Color(0xFF6D28D9),
     [
       HubTab(
-        'crew',
+        'analyse',
         'Analyse',
-        Icons.groups_2_outlined,
+        Icons.travel_explore_outlined,
         hint:
-            'One button runs every analyser as a crew of agents: Scout, '
-            'Listener, Detective, Librarian, Taggers, Judge and Clerk.',
-        related: ['suggestions', 'taggers', 'health'],
+            'One button: BPM and key from Serato, then every online analyser '
+            'at once. The majority answer is written into your files.',
+        related: ['suggestions', 'health'],
       ),
       HubTab(
         'suggestions',
-        'Suggestions',
-        Icons.auto_fix_high_outlined,
+        'Changes',
+        Icons.history,
+        pageTitle: 'Suggestions',
         hint:
-            'Proposed fixes with evidence and confidence. Approve or reject; '
-            'Undo puts the old value back.',
-        related: ['crew', 'taggers', 'health'],
-      ),
-      HubTab(
-        'taggers',
-        'Taggers',
-        Icons.auto_awesome_motion_outlined,
-        hint:
-            'MusicBrainz Picard, OneTagger, Mp3tag and beets on copies of '
-            'your tracks; what they agree on becomes Suggestions.',
-        related: ['suggestions', 'health', 'library'],
+            'Every change the analysers made, with its sources. Undo puts the '
+            'old value back in the file.',
+        related: ['analyse', 'health'],
       ),
       HubTab(
         'health',
         'Health',
         Icons.favorite_outline,
         pageTitle: 'Library Health',
-        hint: 'Missing tags, low bitrate, unreadable and missing files.',
-        related: ['suggestions', 'duplicates', 'upgrades'],
-      ),
-      HubTab(
-        'duplicates',
-        'Duplicates',
-        Icons.copy_all_outlined,
-        pageTitle: 'Duplicate Review',
-        hint: 'Exact copies, possible duplicates and alternate versions.',
-        related: ['organize', 'health'],
-      ),
-      HubTab(
-        'upgrades',
-        'Upgrades',
-        Icons.high_quality_outlined,
-        hint: 'Low-bitrate tracks and better copies to replace them with.',
-        related: ['health', 'organize'],
+        hint: 'Tracks missing genre, year, BPM or key, unreadable or missing files.',
+        related: ['analyse'],
       ),
     ],
   ),
@@ -169,62 +138,26 @@ const hubs = <Hub>[
     'hub:crates',
     'Crates',
     Icons.inventory_2_outlined,
-    'Build manual and smart crates and export them to Serato or rekordbox.',
+    'Your Serato crates: detect, reorganise, edit, delete and build new ones.',
     Color(0xFFFBBF24),
     Color(0xFFB45309),
     [
       HubTab(
+        'serato',
+        'Serato crates',
+        Icons.album_outlined,
+        hint:
+            'The crates saved in Serato: rename, move, sort, edit and delete '
+            'them. Serato must be closed while you change them.',
+        related: ['crates', 'library'],
+      ),
+      HubTab(
         'crates',
-        'Virtual crates',
+        'Crate builder',
         Icons.inventory_2_outlined,
         pageTitle: 'Virtual Crates',
-        hint: 'Manual and smart crates, templates and export.',
-        related: ['discovery', 'library', 'gig-pack'],
-      ),
-      HubTab(
-        'discovery',
-        'Discovery',
-        Icons.explore_outlined,
-        hint: 'Tracks that fit a crate, gaps, tracklist matching, new music.',
-        related: ['crates', 'map'],
-      ),
-    ],
-  ),
-  Hub(
-    'hub:prep',
-    'Prep & Gigs',
-    Icons.bolt_outlined,
-    'Prepare new downloads, organise files and play out.',
-    Color(0xFFFB7185),
-    Color(0xFFBE123C),
-    [
-      HubTab(
-        'quick',
-        'Quick Prep',
-        Icons.bolt_outlined,
-        hint: 'A fast lane for a folder of fresh downloads.',
-        related: ['activity', 'suggestions'],
-      ),
-      HubTab(
-        'organize',
-        'Organise Files',
-        Icons.build_outlined,
-        hint: 'Opt-in: write tags, rename and move files, with preview, undo.',
-        related: ['duplicates', 'upgrades'],
-      ),
-      HubTab(
-        'gig',
-        'Gig Mode',
-        Icons.sensors,
-        hint: 'Live: set list, requests, notes and Next up.',
-        related: ['gig-pack', 'crates'],
-      ),
-      HubTab(
-        'gig-pack',
-        'Gig Pack',
-        Icons.usb_outlined,
-        hint: 'Copy a crate or set to a USB drive, verified.',
-        related: ['gig', 'crates'],
+        hint: 'Manual and smart crates and templates, saved into Serato.',
+        related: ['serato', 'library'],
       ),
     ],
   ),

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../analysis/beatgrid.dart';
-import '../core/discovery.dart';
-import '../core/export.dart';
+import '../core/folders.dart';
 import '../core/library.dart';
 import '../core/library_edit.dart';
 import 'format.dart';
@@ -557,11 +556,6 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                   icon: const Icon(Icons.folder_open, size: 16),
                   label: const Text('Show in folder'),
                 ),
-                TextButton.icon(
-                  onPressed: () => _stores(context, row),
-                  icon: const Icon(Icons.storefront_outlined, size: 16),
-                  label: const Text('Find in stores'),
-                ),
               ],
             ),
           ]),
@@ -569,26 +563,6 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
       ),
     );
   }
-
-  void _stores(BuildContext context, TrackRow row) => showDialog<void>(
-    context: context,
-    builder: (c) => SimpleDialog(
-      title: const Text('Buy or preview'),
-      children: [
-        for (final l in storeLinks(row.artist ?? '', row.title ?? row.fileName))
-          SimpleDialogOption(
-            onPressed: () => openUrl(l['url']!),
-            child: Text(l['store']!),
-          ),
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'Links only: nothing is downloaded or sent until you open one.',
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
 extension on String {

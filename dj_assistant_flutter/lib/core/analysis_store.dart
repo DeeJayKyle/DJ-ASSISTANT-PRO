@@ -7,8 +7,6 @@ import 'catalogue.dart';
 import 'serato_tags.dart';
 import 'limits.dart';
 import 'jobs.dart';
-import 'keys.dart';
-import 'suggestions.dart';
 
 /// Stores analysis estimates and runs analysis as a background job (1.x
 /// `analysis_store.rs`). Only the catalogue is written; music files are only read.
@@ -103,7 +101,6 @@ class AnalysisStore {
         a.beatgrid == null ? null : jsonEncode(a.beatgrid!.toJson()),
       ],
     );
-    _suggest(id, a);
   }
 
   /// The best beatgrid for a track: Serato's own (read from the file's tags,
@@ -125,56 +122,6 @@ class AnalysisStore {
       "VALUES (?,?,?,?,?,?,'error',?)",
       [id, an.method, an.version, nowMs(), size, mtime, error],
     );
-  }
-
-  /// Estimates that disagree with (or fill gaps in) file tags become suggestions.
-  void _suggest(int id, an.Analysis a) {
-    final t = cat.db.select('SELECT bpm_tag, key_tag FROM tracks WHERE id=?', [
-      id,
-    ]).first;
-    final bpmTag = (t['bpm_tag'] as num?)?.toDouble();
-    final keyTag = t['key_tag'] as String?;
-    final bpm = a.bpm;
-    if (bpm != null) {
-      final differs =
-          bpmTag != null &&
-          ![0.5, 1.0, 2.0].any((x) => ((bpmTag / bpm) / x - 1).abs() < 0.02);
-      if (bpmTag == null || differs) {
-        final alt = a.bpmAlt == null
-            ? ''
-            : ' It could also be heard as ${a.bpmAlt!.toStringAsFixed(1)} BPM (half/double time).';
-        insertSuggestion(
-          cat,
-          id,
-          'bpm',
-          bpmTag == null ? null : rustNumber(bpmTag),
-          bpm.toStringAsFixed(1),
-          'Local analysis',
-          'Tempo estimated from the audio.$alt',
-          a.bpmConfidence,
-        );
-      }
-    }
-    final k = a.key, cam = a.camelot;
-    if (k != null && cam != null) {
-      final tagCam = keyTag == null
-          ? null
-          : (parseCamelot(keyTag) != null
-                ? keyTag.toUpperCase()
-                : camelotFor(keyTag));
-      if (keyTag == null || tagCam != cam) {
-        insertSuggestion(
-          cat,
-          id,
-          'key',
-          keyTag,
-          cam,
-          'Local analysis',
-          'Key estimated from the audio: $k ($cam).',
-          a.keyConfidence,
-        );
-      }
-    }
   }
 
   /// Scales energy 1–10 against the DJ's own library: half percentile rank, half

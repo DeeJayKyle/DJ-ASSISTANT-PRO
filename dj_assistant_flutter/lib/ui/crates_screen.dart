@@ -1,8 +1,8 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/crates.dart' hide crateColors;
+import '../core/serato_library.dart';
 import '../core/templates.dart' show crateTemplates;
 import 'format.dart';
 import 'rules_ui.dart';
@@ -32,7 +32,7 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
     final top = crates.where((c) => c.parentId == null).toList();
     return PageFrame(
       title: 'Virtual Crates',
-      subtitle: 'Crates live in DJ Assistant only. A track can be in many crates; files are never copied or moved.',
+      subtitle: 'Build crates by hand, by rules or from templates, then save them into Serato. Files are never copied or moved.',
       actions: [
         OutlinedButton.icon(
           onPressed: () => guard(() {
@@ -44,8 +44,8 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
         ),
         OutlinedButton.icon(
           onPressed: () => showExportCrates(context, ref),
-          icon: const Icon(Icons.ios_share, size: 18),
-          label: const Text('Export crates…'),
+          icon: const Icon(Icons.album_outlined, size: 18),
+          label: const Text('Save to Serato…'),
         ),
         FilledButton.icon(
           onPressed: () => showCrateDialog(context, ref),
@@ -471,7 +471,7 @@ class _CrateDialogState extends State<_CrateDialog> {
   }
 }
 
-/// Export crates to Serato, rekordbox XML or plain folders.
+/// Saves crates into Serato (replacing Serato crates of the same name).
 Future<void> showExportCrates(BuildContext context, WidgetRef ref) async {
   final s = ref.read(sessionProvider);
   final crates = ref
@@ -479,18 +479,21 @@ Future<void> showExportCrates(BuildContext context, WidgetRef ref) async {
       .where((c) => c.kind != 'folder')
       .toList();
   final picked = {for (final c in crates) c.id};
+  final lib = s.seratoLibrary;
   await showDialog<void>(
     context: context,
     builder: (c) => StatefulBuilder(
       builder: (c, set) => AlertDialog(
-        title: const Text('Export crates'),
+        title: const Text('Save crates to Serato'),
         content: SizedBox(
           width: 520,
           child: ListView(
             shrinkWrap: true,
             children: [
-              const HintText(
-                'Serato crates are written as new .crate files next to yours (never overwriting). rekordbox gets an XML file to import. Folders get verified copies. Your library files are never changed.',
+              HintText(
+                lib == null
+                    ? 'No _Serato_ folder was found. Choose one on Crates → Serato crates.'
+                    : 'Each crate is saved into ${lib.dir}. A Serato crate with the same name is replaced. Close Serato first.',
               ),
               const SizedBox(height: 8),
               for (final cr in crates)
@@ -510,54 +513,28 @@ Future<void> showExportCrates(BuildContext context, WidgetRef ref) async {
             onPressed: () => Navigator.pop(c),
             child: const Text('Cancel'),
           ),
-          OutlinedButton(
-            onPressed: () async {
-              final dir = await getDirectoryPath(
-                confirmButtonText: 'Choose _Serato_ folder',
-              );
-              if (dir == null) return;
-              final r = await guard(
-                () => s.djExport.exportSerato(dir, crateIds: picked.toList()),
-              );
-              if (r != null) {
-                toast(
-                  'Wrote ${r['written'] ?? (r['crates'] as List?)?.length ?? 0} Serato crate(s). Restart Serato to see them.',
-                );
-              }
-            },
-            child: const Text('Serato…'),
-          ),
-          OutlinedButton(
-            onPressed: () async {
-              final loc = await getSaveLocation(
-                suggestedName: 'DJ Assistant.xml',
-                acceptedTypeGroups: const [
-                  XTypeGroup(label: 'XML', extensions: ['xml']),
-                ],
-              );
-              if (loc == null) return;
-              await guard(
-                () => s.djExport.exportRekordbox(
-                  loc.path,
-                  crateIds: picked.toList(),
-                ),
-                done: 'rekordbox XML written. Import it in rekordbox (Preferences → Advanced → rekordbox xml).',
-              );
-            },
-            child: const Text('rekordbox XML…'),
-          ),
           FilledButton(
-            onPressed: () async {
-              final dir = await getDirectoryPath(
-                confirmButtonText: 'Copy into this folder',
-              );
-              if (dir == null) return;
-              await guard(
-                () => s.djExport.exportFolders(dir, crateIds: picked.toList()),
-                done: 'Crates copied into folders and verified.',
-              );
-            },
-            child: const Text('Folders…'),
+            onPressed: lib == null || picked.isEmpty
+                ? null
+                : () async {
+                    if (await SeratoLibrary.running()) {
+                      toast('Close Serato DJ first.', error: true);
+                      return;
+                    }
+                    final r = await guard(
+                      () => s.djExport.saveToSerato(
+                        lib,
+                        crateIds: picked.toList(),
+                      ),
+                    );
+                    if (r != null) {
+                      toast(
+                        'Saved ${(r['written'] as List).length} crate(s) to Serato. ${r['note']}',
+                      );
+                      if (c.mounted) Navigator.pop(c);
+                    }
+                  },
+            child: const Text('Save to Serato'),
           ),
         ],
       ),

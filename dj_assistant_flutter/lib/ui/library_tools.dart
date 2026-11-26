@@ -1,15 +1,10 @@
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/health.dart';
 import '../core/limits.dart' show upTo;
-import '../core/json.dart';
-import '../core/library.dart';
 import '../core/library_edit.dart';
-import '../core/rekordbox_import.dart';
 import '../core/scanner.dart';
-import '../core/serato.dart' show SeratoService;
 import 'format.dart';
 import 'library_screen.dart' show addMusicFolders;
 import 'player.dart';
@@ -178,8 +173,8 @@ class ActivityScreen extends ConsumerWidget {
           ),
           gap,
           Panel(
-            title: 'Audio analysis',
-            subtitle: 'BPM, key, energy, loudness, intro/outro, cue ideas and a fingerprint, estimated on this computer. Files are only read.',
+            title: 'Energy analysis',
+            subtitle: 'Energy (1–10) and loudness measured on this computer. BPM and key come from Serato (Analysis → Analyse). Files are only read.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -236,9 +231,7 @@ class ActivityScreen extends ConsumerWidget {
                       FilledButton(
                         onPressed: () => guard(
                           () => s.startAnalysis(),
-                          done: s.gig.active
-                              ? 'Analysis queued — paused while gig mode is on.'
-                              : 'Analysis started. Files are only read.',
+                          done: 'Measuring energy. Files are only read.',
                           bump: ref,
                         ),
                         child: const Text('Analyse new tracks'),
@@ -312,123 +305,6 @@ class ActivityScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-          ),
-          gap,
-          Panel(
-            title: 'Serato (read-only import)',
-            subtitle: "Bring your Serato crates and play history into DJ Assistant. Serato's own files are only read.",
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final dir = await getDirectoryPath(
-                      confirmButtonText: 'Choose _Serato_ folder',
-                    );
-                    if (dir == null) return;
-                    final r = await guard(
-                      () => s.serato.importCrates(dir),
-                      bump: ref,
-                    );
-                    if (r != null) {
-                      toast(
-                        'Imported ${(r['crates'] as List).length} crate(s). ${r['note']}',
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.download_outlined, size: 18),
-                  label: const Text('Import Serato crates…'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final f = await openFile(
-                      acceptedTypeGroups: const [
-                        XTypeGroup(label: 'CSV', extensions: ['csv']),
-                      ],
-                    );
-                    if (f == null) return;
-                    final text = await f.readAsString();
-                    final r = await guard(
-                      () => s.serato.importHistoryCsv(text, f.name),
-                      bump: ref,
-                    );
-                    if (r != null) {
-                      toast(
-                        'Imported ${r['matched']} plays (${r['unmatched']} not in your library'
-                        '${(r['likely'] ?? 0) > 0 ? ', ${r['likely']} matched by title and artist' : ''}).',
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.history, size: 18),
-                  label: const Text('Import Serato history CSV…'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    var db = SeratoService.defaultLibraryDb();
-                    if (db == null) {
-                      final f = await openFile(
-                        acceptedTypeGroups: const [
-                          XTypeGroup(
-                            label: 'Serato library database',
-                            extensions: ['sqlite'],
-                          ),
-                        ],
-                      );
-                      db = f?.path;
-                    }
-                    if (db == null) return;
-                    final path = db;
-                    final r = await guard(
-                      () => s.serato.importSeratoDbHistory(path),
-                      bump: ref,
-                    );
-                    if (r != null) {
-                      toast(
-                        'Imported ${r['sessions']} Serato sessions: ${r['matched']} plays matched, '
-                        '${r['unmatched']} not in your library'
-                        '${(r['skipped'] ?? 0) > 0 ? ' (${r['skipped']} sessions already imported)' : ''}.',
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.history_toggle_off, size: 18),
-                  label: const Text('Import Serato play history'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final f = await openFile(
-                      acceptedTypeGroups: const [
-                        XTypeGroup(label: 'rekordbox XML', extensions: ['xml']),
-                      ],
-                    );
-                    if (f == null) return;
-                    final text = await f.readAsString();
-                    final r = await guard(
-                      () =>
-                          RekordboxImportService(s.cat)
-                              .importXml(text, label: f.name),
-                      bump: ref,
-                    );
-                    if (r != null) {
-                      final pls = (r['playlists'] as List).cast<Map>();
-                      final got = pls.fold<int>(
-                        0,
-                        (n, x) => n + (x['matched'] as int),
-                      );
-                      final miss = pls.fold<int>(
-                        0,
-                        (n, x) => n + (x['missing'] as int),
-                      );
-                      toast(
-                        'Imported ${pls.length} rekordbox playlists as crates: $got tracks matched, $miss not in your library.',
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.library_music_outlined, size: 18),
-                  label: const Text('Import rekordbox XML…'),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -649,8 +525,11 @@ class _HealthFixState extends ConsumerState<HealthFix> {
         ),
         OutlinedButton(
           onPressed: () => guard(
-            () => s.lookupCatalogs([for (final r in rows) r.track.id]),
-            done: 'Looking up BPM, key, year and genre in the catalogues you turned on.',
+            () => s.runAnalyse(
+              scope: 'ids',
+              ids: [for (final r in rows) r.track.id],
+            ),
+            done: 'Asking every online analyser about these tracks.',
           ),
           child: const Text('Look up online'),
         ),
@@ -837,135 +716,9 @@ class _HealthFixState extends ConsumerState<HealthFix> {
   }
 }
 
-/// Duplicate review: exact, possible and alternate versions. Nothing is deleted.
-class DuplicatesScreen extends ConsumerWidget {
-  const DuplicatesScreen({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(sessionProvider);
-    ref.watch(versionProvider);
-    final t = DjTokens.of(context);
-    final groups = s.duplicates.findGroups();
-    final hash = s.jobs.status('hash');
-    final live = hash.state == 'running' || hash.state == 'paused';
-    String kindLabel(String k) => switch (k) {
-      'exact' => 'Exact (identical file contents)',
-      'possible' => 'Possible duplicate',
-      _ => 'Alternate versions',
-    };
-    return PageFrame(
-      title: 'Duplicate Review',
-      subtitle: 'Exact matches are confirmed by comparing file contents. Possible matches and alternate versions need your ear. Nothing is deleted.',
-      actions: [
-        FilledButton.icon(
-          onPressed: live
-              ? null
-              : () => guard(
-                  () => s.startHash(),
-                  done:
-                      'Comparing file contents in the background (read-only).',
-                  bump: ref,
-                ),
-          icon: const Icon(Icons.fingerprint),
-          label: const Text('Find exact duplicates'),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (live)
-            ProgressLine(
-              label: 'Comparing files…',
-              done: hash.done,
-              total: hash.total,
-              message: hash.message,
-            ),
-          if (groups.isEmpty)
-            const EmptyState(
-              icon: Icons.done_all,
-              title: 'No duplicates found',
-              message: 'Run “Find exact duplicates” to compare file contents.',
-            ),
-          for (final g in groups)
-            Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Pill(
-                          kindLabel(g.kind),
-                          color: g.kind == 'exact' ? t.warn : t.accent,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            g.reason,
-                            style: TextStyle(
-                              color: t.faint,
-                              fontSize: DjType.small,
-                            ),
-                          ),
-                        ),
-                        if (g.decision != null) Pill(g.decision!),
-                        MenuAnchor(
-                          builder: (c, ctl, _) => TextButton(
-                            onPressed: ctl.open,
-                            child: const Text('Mark…'),
-                          ),
-                          menuChildren: [
-                            for (final (d, l) in [
-                              ('keep_all', 'Keep all (not duplicates)'),
-                              ('reviewed', 'Reviewed'),
-                              (null, 'Clear decision'),
-                            ])
-                              MenuItemButton(
-                                onPressed: () => guard(
-                                  () => s.duplicates.setDecision(g.key, d),
-                                  bump: ref,
-                                ),
-                                child: Text(l),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    for (final tr in g.tracks)
-                      ListTile(
-                        dense: true,
-                        title: Text(
-                          '${tr.artist ?? unknown} — ${tr.title ?? tr.fileName}',
-                        ),
-                        subtitle: Text(
-                          '${tr.format ?? ''} · ${tr.bitrateKbps ?? '?'} kbps · ${fmtDuration(tr.durationMs)} · ${tr.path}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: SizedBox(
-                          width: 220,
-                          child: PreviewPlayer(
-                            path: tr.path,
-                            durationMs: tr.durationMs,
-                          ),
-                        ),
-                      ),
-                    const HintText(
-                      'To remove or merge copies, use Organise Files → Remove duplicates (Organise Files mode): choose the copy to keep, preview, and the others go to a Removed files area you can undo.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Metadata suggestions to review before they reach the catalogue: approve or
-/// reject one at a time or in batches, and undo any accepted one exactly.
+/// Analysis → Changes: every change the analysers made (with every source's
+/// vote), undoable one by one or in batches; and the few findings that wait
+/// for a decision (file-name clues that would replace a value you have).
 class SuggestionsScreen extends ConsumerStatefulWidget {
   const SuggestionsScreen({super.key});
   @override
@@ -973,7 +726,7 @@ class SuggestionsScreen extends ConsumerStatefulWidget {
 }
 
 class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
-  String status = 'pending';
+  String status = 'accepted';
   String? field, source;
   double min = 0.85;
   final selected = <int>{};
@@ -1000,7 +753,6 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     final s = ref.watch(sessionProvider);
     ref.watch(versionProvider);
     final t = DjTokens.of(context);
-    final st = ref.watch(settingsProvider);
     final counts = s.suggestions.counts();
     final all = s.suggestions.list(
       status: status,
@@ -1019,71 +771,18 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
         : const <int, String>{};
     selected.retainWhere((id) => list.any((x) => x.id == id));
     final allSelected = list.isNotEmpty && selected.length == list.length;
-    final on = s.settings.services();
-    bool svc(String id) => on.any((x) => x['id'] == id && x['enabled'] == true);
     return PageFrame(
-      title: 'Suggestions',
-      subtitle: 'Fixes found in file names, folders, spellings and the online services you turned on. Review them here: nothing reaches your catalogue until you approve it (unless you chose otherwise in Settings), and files are never changed.',
+      title: 'Changes',
+      subtitle: 'Every change the analysers made to your tracks, with the sources that agreed. Undo puts the old value back, in the files too.',
       actions: [
-        OutlinedButton(
-          onPressed: () => guard(
-            () => toast(
-              'Found ${s.suggestions.generateLocal()} new suggestion(s).',
-            ),
-            bump: ref,
-          ),
-          child: const Text('Find local suggestions'),
-        ),
-        OutlinedButton(
-          onPressed: !svc('musicbrainz')
-              ? () => toast(
-                  'Turn on MusicBrainz in Settings → Online services',
-                  error: true,
-                )
-              : () => guard(
-                  () => s.lookupMusicbrainz(
-                    s.library.trackIds(
-                      const TrackQuery(),
-                      max: userLimit(ref, 'lookup_musicbrainz'),
-                    ),
-                  ),
-                  done: 'Looking up on MusicBrainz (one track a second).',
-                ),
-          child: const Text('MusicBrainz'),
-        ),
         FilledButton.tonal(
-          onPressed: () => guard(
-            () => s.lookupCatalogs(
-              s.library.trackIds(
-                const TrackQuery(),
-                max: userLimit(ref, 'lookup_catalogs'),
-              ),
-            ),
-            done: 'Checking the online catalogues you turned on.',
-          ),
-          child: const Text('Online catalogues'),
+          onPressed: () => ref.read(viewProvider.notifier).go('analyse'),
+          child: const Text('Analyse'),
         ),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (st['fix_mode_notice_seen'] != true) ...[
-            Panel(
-              title: 'Suggestions now wait for you',
-              subtitle: st['fix_mode'] == 'review'
-                  ? 'Before 2.4, auto-prep accepted confident suggestions by itself after every scan (into the catalogue only). Now nothing changes until you approve it here, one at a time or in batches. Changes from now on can be undone exactly under Accepted. Ones accepted before this version show as "earlier": their previous values weren\'t kept, so edit those tracks directly if needed.'
-                  : 'Auto-prep applies some suggestions by itself, as chosen in Settings → Library → Metadata suggestions. Every automatic change is marked "automatic" under Accepted and can be undone.',
-              trailing: TextButton(
-                onPressed: () => guard(
-                  () => s.settings.set('fix_mode_notice_seen', true),
-                  bump: ref,
-                ),
-                child: const Text('Got it'),
-              ),
-              child: const SizedBox.shrink(),
-            ),
-            const SizedBox(height: Space.x3),
-          ],
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1092,9 +791,9 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
               SegmentedButton<String>(
                 segments: [
                   for (final (k, label) in const [
-                    ('pending', 'To review'),
-                    ('accepted', 'Accepted'),
-                    ('rejected', 'Rejected'),
+                    ('accepted', 'Applied'),
+                    ('pending', 'Waiting'),
+                    ('rejected', 'Not applied'),
                   ])
                     ButtonSegment(
                       value: k,
@@ -1377,8 +1076,3 @@ class _Filter extends StatelessWidget {
     onChanged: onChanged,
   );
 }
-
-/// Rows as plain JSON for previews.
-List<Map<String, Object?>> rowsAsJson(List<TrackRow> rows) => [
-  for (final r in rows) r.toJson(),
-];

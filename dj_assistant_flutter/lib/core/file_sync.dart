@@ -43,7 +43,8 @@ const _columns = {
   'key': 'musical_key',
 };
 
-bool fileSyncOn(Catalogue cat) => cat.getSetting(syncSetting) == '1';
+bool fileSyncOn(Catalogue cat) =>
+    (cat.getSetting(syncSetting) ?? '1') == '1';
 
 void _ensureQueue(Catalogue cat) => cat.db.execute(
   'CREATE TABLE IF NOT EXISTS file_sync_queue ('

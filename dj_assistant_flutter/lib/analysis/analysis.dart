@@ -5,7 +5,6 @@ import '../audio/pcm.dart';
 import 'beatgrid.dart';
 import 'chromaprint.dart';
 import 'fft.dart';
-import 'key.dart';
 import 'loudness.dart';
 
 /// Local audio analysis, ported from 1.x `analysis.rs`. Everything here is an
@@ -341,100 +340,6 @@ List<Float64List> _spectrogram(Float32List x, int n, int hop, [int? limit]) {
   return ((bpm * 10).round() / 10, conf);
 }
 
-const _notes = [
-  'C',
-  'C#',
-  'D',
-  'Eb',
-  'E',
-  'F',
-  'F#',
-  'G',
-  'Ab',
-  'A',
-  'Bb',
-  'B',
-];
-const _camelotMajor = [
-  '8B',
-  '3B',
-  '10B',
-  '5B',
-  '12B',
-  '7B',
-  '2B',
-  '9B',
-  '4B',
-  '11B',
-  '6B',
-  '1B',
-];
-const _camelotMinor = [
-  '5A',
-  '12A',
-  '7A',
-  '2A',
-  '9A',
-  '4A',
-  '11A',
-  '6A',
-  '1A',
-  '8A',
-  '3A',
-  '10A',
-];
-
-/// How far the music sits from A = 440 Hz, in semitones (−0.5…0.5): the
-/// weighted circular mean of where spectral peaks fall between semitones,
-/// with how consistent they are (0…1).
-(double, double) estimateTuning(List<Float64List> spec, double sr, int n) {
-  var c = 0.0, s = 0.0, w = 0.0;
-  for (final frame in spec) {
-    for (var k = 2; k < frame.length - 1; k++) {
-      final m = frame[k];
-      if (m <= frame[k - 1] || m < frame[k + 1]) continue;
-      final y0 = frame[k - 1], y2 = frame[k + 1];
-      final den = y0 - 2 * m + y2;
-      final kk = den.abs() > 1e-12 ? k + 0.5 * (y0 - y2) / den : k.toDouble();
-      final f = kk * sr / n;
-      if (f < 200 || f > 1760) continue;
-      final midi = 12 * math.log(f / 440) / math.ln2 + 69;
-      final a = 2 * math.pi * (midi - midi.round());
-      c += m * math.cos(a);
-      s += m * math.sin(a);
-      w += m;
-    }
-  }
-  if (w <= 0) return (0, 0);
-  return (math.atan2(s, c) / (2 * math.pi), math.sqrt(c * c + s * s) / w);
-}
-
-/// Key (version 3, see key.dart): (name, Camelot, confidence, tuning in
-/// cents). Music tuned 20 cents or more away from A = 440 Hz (pitched vinyl
-/// rips, older recordings) is read on its own tuning.
-(String, String, double, double)? _key(Float32List x, double sr) {
-  const params = KeyParams();
-  final sal = noteSalience(x, sr, params);
-  if (sal == null) return null;
-  final (salience, tune, _) = sal;
-  final k = bestKey(chromaFromSalience(salience, params), params.profile);
-  if (k == null) return null;
-  final (root, minor, best, second) = k;
-  var conf = ((best - second) * 5 + math.max(0, best - 0.5)).clamp(0.0, 1.0);
-  // One or two pitch classes (a tone, a drum loop with a bass note) can't
-  // establish a key: say so in the confidence.
-  final chroma = chromaFromSalience(salience, params);
-  final top = chroma.reduce(math.max);
-  final active = chroma.where((v) => v >= 0.1 * top).length;
-  if (active < 3) conf *= 0.5;
-  return (
-    '${_notes[root]} ${minor ? 'minor' : 'major'}',
-    minor ? _camelotMinor[root] : _camelotMajor[root],
-    conf.toDouble(),
-    (tune * 1000).round() / 10,
-  );
-}
-
 double _rms(Float32List x, int s, int e) {
   var sum = 0.0;
   for (var i = s; i < e; i++) {
@@ -559,75 +464,12 @@ Analysis analyseDecoded(Decoded d, {String? bpmRange, String? genre}) {
     }
   }
 
-  // Tempo and key on a ~11 kHz mono copy.
+  // A rough tempo on a ~11 kHz mono copy, used only to weigh energy: the
+  // BPM and key DJ Assistant shows come from Serato's own analysis.
   final (low, lsr) = _downsample(x, d.sampleRate);
-  final (oenv, fr, lowEnv) = _onsetEnvelope(low, lsr);
+  final (oenv, fr, _) = _onsetEnvelope(low, lsr);
   final t = _tempo(oenv, fr);
-  if (t != null) {
-    final (detected, conf) = t;
-    // A chosen BPM range wins; otherwise the genre decides half/double time.
-    final ranged = foldBpm(detected, bpmRange);
-    final byGenre = (bpmRange == null || bpmRange == 'auto')
-        ? foldBpmForGenre(ranged, genre)
-        : null;
-    final bpm = ((byGenre ?? ranged) * 10).round() / 10;
-    a
-      ..bpm = bpm
-      ..bpmConfidence = (conf * 100).round() / 100;
-    if (bpm != detected) {
-      a.bpmAlt = detected;
-    } else if (bpm < 95 && bpm * 2 <= 200) {
-      a.bpmAlt = bpm * 2;
-    } else if (bpm > 145) {
-      a.bpmAlt = (bpm / 2 * 10).round() / 10;
-    }
-    a.beatgrid = beatGrid(
-      oenv,
-      fr,
-      bpm,
-      lowEnv: lowEnv,
-      // Flux peaks when an onset is three quarters into the 1024-sample
-      // window (measured: a constant 2 hops after the window centre at every
-      // tempo), the same lag the Studio's beat phase allows for.
-      offsetSec: 768 / lsr,
-    );
-    if (oenv.length > (fr * 40).floor()) {
-      final mid = oenv.length ~/ 2;
-      final h1 = _tempo(Float64List.sublistView(oenv, 0, mid), fr);
-      final h2 = _tempo(Float64List.sublistView(oenv, mid), fr);
-      if (h1 != null && h2 != null && h1.$2 > 0.25 && h2.$2 > 0.25) {
-        final ratio = h1.$1 / h2.$1;
-        final same = [0.5, 1.0, 2.0].any((r) => (ratio / r - 1).abs() < 0.015);
-        a.tempoStable = same;
-        if (!same) {
-          a.warnings.add(
-            'Tempo may change during the track (about ${h1.$1.toStringAsFixed(0)} BPM in the first half, '
-            '${h2.$1.toStringAsFixed(0)} in the second). A fixed beatgrid may drift.',
-          );
-        }
-      }
-    }
-    if (conf < 0.2) a.warnings.add('Tempo is uncertain for this track.');
-  }
-  // Key needs the notes up to 1.76 kHz, so a sample rate of at least 4 kHz.
-  final k = d.sampleRate < 4000 ? null : _key(low, lsr);
-  if (d.sampleRate < 4000) {
-    a.warnings.add(
-      'Key not analysed: the sample rate (${d.sampleRate} Hz) is too low.',
-    );
-  }
-  if (k != null) {
-    a
-      ..key = k.$1
-      ..camelot = k.$2
-      ..keyConfidence = (k.$3 * 100).round() / 100
-      ..tuningCents = k.$4;
-    if (k.$4.abs() >= 20) {
-      a.warnings.add(
-        'Tuned ${k.$4 > 0 ? '+' : ''}${k.$4.round()} cents from A = 440 Hz; the key was read on this tuning.',
-      );
-    }
-  }
+  final roughBpm = t == null ? null : foldBpm(t.$1, bpmRange);
 
   // Energy: a raw 0..1 score from loudness, tempo, percussive punch and brightness.
   // The 1–10 value is later scaled against the DJ's library.
@@ -663,7 +505,7 @@ Analysis analyseDecoded(Decoded d, {String? bpmRange, String? genre}) {
     }
   }
   final centroid = den > 0 ? num / den : 0.0;
-  final bpmNow = a.bpm;
+  final bpmNow = roughBpm;
   final tempo = bpmNow == null
       ? 0.5
       : norm(bpmNow > 150 ? bpmNow / 2 : bpmNow, 70, 132);

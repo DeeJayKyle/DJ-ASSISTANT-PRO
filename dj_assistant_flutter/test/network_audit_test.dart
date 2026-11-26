@@ -1,11 +1,10 @@
 import 'dart:io';
 
 import 'package:dj_assistant/app/session.dart';
-import 'package:dj_assistant/assistant/agent.dart';
 import 'package:dj_assistant/core/jobs.dart';
 import 'package:dj_assistant/core/scanner.dart';
 import 'package:dj_assistant/online/http_online.dart';
-import 'package:dj_assistant/online/lookups.dart';
+import 'package:dj_assistant/online/consensus.dart';
 import 'package:dj_assistant/online/online.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -56,40 +55,21 @@ void main() {
   });
 
   test(
-    'online features refuse to send anything until they are turned on',
+    'Analyse sends nothing online until an analyser is turned on',
     () async {
       final ids = [
         for (final r in app.cat.db.select('SELECT id FROM tracks'))
           r['id'] as int,
       ];
       expect(ids, isNotEmpty);
-      final progress = LocalProgress();
-      expect(await autoPrepOnline(app.cat, progress, online, app.secrets), 0);
-      expect(
-        () => musicbrainzLookup(app.cat, online, ids, progress),
-        throwsA(anything),
-      );
-      expect(
-        () => acoustidLookup(app.cat, online, app.secrets, ids, progress),
-        throwsA(anything),
-      );
-      expect(
-        () => catalogLookup(app.cat, online, app.secrets, ids, progress),
-        throwsA(anything),
-      );
-      expect(() => app.lookupCatalogs(ids), throwsA(anything));
-      expect(() => app.lookupMusicbrainz(ids), throwsA(anything));
-      expect(() => app.lookupAcoustid(ids, confirmed: true), throwsA(anything));
-      expect(() => app.discovery.refreshReleases(online), throwsA(anything));
-      expect(
-        () => app.discovery.lastfmForTrack(online, app.secrets, ids.first),
-        throwsA(anything),
-      );
-      // the AI assistant refuses while AI is off (the panel then answers
-      // from its built-in rules, which never go online)
-      await expectLater(
-        Agent(app).chat(null, 'how many tracks do I have?'),
-        throwsA(isA<AgentException>()),
+      expect(activeAnalysers(app.cat, app.secrets), isEmpty);
+      await analyseOnline(
+        app.cat,
+        online,
+        app.secrets,
+        ids,
+        LocalProgress(),
+        spacingMs: 0,
       );
       await pumpEventQueue();
       expect(sent, isEmpty);
@@ -104,9 +84,10 @@ void main() {
       ))
         r['id'] as int,
     ];
-    await musicbrainzLookup(
+    await analyseOnline(
       app.cat,
       online,
+      app.secrets,
       ids,
       LocalProgress(),
       spacingMs: 0,
