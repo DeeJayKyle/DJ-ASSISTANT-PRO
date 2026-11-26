@@ -172,7 +172,6 @@ class AppSession {
   Map<String, Object?> startAnalysis({List<int>? ids, bool force = false}) =>
       _launch('analysis', analysisJob(dbPath, only: ids, force: force));
 
-
   /// The Analyse button: Serato BPM/key, energy, every online analyser at
   /// once (majority wins) and writing into the files. After scans it runs
   /// on new and incomplete tracks by itself.
@@ -204,11 +203,16 @@ class AppSession {
   /// Writes queued catalogue changes into the music files (write-through,
   /// file_sync.dart), in the background. No-op when nothing is queued.
   Map<String, Object?>? startFileSync() {
-    if (!fileSyncOn(cat) || jobs.running('file_sync') || jobs.running('online')) {
+    if (!fileSyncOn(cat) ||
+        jobs.running('file_sync') ||
+        jobs.running('online')) {
       return null;
     }
     if (fileSyncQueued(cat) == 0) return null;
-    return _launch('file_sync', fileSyncJob(dbPath, dataDir));
+    return _launch(
+      'file_sync',
+      fileSyncJob(dbPath, dataDir, seratoDirs: seratoDirs),
+    );
   }
 
   bool _closed = false;

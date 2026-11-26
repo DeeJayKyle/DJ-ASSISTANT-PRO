@@ -199,7 +199,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 sw(
                   'sync_to_files',
                   'Write changes into the music files',
-                  sub: 'Title, artist, album, genre, year, label, BPM and key go into the file\'s own tags so Serato sees them. The audio is checked bit for bit and Serato\'s cues and beatgrids are kept. MP3 and FLAC get every field; M4A all but BPM and key; WAV, AIFF and Ogg keep their values in DJ Assistant only.',
+                  sub: 'Title, artist, album, genre, year, label, BPM, key and Grouping (energy and mood, like "E7 · Uplifting") go into the file\'s own tags, and then into Serato\'s library so Serato shows them without a rescan. The audio is checked bit for bit and Serato\'s cues and beatgrids are kept. MP3 and FLAC get every field; M4A all but BPM, key and label; WAV, AIFF and Ogg keep their values in DJ Assistant only.',
+                ),
+                sw(
+                  'energy_to_comment',
+                  'Also write energy and mood into Comments',
+                  sub: 'Off: Comments are left alone (Mixed In Key and many DJs keep "8A - Energy 6" there). On: Comments get the same text as Grouping.',
                 ),
                 sw(
                   'write_backups',
@@ -259,7 +264,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ? TextButton(
                             onPressed: () => guard(
                               () => s.safeWrite.rollback(c['id']! as int),
-                              done: 'Restored the original file from its backup.',
+                              done:
+                                  'Restored the original file from its backup.',
                               bump: ref,
                             ),
                             child: const Text('Roll back'),
@@ -443,33 +449,27 @@ class ResetPanel extends ConsumerWidget {
               );
             },
           ),
-          item(
-            Icons.album_outlined,
-            'Delete all Serato crates',
-            'Every .crate file in your _Serato_ folder(s). Close Serato first.',
-            'Delete in Serato',
-            () async {
-              final dirs = s.seratoDirs;
-              if (dirs.isEmpty) {
-                toast('No _Serato_ folder found.', error: true);
-                return;
+          item(Icons.album_outlined, 'Delete all Serato crates', 'Every .crate file in your _Serato_ folder(s). Close Serato first.', 'Delete in Serato', () async {
+            final dirs = s.seratoDirs;
+            if (dirs.isEmpty) {
+              toast('No _Serato_ folder found.', error: true);
+              return;
+            }
+            if (!await ask(
+              'Delete every Serato crate?',
+              'All crates in ${dirs.join(', ')} are deleted. Serato\'s library and your music stay.',
+              'Delete Serato crates',
+            )) {
+              return;
+            }
+            await guard(() {
+              var n = 0;
+              for (final d in dirs) {
+                n += s.seratoLibraryFor(d).deleteAll();
               }
-              if (!await ask(
-                'Delete every Serato crate?',
-                'All crates in ${dirs.join(', ')} are deleted. Serato\'s library and your music stay.',
-                'Delete Serato crates',
-              )) {
-                return;
-              }
-              await guard(() {
-                var n = 0;
-                for (final d in dirs) {
-                  n += s.seratoLibraryFor(d).deleteAll();
-                }
-                toast('Deleted ${plural(n, 'Serato crate')}.');
-              }, bump: ref);
-            },
-          ),
+              toast('Deleted ${plural(n, 'Serato crate')}.');
+            }, bump: ref);
+          }),
           item(
             Icons.settings_backup_restore,
             'Reset settings',
@@ -490,46 +490,34 @@ class ResetPanel extends ConsumerWidget {
               );
             },
           ),
-          item(
-            Icons.cleaning_services_outlined,
-            'Empty this account',
-            'Library list, crates, analysis, change history and settings of this account.',
-            'Empty account',
-            () async {
-              if (!await ask(
-                'Empty this account?',
-                'Everything DJ Assistant stored for this account is deleted. Your music files are not touched; scan your folders again to start over.',
-                'Empty account',
-              )) {
-                return;
-              }
-              await guard(
-                () => ref.read(sessionProvider.notifier).resetAccount(),
-                done: 'The account is empty.',
-              );
-              ref.read(viewProvider.notifier).go('home');
-            },
-          ),
-          item(
-            Icons.delete_forever_outlined,
-            'Delete all app data',
-            'Every account, crate, setting, API key and backup. DJ Assistant starts as new.',
-            'Delete everything',
-            () async {
-              if (!await ask(
-                'Delete all DJ Assistant data?',
-                'Every account with its library list, crates, analysis, settings, API keys and backups is deleted. This cannot be undone. Your music files and Serato are not touched.',
-                'Delete everything',
-              )) {
-                return;
-              }
-              await guard(() async {
-                s.settings.resetAll();
-                await ref.read(sessionProvider.notifier).resetEverything();
-              }, done: 'All app data deleted. DJ Assistant starts fresh.');
-              ref.read(viewProvider.notifier).go('home');
-            },
-          ),
+          item(Icons.cleaning_services_outlined, 'Empty this account', 'Library list, crates, analysis, change history and settings of this account.', 'Empty account', () async {
+            if (!await ask(
+              'Empty this account?',
+              'Everything DJ Assistant stored for this account is deleted. Your music files are not touched; scan your folders again to start over.',
+              'Empty account',
+            )) {
+              return;
+            }
+            await guard(
+              () => ref.read(sessionProvider.notifier).resetAccount(),
+              done: 'The account is empty.',
+            );
+            ref.read(viewProvider.notifier).go('home');
+          }),
+          item(Icons.delete_forever_outlined, 'Delete all app data', 'Every account, crate, setting, API key and backup. DJ Assistant starts as new.', 'Delete everything', () async {
+            if (!await ask(
+              'Delete all DJ Assistant data?',
+              'Every account with its library list, crates, analysis, settings, API keys and backups is deleted. This cannot be undone. Your music files and Serato are not touched.',
+              'Delete everything',
+            )) {
+              return;
+            }
+            await guard(() async {
+              s.settings.resetAll();
+              await ref.read(sessionProvider.notifier).resetEverything();
+            }, done: 'All app data deleted. DJ Assistant starts fresh.');
+            ref.read(viewProvider.notifier).go('home');
+          }),
         ],
       ),
     );

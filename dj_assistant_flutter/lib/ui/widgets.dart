@@ -106,9 +106,7 @@ class _PageFrameState extends State<PageFrame> {
           spacing: Space.x2,
           runSpacing: Space.x2,
           crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ...actions,
-          ],
+          children: [...actions],
         );
         final head = Padding(
           padding: EdgeInsets.fromLTRB(pad, Space.x5, pad, Space.x3),

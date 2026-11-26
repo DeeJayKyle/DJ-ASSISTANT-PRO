@@ -233,7 +233,10 @@ class SafeWriteService {
       final day = nowMs() ~/ 86400000;
       final dir = Directory(p.join(dataDir, 'backups', '$day'))
         ..createSync(recursive: true);
-      final b = p.join(dir.path, '${pc.trackId}-${nowMs()}-${p.basename(path)}');
+      final b = p.join(
+        dir.path,
+        '${pc.trackId}-${nowMs()}-${p.basename(path)}',
+      );
       if (File(b).existsSync()) _no('backup name collision; try again');
       try {
         File(path).copySync(b);

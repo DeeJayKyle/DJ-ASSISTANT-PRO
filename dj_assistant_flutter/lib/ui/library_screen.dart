@@ -1024,7 +1024,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
     );
   }
-
 }
 
 /// Picks music folders and adds them as library roots, then scans.

@@ -157,46 +157,45 @@ void main() {
     });
   });
 
-  test('Analyse asks every analyser at once and applies the majority', () async {
-    await runScan(cat);
-    final secrets = MemorySecrets();
-    final settings = SettingsService(cat, secrets);
-    for (final s in ['musicbrainz', 'catalogs', 'spotify', 'youtube']) {
-      settings.setService(s, true);
-    }
-    settings.setSecret('spotify', 'id123:secret456');
-    settings.setSecret('youtube', 'yt-key');
-    expect(activeAnalysers(cat, secrets), hasLength(5));
-    final id = idOf('Lagos Lights - Sunrise Groove.mp3');
-    final res = await analyseOnline(
-      cat,
-      FakeOnline(),
-      secrets,
-      [id],
-      LocalProgress(),
-      spacingMs: 0,
-    );
-    expect(res.tracks, 1);
-    final row = LibraryService(cat).row(id)!;
-    // Deezer, Apple Music, Spotify and YouTube say 2014; MusicBrainz 2015
-    expect(row.year, 2014);
-    // Deezer, Apple Music and Spotify say Amapiano; MusicBrainz afrobeats
-    expect(row.genre, 'Amapiano');
-    final applied = sugg
-        .list(trackId: id)
-        .where((s) => s.field == 'year' && s.status == 'accepted')
-        .single;
-    expect(applied.suggestedValue, '2014');
-    expect(applied.source, contains('Spotify'));
-    expect(
-      cat.db.select("SELECT 1 FROM catalog_checked WHERE track_id=?", [id]),
-      isNotEmpty,
-    );
-  });
-
-
-
-
+  test(
+    'Analyse asks every analyser at once and applies the majority',
+    () async {
+      await runScan(cat);
+      final secrets = MemorySecrets();
+      final settings = SettingsService(cat, secrets);
+      for (final s in ['musicbrainz', 'catalogs', 'spotify', 'youtube']) {
+        settings.setService(s, true);
+      }
+      settings.setSecret('spotify', 'id123:secret456');
+      settings.setSecret('youtube', 'yt-key');
+      expect(activeAnalysers(cat, secrets), hasLength(5));
+      final id = idOf('Lagos Lights - Sunrise Groove.mp3');
+      final res = await analyseOnline(
+        cat,
+        FakeOnline(),
+        secrets,
+        [id],
+        LocalProgress(),
+        spacingMs: 0,
+      );
+      expect(res.tracks, 1);
+      final row = LibraryService(cat).row(id)!;
+      // Deezer, Apple Music, Spotify and YouTube say 2014; MusicBrainz 2015
+      expect(row.year, 2014);
+      // Deezer, Apple Music and Spotify say Amapiano; MusicBrainz afrobeats
+      expect(row.genre, 'Amapiano');
+      final applied = sugg
+          .list(trackId: id)
+          .where((s) => s.field == 'year' && s.status == 'accepted')
+          .single;
+      expect(applied.suggestedValue, '2014');
+      expect(applied.source, contains('Spotify'));
+      expect(
+        cat.db.select("SELECT 1 FROM catalog_checked WHERE track_id=?", [id]),
+        isNotEmpty,
+      );
+    },
+  );
 
   group('parsers (1.x dj-online tests)', () {
     test('YouTube Music releases', () {
@@ -224,6 +223,34 @@ void main() {
       );
     });
 
+    test('Discogs search', () {
+      final m = parseDiscogsSearch(
+        {
+          'results': [
+            {
+              'title': 'Daft Punk - Discovery',
+              'year': '2001',
+              'style': ['French House'],
+              'genre': ['Electronic'],
+              'label': ['Virgin', 'Labels'],
+            },
+            {
+              'title': 'Daft Punk (2) - Homework',
+              'year': '1997',
+              'genre': ['Electronic'],
+            },
+          ],
+        },
+        'Daft Punk',
+        'Da Funk',
+      );
+      expect(m.map((x) => x.album), ['Homework', 'Discovery']);
+      expect(m.first.artist, 'Daft Punk');
+      expect(m.first.title, 'Da Funk');
+      expect(m[1].genres.first, 'French House');
+      expect(m[1].label, 'Virgin');
+      expect(m[1].releaseDate, '2001');
+    });
 
     test('Deezer and Apple Music', () {
       final d = parseDeezer(
@@ -283,11 +310,9 @@ void main() {
       expect(a[0].releaseDate, '2001-03-07');
       expect(a[0].source, 'Apple Music');
     });
-
   });
 
   group('HttpOnline', () {
-
     test('MusicBrainz is limited to one request a second', () async {
       final at = <DateTime>[];
       final o = HttpOnline(
@@ -303,7 +328,6 @@ void main() {
         greaterThanOrEqualTo(1000),
       );
     });
-
   });
 
   test('library edits keep working alongside lookups', () async {

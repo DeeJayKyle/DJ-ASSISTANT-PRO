@@ -53,11 +53,12 @@ class Verdict {
   }
 }
 
-String _genreKey(String g) => fold(g)
-    .replaceAll(RegExp('[-/&_]'), ' ')
-    .split(RegExp(r'\s+'))
-    .where((w) => w.isNotEmpty)
-    .join(' ');
+String _genreKey(String g) =>
+    fold(g)
+        .replaceAll(RegExp('[-/&_]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .join(' ');
 
 /// The comparison key for a voted value.
 String voteKey(String field, String v) => switch (field) {
@@ -65,10 +66,14 @@ String voteKey(String field, String v) => switch (field) {
   _ => agreeKey(field, v),
 };
 
-bool _junkGenre(String g) =>
-    const {'', 'music', 'other', 'unknown', 'misc', 'various'}.contains(
-      _genreKey(g),
-    );
+bool _junkGenre(String g) => const {
+  '',
+  'music',
+  'other',
+  'unknown',
+  'misc',
+  'various',
+}.contains(_genreKey(g));
 
 /// The majority decision for one field, or null when there is none.
 /// [hasValue]: the track already has a value for the field.
@@ -88,10 +93,10 @@ Verdict? decide(String field, List<Vote> votes, {required bool hasValue}) {
   for (final v in top) {
     spellings[v.value] = (spellings[v.value] ?? 0) + 1;
   }
-  final value = (spellings.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value)))
-      .first
-      .key;
+  final value =
+      (spellings.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+          .first
+          .key;
   return Verdict(
     field,
     field == 'year' ? voteKey('year', value) : value,
@@ -151,6 +156,8 @@ List<String> activeAnalysers(
     'Spotify',
   if (serviceEnabled(cat, 'youtube') && secrets.get('youtube') != null)
     'YouTube Music',
+  if (serviceEnabled(cat, 'discogs') && secrets.get('discogs') != null)
+    'Discogs',
   if (oneTagger) 'OneTagger',
 ];
 
@@ -229,7 +236,12 @@ Future<(List<Vote>, List<String>)> _collectVotes(
     }
   }
 
-  final spotify = serviceEnabled(cat, 'spotify') ? secrets.get('spotify') : null;
+  final spotify = serviceEnabled(cat, 'spotify')
+      ? secrets.get('spotify')
+      : null;
+  final discogs = serviceEnabled(cat, 'discogs')
+      ? secrets.get('discogs')
+      : null;
   final yt = youtube && serviceEnabled(cat, 'youtube')
       ? secrets.get('youtube')
       : null;
@@ -256,6 +268,14 @@ Future<(List<Vote>, List<String>)> _collectVotes(
           await online.spotifyLookup(spotify, t.artist, t.title),
         ),
       ),
+    if (discogs != null)
+      ask(
+        'Discogs',
+        () async => _catalogVotes(
+          t,
+          await online.discogsLookup(discogs, t.artist, t.title),
+        ),
+      ),
     if (yt != null)
       ask(
         'YouTube Music',
@@ -277,7 +297,8 @@ Future<(List<Vote>, List<String>)> _collectVotes(
 /// Applies a verdict: recorded under Changes (source: the agreeing
 /// analysers) and accepted at once. Returns true when the value changed.
 bool applyVerdict(Catalogue cat, int trackId, Verdict v, String? current) {
-  if (current != null && voteKey(v.field, current) == voteKey(v.field, v.value)) {
+  if (current != null &&
+      voteKey(v.field, current) == voteKey(v.field, v.value)) {
     return false;
   }
   final source = v.agree.join(' + ');
@@ -351,11 +372,10 @@ Future<ConsensusResult> analyseOnline(
       var changed = false;
       for (final f in voteFields) {
         final cur = t.current[f];
-        final v = decide(
-          f,
-          [for (final x in votes) if (x.field == f) x],
-          hasValue: cur != null && cur.trim().isNotEmpty,
-        );
+        final v = decide(f, [
+          for (final x in votes)
+            if (x.field == f) x,
+        ], hasValue: cur != null && cur.trim().isNotEmpty);
         if (v != null && applyVerdict(cat, id, v, cur)) {
           res.fields++;
           changed = true;

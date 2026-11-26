@@ -278,6 +278,42 @@ class HttpOnline extends Online {
   }
 
   @override
+  Future<List<CatalogMatch>> discogsLookup(
+    String token,
+    String artist,
+    String title,
+  ) async {
+    // 60 requests a minute with a token
+    await throttle('discogs', const Duration(milliseconds: 1050));
+    final r = await _send(
+      () => web.get(
+        _uri('https://api.discogs.com/database/search', {
+          'type': 'release',
+          'artist': artist,
+          'track': title,
+          'per_page': '8',
+        }),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Discogs token=$token',
+        },
+      ),
+    );
+    if (r.statusCode == 401 || r.statusCode == 403) {
+      throw OnlineException(
+        'Discogs rejected the token. Check it on the Analyse page.',
+      );
+    }
+    if (r.statusCode == 429) {
+      throw OnlineException('Discogs: too many requests, try again later');
+    }
+    if (r.statusCode >= 400) {
+      throw OnlineException('Discogs error (HTTP ${r.statusCode})');
+    }
+    return parseDiscogsSearch(_json(r), artist, title);
+  }
+
+  @override
   Future<List<CatalogMatch>> spotifyLookup(
     String creds,
     String artist,

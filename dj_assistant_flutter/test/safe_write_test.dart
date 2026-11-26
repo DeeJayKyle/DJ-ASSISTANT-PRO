@@ -157,7 +157,7 @@ void main() {
         contains('not supported'),
       );
       expect(
-        () => sw.preview([id], {'label': 'x'}),
+        () => sw.preview([id], {'composer': 'x'}),
         throwsA(isA<SafeWriteException>()),
       );
     },

@@ -65,6 +65,12 @@ const _analysers = [
     key: 'spotify',
   ),
   _Analyser(
+    'discogs',
+    'Discogs',
+    'Style, original year, album and label. Needs a free personal token.',
+    key: 'discogs',
+  ),
+  _Analyser(
     'youtube',
     'YouTube Music',
     'Release year, album, label. Free key, about 100 tracks a day.',
@@ -123,9 +129,11 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
     final v = await askText(
       context,
       title: '${a.name} key',
-      label: a.key == 'spotify'
-          ? 'Client ID:Client secret'
-          : 'YouTube Data API key',
+      label: switch (a.key) {
+        'spotify' => 'Client ID:Client secret',
+        'discogs' => 'Discogs personal access token',
+        _ => 'YouTube Data API key',
+      },
       ok: 'Save',
     );
     if (v == null) return;
@@ -161,9 +169,7 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
     final live = job.state == 'running' || job.state == 'paused';
     final report = lastAnalyseReport(s.cat);
     final target = ref.watch(analyseTargetProvider);
-    final services = {
-      for (final x in s.settings.services()) '${x['id']}': x,
-    };
+    final services = {for (final x in s.settings.services()) '${x['id']}': x};
     final serato = s.seratoDirs;
     final otPath = s.taggers.path('onetagger');
     final otOn = s.taggers.enabled('onetagger');
@@ -286,7 +292,10 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
       subtitle: Text(gives),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [?extra, Switch(value: on, onChanged: onChanged)],
+        children: [
+          ?extra,
+          Switch(value: on, onChanged: onChanged),
+        ],
       ),
     );
 
@@ -345,10 +354,7 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
                         _setKey(a);
                         return;
                       }
-                      guard(
-                        () => s.settings.setService(a.id, v),
-                        bump: ref,
-                      );
+                      guard(() => s.settings.setService(a.id, v), bump: ref);
                     },
             ),
           row(

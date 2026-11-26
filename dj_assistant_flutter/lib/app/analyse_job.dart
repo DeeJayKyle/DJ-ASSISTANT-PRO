@@ -1,10 +1,13 @@
 import 'dart:convert';
 
+import 'package:path/path.dart' as p;
+
 import '../core/analysis_store.dart';
 import '../core/catalogue.dart';
 import '../core/file_sync.dart';
 import '../core/jobs.dart';
 import '../core/serato_library.dart';
+import '../core/serato_sync.dart';
 import '../core/suggestions.dart';
 import '../core/taggers.dart';
 import '../online/consensus.dart';
@@ -232,14 +235,31 @@ JobBody analyseJob(
       steps.add('no online analysers are switched on');
     }
 
-    // 6. into the files
+    // 6. into the files, then into Serato's library
     var written = 0, failed = 0;
+    if (fileSyncOn(cat)) {
+      // energy and mood go into the Grouping tag
+      enqueueFileSync(cat, ids, const ['energy']);
+    }
     if (fileSyncOn(cat) && fileSyncQueued(cat) > 0) {
       ctx.message = 'Writing the changes into your music files…';
       final (w, _, f) = await flushFileSync(cat, dataDir: plan.dataDir);
       written = w;
       failed = f;
       steps.add('wrote $w file(s)${f > 0 ? ' ($f could not be written)' : ''}');
+    }
+    if (seratoSyncQueued(cat) > 0) {
+      ctx.message = "Updating Serato's library…";
+      final (st, sf, note) = flushSeratoSync(
+        cat,
+        plan.seratoDirs,
+        backupsDir: p.join(plan.dataDir, 'serato_backups'),
+      );
+      if (note != null) {
+        steps.add('Serato\'s library waits until Serato DJ is closed ($note)');
+      } else if (st > 0) {
+        steps.add('updated $sf field(s) of $st track(s) in Serato');
+      }
     }
 
     final summary = 'Analysed ${ids.length} track(s): ${steps.join('; ')}.';

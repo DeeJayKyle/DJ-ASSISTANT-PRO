@@ -45,9 +45,9 @@ class HomeScreen extends ConsumerWidget {
 
     final cr = hubs[0], lib = hubs[1], ana = hubs[1];
     final tracks = stats['tracks'] ?? 0;
-    final checked = s.cat.db
-        .select('SELECT COUNT(*) AS n FROM catalog_checked')
-        .first['n'] as int;
+    final checked =
+        s.cat.db.select('SELECT COUNT(*) AS n FROM catalog_checked').first['n']
+            as int;
     final problems = (stats['errors'] ?? 0) + (stats['missing'] ?? 0);
     final pct = tracks == 0 ? 0.0 : (checked / tracks).clamp(0.0, 1.0);
     final serato = s.seratoLibrary;

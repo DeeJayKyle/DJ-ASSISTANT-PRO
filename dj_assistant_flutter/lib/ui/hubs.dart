@@ -94,8 +94,7 @@ const hubs = <Hub>[
         'Smart crates & templates',
         Icons.rule_folder_outlined,
         pageTitle: 'Virtual Crates',
-        hint:
-            'Rule-based smart crates and nested templates, written into Serato.',
+        hint: 'Rule-based smart crates and nested templates, written into Serato.',
         related: ['serato', 'library'],
       ),
     ],

@@ -244,3 +244,43 @@ String? camelotOf(String k) {
   final c = normalizeKey(k);
   return (c != null && parseCamelot(c) != null) ? c : null;
 }
+
+/// Discogs database search (`type=release`): each release that holds the
+/// track [title] by [artist]. Discogs titles read "Artist - Release"; its
+/// styles ("Deep House") are more precise than its genres ("Electronic"),
+/// so they come first. Earliest release first, so the original wins over
+/// reissues.
+List<CatalogMatch> parseDiscogsSearch(Object? v, String artist, String title) {
+  final out = <CatalogMatch>[];
+  for (final r in list(at(v, 'results'))) {
+    final full = str(at(r, 'title'));
+    if (full == null) continue;
+    final i = full.indexOf(' - ');
+    final a = i < 0
+        ? artist
+        : full.substring(0, i).replaceAll(RegExp(r' \(\d+\)$'), '');
+    final album = i < 0 ? full : full.substring(i + 3);
+    final year = str(at(r, 'year')) ?? integer(at(r, 'year'))?.toString();
+    out.add(
+      CatalogMatch(
+        source: 'Discogs',
+        title: title,
+        artist: a.trim(),
+        album: album.trim(),
+        releaseDate: year != null && year.length == 4 ? year : null,
+        genres: [
+          for (final g in [...list(at(r, 'style')), ...list(at(r, 'genre'))])
+            ?str(g),
+        ],
+        label: switch (list(at(r, 'label'))) {
+          [final l, ...] => str(l),
+          _ => null,
+        },
+      ),
+    );
+  }
+  out.sort(
+    (x, y) => (x.releaseDate ?? '9999').compareTo(y.releaseDate ?? '9999'),
+  );
+  return out;
+}

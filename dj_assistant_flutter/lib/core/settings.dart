@@ -48,6 +48,7 @@ class SettingsService {
       'premium_ui': _flag('premium_ui', false),
       'auto_prep': autoPrepEnabled(cat),
       'energy_analysis': _flag('energy_analysis', true),
+      'energy_to_comment': _flag('energy_to_comment', false),
       'serato_dir': cat.getSetting('serato_dir') ?? '',
       'ui_prefs': prefs is Map ? prefs : <String, Object?>{},
     };
@@ -63,6 +64,7 @@ class SettingsService {
     'premium_ui',
     'auto_prep',
     'energy_analysis',
+    'energy_to_comment',
     'watch_enabled',
   };
 
@@ -118,7 +120,7 @@ class SettingsService {
     }
   }
 
-  static const _keyed = {'spotify', 'youtube'};
+  static const _keyed = {'spotify', 'youtube', 'discogs'};
 
   /// Every online service with its switch and whether a key is saved (the
   /// key itself never leaves the credential store).

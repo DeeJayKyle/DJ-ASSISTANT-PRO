@@ -194,8 +194,6 @@ final libraryQueryProvider =
       LibraryQueryNotifier.new,
     );
 
-
-
 // ---- data, re-read whenever the version is bumped
 
 final statsProvider = Provider<Map<String, int>>((ref) {

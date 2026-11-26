@@ -413,11 +413,7 @@ Future<Findings> runAutomaticTool(
   ws.manifest['opened'] = {...ws.opened, tool: nowMs()};
   ws.save();
   progress?.message = 'Running $name on the copies…';
-  final (args, env) = automaticCommand(
-    ws,
-    tool,
-    platforms: platforms,
-  );
+  final (args, env) = automaticCommand(ws, tool, platforms: platforms);
   final r = await run(
     exe,
     args,
@@ -554,6 +550,4 @@ class TaggerService {
     if (!p.isWithin(root, ws.dir)) _no('not a tagger workspace');
     Directory(ws.dir).deleteSync(recursive: true);
   }
-
-
 }

@@ -15,7 +15,6 @@ class DjExportException implements Exception {
   String toString() => message;
 }
 
-
 class _Node {
   _Node(this.id, this.name, this.parent);
   final int id;

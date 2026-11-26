@@ -44,7 +44,9 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
   }
 
   Future<void> _chooseFolder() async {
-    final d = await getDirectoryPath(confirmButtonText: 'Use this _Serato_ folder');
+    final d = await getDirectoryPath(
+      confirmButtonText: 'Use this _Serato_ folder',
+    );
     if (d == null) return;
     final s = ref.read(sessionProvider);
     await guard(() => s.settings.set('serato_dir', d), bump: ref);
@@ -95,13 +97,8 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
     );
     if (pick == null) return;
     final parent = pick == top ? null : pick;
-    await _change(
-      'Moved “${c.label}”.',
-      (lib) => lib.move(c.name, parent),
-    );
-    setState(
-      () => _open = parent == null ? c.label : '$parent%%${c.label}',
-    );
+    await _change('Moved “${c.label}”.', (lib) => lib.move(c.name, parent));
+    setState(() => _open = parent == null ? c.label : '$parent%%${c.label}');
   }
 
   Future<void> _sort(SeratoCrate c) async {
@@ -187,8 +184,7 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
     final ok = await confirm(
       context,
       title: 'Delete all $n Serato crates?',
-      message:
-          'Every crate in this _Serato_ folder is deleted. Your music files and Serato\'s library stay.',
+      message: 'Every crate in this _Serato_ folder is deleted. Your music files and Serato\'s library stay.',
       ok: 'Delete all',
       danger: true,
     );
@@ -231,8 +227,7 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
           child: EmptyState(
             icon: Icons.album_outlined,
             title: 'No _Serato_ folder found',
-            message:
-                'Serato keeps its crates in a _Serato_ folder in your Music folder or at the top of an external drive.',
+            message: 'Serato keeps its crates in a _Serato_ folder in your Music folder or at the top of an external drive.',
             action: FilledButton.icon(
               onPressed: _chooseFolder,
               icon: const Icon(Icons.folder_open),
@@ -343,7 +338,10 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
                       title: Text(c.label, overflow: TextOverflow.ellipsis),
                       trailing: Text(
                         '${c.paths.length}',
-                        style: TextStyle(color: t.faint, fontSize: DjType.small),
+                        style: TextStyle(
+                          color: t.faint,
+                          fontSize: DjType.small,
+                        ),
                       ),
                       onTap: () => setState(() => _open = c.name),
                     ),
@@ -392,7 +390,11 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
             builder: (context, box) => box.maxWidth < 760
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [list, const SizedBox(height: Space.x3), detail],
+                    children: [
+                      list,
+                      const SizedBox(height: Space.x3),
+                      detail,
+                    ],
                   )
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,12 +442,16 @@ class _CrateDetail extends ConsumerWidget {
     };
     final rows = [
       for (final x in crate.paths)
-        (x, () {
-          final r = s.cat.db.select('SELECT id FROM tracks WHERE path_key=?', [
-            pathKey(lib.absolute(x)),
-          ]);
-          return r.isEmpty ? null : s.library.row(r.first['id'] as int);
-        }()),
+        (
+          x,
+          () {
+            final r = s.cat.db.select(
+              'SELECT id FROM tracks WHERE path_key=?',
+              [pathKey(lib.absolute(x))],
+            );
+            return r.isEmpty ? null : s.library.row(r.first['id'] as int);
+          }(),
+        ),
     ];
     return Panel(
       title: crate.parts.join(' › '),

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import 'catalogue.dart';
 import 'jobs.dart';
+import 'serato_sync.dart';
 import 'keys.dart';
 import 'safe_write.dart';
 import 'suggestions.dart' show rustNumber;
@@ -30,9 +31,15 @@ const syncFields = {
   'year': 'year',
   'bpm': 'bpm',
   'key': 'key',
+  'record_label': 'label',
+  'grouping': 'grouping',
 };
 
-/// The catalogue column behind each synced field.
+/// Catalogue fields that make up the Grouping tag (energy and mood).
+const groupingSources = {'energy', 'mood'};
+
+/// The catalogue column behind each synced field (Grouping is worked out
+/// from energy and mood, see [groupingText]).
 const _columns = {
   'title': 'title',
   'artist': 'artist',
@@ -41,10 +48,32 @@ const _columns = {
   'year': 'year',
   'bpm': 'bpm',
   'key': 'musical_key',
+  'record_label': 'record_label',
 };
 
-bool fileSyncOn(Catalogue cat) =>
-    (cat.getSetting(syncSetting) ?? '1') == '1';
+/// "E7 · Uplifting": energy (the DJ's, else the analysed one) and mood, as
+/// written to the Grouping tag; null when there is neither.
+String? groupingText(Catalogue cat, int id) {
+  final r = cat.db.select(
+    'SELECT COALESCE(u.energy, a.energy) AS e, u.mood AS m FROM tracks t '
+    'LEFT JOIN track_user u ON u.track_id=t.id '
+    'LEFT JOIN analysis a ON a.track_id=t.id WHERE t.id=?',
+    [id],
+  ).firstOrNull;
+  if (r == null) return null;
+  final parts = [
+    if (r['e'] case final num e) 'E${e.round()}',
+    if ((r['m'] as String?)?.trim() case final m? when m.isNotEmpty) m,
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// Whether energy and mood also go into the Comments tag (off: Comments
+/// often holds Mixed In Key's "8A - Energy 6" and is left alone).
+bool groupingToComment(Catalogue cat) =>
+    cat.getSetting('energy_to_comment') == '1';
+
+bool fileSyncOn(Catalogue cat) => (cat.getSetting(syncSetting) ?? '1') == '1';
 
 void _ensureQueue(Catalogue cat) => cat.db.execute(
   'CREATE TABLE IF NOT EXISTS file_sync_queue ('
@@ -57,7 +86,10 @@ void _ensureQueue(Catalogue cat) => cat.db.execute(
 /// is on and the fields can be written). Cheap: no file is touched here.
 int enqueueFileSync(Catalogue cat, List<int> ids, Iterable<String> fields) {
   if (!fileSyncOn(cat)) return 0;
-  final fs = fields.where(syncFields.containsKey).toList();
+  final fs = {
+    ...fields.where(syncFields.containsKey),
+    if (fields.any(groupingSources.contains)) 'grouping',
+  }.toList();
   if (fs.isEmpty || ids.isEmpty) return 0;
   _ensureQueue(cat);
   final now = nowMs();
@@ -173,12 +205,23 @@ Future<(int, int, int)> flushFileSync(
       ))
         r['field'] as String,
     ];
-    final row = cat.db.select(
-      'SELECT ${fields.map((f) => _columns[f]).join(', ')} FROM track_user WHERE track_id=?',
-      [id],
-    ).firstOrNull;
+    final cols = [for (final f in fields) ?_columns[f]];
+    final row = cols.isEmpty
+        ? null
+        : cat.db.select(
+            'SELECT ${cols.join(', ')} FROM track_user WHERE track_id=?',
+            [id],
+          ).firstOrNull;
     final values = <String, String?>{};
     for (final f in fields) {
+      if (f == 'grouping') {
+        final g = groupingText(cat, id);
+        if (g != null) {
+          values['grouping'] = g;
+          if (groupingToComment(cat)) values['comment'] = g;
+        }
+        continue;
+      }
       final v = _fileValue(cat, f, row?[_columns[f]]);
       if (v != null) {
         values[syncFields[f]!] = v;
@@ -197,6 +240,7 @@ Future<(int, int, int)> flushFileSync(
         switch (res['status']) {
           case 'done':
             written++;
+            enqueueSeratoSync(cat, [id]);
           case 'failed':
             failed++;
             ok = false;
@@ -230,15 +274,27 @@ Future<(int, int, int)> flushFileSync(
   return (written, skipped, failed);
 }
 
-/// The background writer (a job isolate).
-JobBody fileSyncJob(String dbPath, String dataDir) => (ctx) async {
+/// The background writer (a job isolate). Afterwards Serato's library is
+/// brought in step with the files (when Serato DJ is closed).
+JobBody fileSyncJob(
+  String dbPath,
+  String dataDir, {
+  List<String> seratoDirs = const [],
+}) => (ctx) async {
   final cat = Catalogue.open(dbPath);
   try {
     final (w, s, f) = await flushFileSync(cat, dataDir: dataDir, progress: ctx);
+    final (st, _, note) = flushSeratoSync(
+      cat,
+      seratoDirs,
+      backupsDir: p.join(dataDir, 'serato_backups'),
+    );
     ctx
-      ..result = {'written': w, 'skipped': s, 'failed': f}
+      ..result = {'written': w, 'skipped': s, 'failed': f, 'serato': st}
       ..message =
-          'Wrote $w file(s)${f > 0 ? '; $f could not be written (see History)' : ''}.';
+          'Wrote $w file(s)${f > 0 ? '; $f could not be written (see History)' : ''}'
+          '${st > 0 ? '; updated $st track(s) in Serato' : ''}'
+          '${note != null ? '; Serato not updated yet: $note' : ''}.';
   } finally {
     cat.close();
   }

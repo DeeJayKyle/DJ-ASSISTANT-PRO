@@ -651,10 +651,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         width: 64,
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: Space.x2),
-          children: [
-            homeItem,
-            for (final h in hubs) hubItem(h),
-          ],
+          children: [homeItem, for (final h in hubs) hubItem(h)],
         ),
       );
     }

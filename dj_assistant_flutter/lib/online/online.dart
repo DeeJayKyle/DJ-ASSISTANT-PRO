@@ -86,6 +86,13 @@ abstract class Online {
     String title,
   ) async => _na('YouTube lookups');
 
+  /// Discogs database search; [token] is a personal access token.
+  Future<List<CatalogMatch>> discogsLookup(
+    String token,
+    String artist,
+    String title,
+  ) async => _na('Discogs lookups');
+
   /// Downloads [url] into [dest], resuming what is there. [progress] gets the
   /// bytes in the file and returns false to stop.
   Future<void> download(
@@ -147,6 +154,12 @@ const onlineServices = <ServiceInfo>[
     'YouTube Music',
     'Release date, label and album from the official YouTube Music release of each track. The free quota covers about 100 tracks a day.',
     'The artist and title text of tracks being looked up. Never audio, file paths or listening history. Needs a free YouTube Data API key (console.cloud.google.com → APIs → YouTube Data API v3 → Credentials).',
+  ),
+  ServiceInfo(
+    'discogs',
+    'Discogs',
+    'Style (Deep House, Afro House…), original release year, album and label from the Discogs database.',
+    'The artist and title text of tracks being looked up. Never audio, file paths or listening history. Needs a free Discogs personal access token (discogs.com → Settings → Developers).',
   ),
   ServiceInfo(
     'updates',
