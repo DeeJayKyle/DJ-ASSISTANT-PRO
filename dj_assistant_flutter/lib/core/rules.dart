@@ -30,6 +30,7 @@ class RuleException implements Exception {
     'composer': ('t.composer', _T.text),
     'comment': ('t.comment', _T.text),
     'mood': ('u.mood', _T.text),
+    'event': ('u.event', _T.text),
     'notes': ('u.notes', _T.text),
     'color': ('u.color', _T.enumeration),
     'key': ('keynorm(COALESCE(u.musical_key, t.key_tag, a.camelot))', _T.text),

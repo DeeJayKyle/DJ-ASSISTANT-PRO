@@ -40,6 +40,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
       'bpm',
       'key',
       'mood',
+      'event',
       'notes',
       'version_label',
     ]) {
@@ -454,6 +455,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                 field('bpm', 'BPM', file['bpm']),
                 field('key', 'Key', file['key']),
                 field('mood', 'Mood', null),
+                field('event', 'Event', null),
                 field('version_label', 'Version label', file['version_hint']),
                 SizedBox(
                   width: 170,
@@ -503,6 +505,7 @@ class _TrackDetailPaneState extends ConsumerState<TrackDetailPane> {
                           'genre',
                           'key',
                           'mood',
+                          'event',
                           'notes',
                           'version_label',
                         ])

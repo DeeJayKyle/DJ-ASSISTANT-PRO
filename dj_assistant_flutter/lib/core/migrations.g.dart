@@ -383,4 +383,8 @@ CREATE TABLE inbox_imports (
     UNIQUE (source_path, source_size, source_mtime, entry)
 );
 ''',
+  // 2.6: the event a track suits (Wedding, Club, Lounge…), for rules
+  r'''
+ALTER TABLE track_user ADD COLUMN event TEXT;
+''',
 ];
