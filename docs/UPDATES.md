@@ -1,5 +1,11 @@
 # Auto-update
 
+## 2.x: automatic install
+
+With **Settings → Updates → Install updates automatically** on (the default), the app checks `latest.json` when it starts and every six hours. A newer installer is downloaded into `<data folder>/updates`, its minisign signature is checked, and it waits there. It installs quietly when DJ Assistant closes (`/P /UPDATE`), or straight away with **Restart and update** (`/P /UPDATE /R`). The signature is checked again just before the installer runs, and the waiting copy is deleted once that version is running. With the switch off, the app only says that a new version is available. Releases are built and signed by the **Release (Flutter)** workflow, as before.
+
+## 1.x
+
 DJ Assistant uses the Tauri updater. On start-up (and from **Settings → Updates**) it asks GitHub for `latest.json`, and if a newer version exists it downloads the installer, **verifies its signature** with the public key built into the app, installs it in place (passive mode) and restarts. Your catalogue, crates and settings are kept. Only the app version and platform are sent; checks can be switched off in Settings.
 
 ## Version numbers (from 1.8.0 onwards)

@@ -137,6 +137,23 @@ void main() {
         reason: 'signed by another key',
       );
       expect(File(p.join(tmp.path, 'bad.exe')).existsSync(), isFalse);
+
+      // automatic updates: staged in the background, kept until installed
+      final dir = p.join(tmp.path, 'updates');
+      final staged = await stageUpdate(client, u, dir, publicKey: key);
+      expect(File(staged.path).readAsBytesSync(), data);
+      final again = stagedUpdate(dir, '2.0.0')!;
+      expect((again.version, again.path), ('2.1.0', staged.path));
+      // once that version (or a later one) runs, the waiting copy is cleared
+      expect(stagedUpdate(dir, '2.1.0'), isNull);
+      expect(Directory(dir).existsSync(), isFalse);
+      // a tampered installer is never started
+      await stageUpdate(client, u, dir, publicKey: key);
+      File(staged.path).writeAsBytesSync([9, 9, 9]);
+      await expectLater(
+        installStaged(stagedUpdate(dir, '2.0.0')!, publicKey: key),
+        throwsA(isA<UpdateException>()),
+      );
     });
   });
 }

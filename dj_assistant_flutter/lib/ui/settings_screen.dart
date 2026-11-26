@@ -8,6 +8,7 @@ import '../core/diag_log.dart';
 import '../core/folders.dart' show openFolder;
 import '../core/file_sync.dart';
 import '../core/updater.dart';
+import 'updates.dart';
 import '../online/http_online.dart';
 import 'format.dart';
 import 'shortcuts_sheet.dart';
@@ -273,14 +274,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 sw(
                   'auto_update',
-                  'Check for updates when the app starts',
-                  sub: 'Sends only the request for the release manifest to GitHub.',
+                  'Check for updates automatically',
+                  sub: 'When the app starts and every few hours. Sends only the request for the release manifest to GitHub.',
                 ),
+                if (st['auto_update'] == true)
+                  sw(
+                    'auto_install_update',
+                    'Install updates automatically',
+                    sub: 'A new version is downloaded in the background, its signature is checked, and it installs when you close DJ Assistant. Your library, crates and settings are kept.',
+                  ),
                 Row(
                   children: [
                     Text('DJ Assistant $appVersion'),
                     const Spacer(),
-                    if (update != null)
+                    ValueListenableBuilder(
+                      valueListenable: waitingUpdate,
+                      builder: (context, w, _) => w == null
+                          ? const SizedBox.shrink()
+                          : FilledButton.icon(
+                              onPressed: () => guard(restartToUpdate),
+                              icon: const Icon(Icons.restart_alt, size: 18),
+                              label: Text('Restart and update to ${w.version}'),
+                            ),
+                    ),
+                    if (update != null &&
+                        waitingUpdate.value?.version != update!.version)
                       FilledButton(
                         onPressed: () => guard(() async {
                           final dest =

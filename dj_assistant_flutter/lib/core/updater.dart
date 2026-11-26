@@ -182,3 +182,82 @@ Future<String> downloadUpdate(
   File(dest).writeAsBytesSync(r.bodyBytes, flush: true);
   return dest;
 }
+
+/// An update that was downloaded and verified in the background and waits to
+/// be installed (when the app closes, or on "Restart now").
+class StagedUpdate {
+  StagedUpdate(this.version, this.path, this.signature);
+  final String version, path, signature;
+}
+
+const _stagedFile = 'staged.json';
+
+/// The update waiting in [dir], if it is newer than [current] and its
+/// installer is still there. Anything older or broken is cleared away.
+StagedUpdate? stagedUpdate(String dir, String current) {
+  final f = File('$dir${Platform.pathSeparator}$_stagedFile');
+  if (!f.existsSync()) return null;
+  try {
+    final m = jsonDecode(f.readAsStringSync()) as Map;
+    final s = StagedUpdate(
+      m['version'] as String,
+      m['path'] as String,
+      m['signature'] as String,
+    );
+    if (isNewer(s.version, current) && File(s.path).existsSync()) return s;
+  } on Object {
+    // unreadable: cleared below
+  }
+  clearStagedUpdates(dir);
+  return null;
+}
+
+void clearStagedUpdates(String dir) {
+  final d = Directory(dir);
+  if (d.existsSync()) d.deleteSync(recursive: true);
+}
+
+/// Downloads [u] into [dir] (signature checked) and records it as waiting.
+Future<StagedUpdate> stageUpdate(
+  http.Client client,
+  UpdateInfo u,
+  String dir, {
+  String publicKey = updaterPublicKey,
+}) async {
+  clearStagedUpdates(dir);
+  Directory(dir).createSync(recursive: true);
+  final path = await downloadUpdate(
+    client,
+    u,
+    '$dir${Platform.pathSeparator}DJ-Assistant-${u.version}-setup.exe',
+    publicKey: publicKey,
+  );
+  File('$dir${Platform.pathSeparator}$_stagedFile').writeAsStringSync(
+    jsonEncode({'version': u.version, 'path': path, 'signature': u.signature}),
+  );
+  return StagedUpdate(u.version, path, u.signature);
+}
+
+/// Checks the waiting installer's signature again, then starts it detached:
+/// passive install over the current version, then (with [restart]) the new
+/// version opens. The caller exits the app right after.
+Future<void> installStaged(
+  StagedUpdate s, {
+  bool restart = true,
+  String publicKey = updaterPublicKey,
+}) async {
+  if (!await verifyMinisign(
+    File(s.path).readAsBytesSync(),
+    s.signature,
+    parseMinisignKey(publicKey),
+  )) {
+    throw UpdateException(
+      "the waiting update isn't signed by DJ Assistant; it was not installed",
+    );
+  }
+  await Process.start(s.path, [
+    '/P',
+    '/UPDATE',
+    if (restart) '/R',
+  ], mode: ProcessStartMode.detached);
+}
