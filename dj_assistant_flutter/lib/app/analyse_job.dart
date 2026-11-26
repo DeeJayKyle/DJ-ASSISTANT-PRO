@@ -17,14 +17,17 @@ import '../online/online.dart';
 /// scanned). In order:
 ///
 /// 1. **Names**: tracks with no artist or title get them from the file name.
-/// 2. **Serato**: BPM and key from Serato DJ's own analysis.
+/// 2. **Serato**: BPM and key from Serato DJ's own database (no audio read).
 /// 3. **This computer**: a 1–10 energy score from the audio (switchable),
-///    and BPM/key for tracks Serato hasn't analysed.
+///    and BPM/key for tracks Serato hasn't analysed, on every CPU core and
+///    at the same time as steps 4–5.
 /// 4. **OneTagger** (when installed and on) works on temporary copies, which
 ///    are deleted afterwards; its findings count as one vote.
-/// 5. **Online analysers**: all of them at once per track; the majority
-///    decides genre, year, album and label (see consensus.dart).
-/// 6. **Write**: every change goes into the original music files.
+/// 5. **Online analysers**: many tracks at once, only tracks still missing
+///    something; the majority decides genre, year, album and label (see
+///    consensus.dart).
+/// 6. **Write**: every change goes into the original music files, the tags
+///    as soon as step 5 is done and energy when step 3 is.
 ///
 /// Everything it changes is listed under Analysis → Changes and can be undone.
 class AnalysePlan {
@@ -113,8 +116,70 @@ int fillFromNames(Catalogue cat, List<int> ids) {
   return n;
 }
 
+/// Tracks the online analysers still need to see. "New" runs skip tracks
+/// whose genre, year, album and label are all filled, and tracks checked in
+/// the last 90 days (a track no catalogue knew is tried again after that,
+/// in case it has been added since). "Every track" and chosen tracks are
+/// always asked.
+List<int> onlineScope(Catalogue cat, String scope, List<int> ids) {
+  if (scope != 'new' || ids.isEmpty) return ids;
+  final since = nowMs() - 90 * 24 * 3600 * 1000;
+  final want = ids.toSet();
+  return [
+    for (final r in cat.db.select(
+      'SELECT t.id FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id '
+      'WHERE t.id NOT IN (SELECT track_id FROM catalog_checked WHERE checked_at>?) '
+      "AND (NULLIF(TRIM(COALESCE(u.genre, t.genre)), '') IS NULL "
+      'OR COALESCE(u.year, t.year) IS NULL '
+      "OR NULLIF(TRIM(COALESCE(u.album, t.album)), '') IS NULL "
+      "OR NULLIF(TRIM(COALESCE(u.record_label, t.label)), '') IS NULL) "
+      'ORDER BY t.id',
+      [since],
+    ))
+      if (want.contains(r['id'])) r['id'] as int,
+  ];
+}
+
+/// Two parts of one job reporting into one progress bar: the online
+/// analysers and the audio analysis run side by side.
+class _Part implements JobProgress {
+  _Part(this.job, this.label, this.show);
+  final JobProgress job;
+  final String label;
+  final void Function() show;
+  int count = 0, done = 0;
+  String note = '';
+  @override
+  set total(int n) => count = n;
+  @override
+  void tick({bool ok = true}) {
+    done++;
+    job.tick(ok: ok);
+    show();
+  }
+
+  @override
+  set message(String m) {
+    note = m;
+    show();
+  }
+
+  @override
+  Future<bool> checkpoint() => job.checkpoint();
+  bool get active => count > 0 && done < count;
+  @override
+  String toString() => '$done of $count';
+}
+
 /// The whole Analyse run as one background job. [makeOnline] and
 /// [makeSecrets] build the online side inside the job's isolate.
+///
+/// Built for big libraries: the audio (energy, and BPM/key Serato hasn't
+/// got) is decoded on every CPU core *while* the online analysers work, so
+/// neither waits for the other; the online part only asks about tracks
+/// that still miss something (see [onlineScope]) and many at once; tags go
+/// into the files as soon as the online part is done, energy when the audio
+/// part is.
 JobBody analyseJob(
   AnalysePlan plan, {
   required Online Function() makeOnline,
@@ -122,6 +187,7 @@ JobBody analyseJob(
 }) => (ctx) async {
   final cat = Catalogue.open(plan.dbPath);
   final steps = <String>[];
+  final started = DateTime.now();
   try {
     final ids = analyseScope(cat, plan.scope, plan.ids);
     if (ids.isEmpty) {
@@ -138,11 +204,9 @@ JobBody analyseJob(
     final named = fillFromNames(cat, ids);
     if (named > 0) steps.add('$named field(s) filled from file names');
 
-    // 2. Serato
+    // 2. Serato: from its database, no audio read
     if (await ctx.checkpoint()) return;
-    ctx
-      ..message = "Reading Serato's BPM and key…"
-      ..total = ids.length;
+    ctx.message = "Reading Serato's BPM and key…";
     final (fromSerato, notInSerato) = syncSeratoAnalysis(
       cat,
       plan.seratoDirs,
@@ -153,39 +217,54 @@ JobBody analyseJob(
       '${notInSerato > 0 ? ' ($notInSerato not analysed in Serato yet)' : ''}',
     );
 
-    // 3. this computer: energy, and BPM/key where Serato has none
-    if (!await ctx.checkpoint()) {
-      final noBpmKey = _ids(
-        cat,
-        't.id IN (${ids.join(',')}) AND (COALESCE(u.bpm, t.bpm_tag) IS NULL '
-        'OR COALESCE(u.musical_key, t.key_tag) IS NULL)',
-      );
-      final store = AnalysisStore(cat);
-      final todo = noBpmKey.isEmpty && !plan.energy
-          ? const <(int, String, int, int?)>[]
-          : store.pending(only: plan.energy ? ids : noBpmKey);
-      if (todo.isNotEmpty) {
-        ctx.message = plan.energy
-            ? 'Measuring energy of ${todo.length} track(s)…'
-            : 'Working out BPM and key of ${todo.length} track(s)…';
-        await analysisJob(plan.dbPath, only: [for (final x in todo) x.$1])(ctx);
-        steps.add(
-          '${plan.energy ? 'energy' : 'BPM/key'} for ${todo.length} track(s) '
-          'on this computer',
-        );
-      }
+    // what each part will do
+    final noBpmKey = _ids(
+      cat,
+      't.id IN (${ids.join(',')}) AND (COALESCE(u.bpm, t.bpm_tag) IS NULL '
+      'OR COALESCE(u.musical_key, t.key_tag) IS NULL)',
+    );
+    final store = AnalysisStore(cat);
+    final audioTodo = noBpmKey.isEmpty && !plan.energy
+        ? const <(int, String, int, int?)>[]
+        : store.pending(only: plan.energy ? ids : noBpmKey);
+    final onlineIds = onlineScope(cat, plan.scope, ids);
+    final secrets = makeSecrets();
+
+    late final _Part audio, online;
+    void show() {
+      final parts = [
+        if (online.count > 0) 'online $online',
+        if (audio.count > 0) '${plan.energy ? 'energy' : 'BPM/key'} $audio',
+      ];
+      final now = online.active ? online.note : audio.note;
+      ctx.message = [parts.join(' · '), if (now.isNotEmpty) now].join(' — ');
     }
+
+    audio = _Part(ctx, 'audio', show);
+    online = _Part(ctx, 'online', show);
+    final voters = activeAnalysers(cat, secrets);
+    ctx.total =
+        audioTodo.length +
+        (voters.isEmpty && plan.oneTaggerExe == null ? 0 : onlineIds.length);
+
+    // 3. this computer, on every core, alongside the online part
+    audio
+      ..count = audioTodo.length
+      ..note = 'measuring the audio on ${analysisWorkers()} core(s)';
+    final audioRun = audioTodo.isEmpty
+        ? Future.value(const <int>[])
+        : analyseTracks(store, audioTodo, audio);
 
     // 4. OneTagger on temporary copies
     Findings oneTagger = const {};
     final exe = plan.oneTaggerExe;
-    if (exe != null && !await ctx.checkpoint()) {
+    if (exe != null && onlineIds.isNotEmpty && !await ctx.checkpoint()) {
       final svc = TaggerService(cat, plan.dataDir);
       TaggerWorkspace? ws;
       try {
-        ctx.message = 'OneTagger is looking tracks up…';
+        online.message = 'OneTagger is looking tracks up…';
         ws = svc.create(
-          ids.take(plan.oneTaggerLimit).toList(),
+          onlineIds.take(plan.oneTaggerLimit).toList(),
           label: 'Analyse',
         );
         oneTagger = await runAutomaticTool(
@@ -207,46 +286,77 @@ JobBody analyseJob(
       }
     }
 
-    // 5. every online analyser at once, majority wins
-    final secrets = makeSecrets();
-    final voters = activeAnalysers(
+    // 5. online analysers: many tracks at once, majority wins
+    final allVoters = activeAnalysers(
       cat,
       secrets,
       oneTagger: oneTagger.isNotEmpty,
     );
-    if (voters.isNotEmpty && !await ctx.checkpoint()) {
+    if (allVoters.isEmpty || onlineIds.isEmpty) {
+      ctx.total = audioTodo.length; // no online part after all
+    }
+    if (allVoters.isEmpty) {
+      steps.add('no online analysers are switched on');
+    } else if (onlineIds.isEmpty) {
+      steps.add('online: every track is already complete or checked');
+    } else if (!await ctx.checkpoint()) {
       final res = await analyseOnline(
         cat,
         makeOnline(),
         secrets,
-        ids,
-        ctx,
+        onlineIds,
+        online,
         oneTagger: oneTagger,
+        reuseAlbums: plan.scope != 'all',
       );
       steps.add(
-        '${voters.length} online analyser(s) checked ${res.tracks} track(s) '
+        '${allVoters.length} online analyser(s) checked ${res.tracks} track(s) '
         'and fixed ${res.fields} tag(s) on ${res.changed} track(s)'
-        '${res.noMatch > 0 ? ' (${res.noMatch} not found online)' : ''}',
+        '${res.noMatch > 0 ? ' (${res.noMatch} not found online)' : ''}'
+        '${res.albumHits > 0 ? '; ${res.albumHits} answered from their album' : ''}',
       );
       if (res.errors.isNotEmpty) {
         steps.add('problems: ${res.errors.take(3).join('; ')}');
       }
-    } else if (voters.isEmpty) {
-      steps.add('no online analysers are switched on');
+    }
+    final skippedOnline = ids.length - onlineIds.length;
+    if (skippedOnline > 0 && allVoters.isNotEmpty) {
+      steps.add('$skippedOnline complete or recently checked track(s) skipped');
     }
 
-    // 6. into the files, then into Serato's library
+    // 6. the tags into the files now, without waiting for the audio part
     var written = 0, failed = 0;
-    if (fileSyncOn(cat)) {
-      // energy and mood go into the Grouping tag
-      enqueueFileSync(cat, ids, const ['energy']);
-    }
-    if (fileSyncOn(cat) && fileSyncQueued(cat) > 0) {
-      ctx.message = 'Writing the changes into your music files…';
+    Future<void> flush() async {
+      if (!fileSyncOn(cat) || fileSyncQueued(cat) == 0) return;
       final (w, _, f) = await flushFileSync(cat, dataDir: plan.dataDir);
-      written = w;
-      failed = f;
-      steps.add('wrote $w file(s)${f > 0 ? ' ($f could not be written)' : ''}');
+      written += w;
+      failed += f;
+    }
+
+    if (audio.active) {
+      online.message = 'writing the changes into your music files';
+    } else {
+      ctx.message = 'Writing the changes into your music files…';
+    }
+    await flush();
+
+    // 7. the audio part, then its energy into the Grouping tag
+    final analysed = await audioRun;
+    if (analysed.isNotEmpty) {
+      steps.add(
+        '${plan.energy ? 'energy' : 'BPM/key'} for ${analysed.length} '
+        'track(s) on ${analysisWorkers()} core(s)',
+      );
+      if (fileSyncOn(cat)) {
+        enqueueFileSync(cat, analysed, const ['energy']);
+        ctx.message = 'Writing energy into your music files…';
+        await flush();
+      }
+    }
+    if (written > 0 || failed > 0) {
+      steps.add(
+        'wrote $written file(s)${failed > 0 ? ' ($failed could not be written)' : ''}',
+      );
     }
     if (seratoSyncQueued(cat) > 0) {
       ctx.message = "Updating Serato's library…";
@@ -262,10 +372,15 @@ JobBody analyseJob(
       }
     }
 
-    final summary = 'Analysed ${ids.length} track(s): ${steps.join('; ')}.';
+    final secs = DateTime.now().difference(started).inSeconds;
+    final took = secs < 90 ? '$secs s' : '${(secs / 60).round()} min';
+    final summary =
+        'Analysed ${ids.length} track(s) in $took: ${steps.join('; ')}.';
     final report = {
       'finished_at': nowMs(),
       'tracks': ids.length,
+      'online_tracks': onlineIds.length,
+      'seconds': secs,
       'summary': summary,
       'files_written': written,
       'files_failed': failed,

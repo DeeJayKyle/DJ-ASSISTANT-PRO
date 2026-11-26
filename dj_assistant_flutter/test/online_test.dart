@@ -163,14 +163,9 @@ void main() {
       settings.setSecret('youtube', 'yt-key');
       expect(activeAnalysers(cat, secrets), hasLength(5));
       final id = idOf('Lagos Lights - Sunrise Groove.mp3');
-      final res = await analyseOnline(
-        cat,
-        FakeOnline(),
-        secrets,
-        [id],
-        LocalProgress(),
-        spacingMs: 0,
-      );
+      final res = await analyseOnline(cat, FakeOnline(), secrets, [
+        id,
+      ], LocalProgress());
       expect(res.tracks, 1);
       final row = LibraryService(cat).row(id)!;
       // Deezer, Apple Music, Spotify and YouTube say 2014; MusicBrainz 2015

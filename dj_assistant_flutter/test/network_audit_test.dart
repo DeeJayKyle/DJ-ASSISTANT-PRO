@@ -61,14 +61,7 @@ void main() {
     ];
     expect(ids, isNotEmpty);
     expect(activeAnalysers(app.cat, app.secrets), isEmpty);
-    await analyseOnline(
-      app.cat,
-      online,
-      app.secrets,
-      ids,
-      LocalProgress(),
-      spacingMs: 0,
-    );
+    await analyseOnline(app.cat, online, app.secrets, ids, LocalProgress());
     await pumpEventQueue();
     expect(sent, isEmpty);
   });
@@ -81,14 +74,7 @@ void main() {
       ))
         r['id'] as int,
     ];
-    await analyseOnline(
-      app.cat,
-      online,
-      app.secrets,
-      ids,
-      LocalProgress(),
-      spacingMs: 0,
-    );
+    await analyseOnline(app.cat, online, app.secrets, ids, LocalProgress());
     expect(ids, isNotEmpty);
     expect(sent, isNotEmpty);
     expect(sent.every((u) => u.host == 'musicbrainz.org'), isTrue);

@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../analysis/analysis.dart' as an;
@@ -227,25 +230,28 @@ class AnalysisStore {
   List<(int, String, int, int?)> pending({
     List<int>? only,
     bool force = false,
-  }) => cat.db
-      .select(
-        'SELECT t.id, t.path, t.file_size, t.file_mtime FROM tracks t JOIN library_roots r ON r.id=t.root_id '
-        'LEFT JOIN analysis a ON a.track_id=t.id '
-        "WHERE t.presence='present' AND t.read_status='ok' AND r.status<>'offline' "
-        'AND (? OR a.track_id IS NULL OR a.version<>? OR a.file_size<>t.file_size OR a.file_mtime IS NOT t.file_mtime) '
-        'ORDER BY t.id',
-        [force ? 1 : 0, an.version],
-      )
-      .map(
-        (r) => (
-          r['id'] as int,
-          r['path'] as String,
-          r['file_size'] as int,
-          r['file_mtime'] as int?,
-        ),
-      )
-      .where((r) => only == null || only.contains(r.$1))
-      .toList();
+  }) {
+    final want = only?.toSet();
+    return cat.db
+        .select(
+          'SELECT t.id, t.path, t.file_size, t.file_mtime FROM tracks t JOIN library_roots r ON r.id=t.root_id '
+          'LEFT JOIN analysis a ON a.track_id=t.id '
+          "WHERE t.presence='present' AND t.read_status='ok' AND r.status<>'offline' "
+          'AND (? OR a.track_id IS NULL OR a.version<>? OR a.file_size<>t.file_size OR a.file_mtime IS NOT t.file_mtime) '
+          'ORDER BY t.id',
+          [force ? 1 : 0, an.version],
+        )
+        .map(
+          (r) => (
+            r['id'] as int,
+            r['path'] as String,
+            r['file_size'] as int,
+            r['file_mtime'] as int?,
+          ),
+        )
+        .where((r) => want == null || want.contains(r.$1))
+        .toList();
+  }
 
   /// The track's genre as the DJ sees it (catalogue, else file tag): the
   /// tempo hint for half/double time.
@@ -273,47 +279,86 @@ class AnalysisStore {
   }
 }
 
+/// How many tracks are decoded at once: one per CPU core, keeping one core
+/// free for the app, at most 6 (each decode holds a few minutes of audio
+/// in memory).
+int analysisWorkers() =>
+    math.max(1, math.min(6, Platform.numberOfProcessors - 1));
+
+/// Decodes and analyses one file on a worker isolate. A top-level function,
+/// so the isolate gets only these plain values (never the database).
+Future<an.Analysis> _analyseOff(
+  String path,
+  double? seconds,
+  String bpmRange,
+  String? genre,
+) => Isolate.run(
+  () =>
+      an.analyseFile(path, seconds: seconds, bpmRange: bpmRange, genre: genre),
+);
+
+/// Analyses [todo] (from [AnalysisStore.pending]) on [workers] cores at
+/// once and stores each result as it arrives. Returns the tracks analysed.
+/// Damaged files are recorded and skipped; they never stop the run.
+Future<List<int>> analyseTracks(
+  AnalysisStore store,
+  List<(int, String, int, int?)> todo,
+  JobProgress p, {
+  int? workers,
+}) async {
+  final cat = store.cat;
+  // Settings → Limits: minutes read per track, or the whole file
+  final minutes = limitOf(cat, 'analysis_minutes');
+  final seconds = minutes == null ? null : minutes * 60.0;
+  // Settings → Library: BPM range (Serato's ranges, or automatic)
+  final range = cat.getSetting('bpm_range');
+  final bpmRange = bpmRanges.containsKey(range) ? range! : 'auto';
+  final done = <int>[];
+  var next = 0;
+  var stop = false;
+  Future<void> worker() async {
+    while (!stop && next < todo.length) {
+      if (await p.checkpoint()) {
+        stop = true;
+        return;
+      }
+      if (next >= todo.length) return;
+      final (id, path, size, mtime) = todo[next++];
+      try {
+        final a = await _analyseOff(path, seconds, bpmRange, store.genreOf(id));
+        store.storeResult(id, size, mtime, a);
+        done.add(id);
+        p.tick();
+      } catch (e) {
+        store.storeError(
+          id,
+          size,
+          mtime,
+          e is Exception ? '$e' : 'analysis failed on this file',
+        );
+        p.tick(ok: false);
+      }
+    }
+  }
+
+  await Future.wait([
+    for (var i = 0; i < (workers ?? analysisWorkers()); i++) worker(),
+  ]);
+  store.rescaleEnergy();
+  return done;
+}
+
 /// The analysis job body: runs in a [JobsController] isolate with its own
-/// connection to the account's catalogue.
+/// connection to the account's catalogue; the audio itself is decoded on
+/// every core at once (see [analyseTracks]).
 JobBody analysisJob(String dbPath, {List<int>? only, bool force = false}) =>
     (ctx) async {
       final cat = Catalogue.open(dbPath);
       try {
         final store = AnalysisStore(cat);
         final todo = store.pending(only: only, force: force);
-        // Settings → Limits: minutes read per track, or the whole file
-        final minutes = limitOf(cat, 'analysis_minutes');
-        // Settings → Library: BPM range (Serato's ranges, or automatic)
-        final range = cat.getSetting('bpm_range');
-        final bpmRange = bpmRanges.containsKey(range) ? range : 'auto';
         ctx.total = todo.length;
-        for (final (id, path, size, mtime) in todo) {
-          if (await ctx.checkpoint()) break;
-          try {
-            store.storeResult(
-              id,
-              size,
-              mtime,
-              an.analyseFile(
-                path,
-                seconds: minutes == null ? null : minutes * 60.0,
-                bpmRange: bpmRange,
-                genre: store.genreOf(id),
-              ),
-            );
-            ctx.tick();
-          } catch (e) {
-            // A damaged file is recorded and skipped; it never stops the job.
-            store.storeError(
-              id,
-              size,
-              mtime,
-              e is Exception ? '$e' : 'analysis failed on this file',
-            );
-            ctx.tick(ok: false);
-          }
-        }
-        store.rescaleEnergy();
+        await analyseTracks(store, todo, ctx);
       } finally {
         cat.close();
       }
