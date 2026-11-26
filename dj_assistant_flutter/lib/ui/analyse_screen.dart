@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/analyse_job.dart';
 import 'format.dart';
-import 'hubs.dart';
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -164,7 +163,6 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
     ref.watch(versionProvider);
     final t = DjTokens.of(context);
     final text = Theme.of(context).textTheme;
-    final nav = ref.read(viewProvider.notifier);
     final job = s.jobs.status('online');
     final live = job.state == 'running' || job.state == 'paused';
     final report = lastAnalyseReport(s.cat);
@@ -228,13 +226,6 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
               icon: const Icon(Icons.stop),
               label: const Text('Stop'),
             ),
-          DjLink(
-            label: 'See every change',
-            icon: Icons.history,
-            color: hubs[1].color(context),
-            hint: tabOf('suggestions')!.hint,
-            onTap: () => nav.go('suggestions'),
-          ),
         ],
       ),
     );

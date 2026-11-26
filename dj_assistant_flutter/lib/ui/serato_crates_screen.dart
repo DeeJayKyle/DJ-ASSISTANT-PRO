@@ -180,19 +180,6 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
     setState(() => _open = null);
   }
 
-  Future<void> _deleteAll(int n) async {
-    final ok = await confirm(
-      context,
-      title: 'Delete all $n Serato crates?',
-      message: 'Every crate in this _Serato_ folder is deleted. Your music files and Serato\'s library stay.',
-      ok: 'Delete all',
-      danger: true,
-    );
-    if (!ok) return;
-    await _change('Deleted every Serato crate.', (lib) => lib.deleteAll());
-    setState(() => _open = null);
-  }
-
   Future<void> _newCrate() async {
     final n = await askText(
       context,
@@ -208,7 +195,7 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
     final s = ref.read(sessionProvider);
     await guard(
       () => s.serato.importCrates(lib.dir),
-      done: 'Copied into the Crate builder, where rules and templates can reshape them.',
+      done: 'Copied to Smart crates, where rules can reshape them.',
       bump: ref,
     );
   }
@@ -245,7 +232,8 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
       all = const [];
       error = '$e';
     }
-    final open = all.where((c) => c.name == _open).firstOrNull;
+    final open =
+        all.where((c) => c.name == _open).firstOrNull ?? all.firstOrNull;
     bool hidden(SeratoCrate c) {
       for (var i = 1; i < c.parts.length; i++) {
         if (_collapsed.contains(c.parts.sublist(0, i).join('%%'))) return true;
@@ -296,12 +284,7 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
           OutlinedButton.icon(
             onPressed: all.isEmpty ? null : () => _import(lib),
             icon: const Icon(Icons.download_outlined, size: 18),
-            label: const Text('Copy into Crate builder'),
-          ),
-          TextButton.icon(
-            onPressed: all.isEmpty ? null : () => _deleteAll(all.length),
-            icon: Icon(Icons.delete_sweep_outlined, size: 18, color: t.danger),
-            label: Text('Delete all', style: TextStyle(color: t.danger)),
+            label: const Text('Copy to Smart crates'),
           ),
         ],
       ),
@@ -317,7 +300,9 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
                   if (!hidden(c))
                     ListTile(
                       dense: true,
-                      selected: c.name == _open,
+                      visualDensity: const VisualDensity(vertical: -3),
+                      minLeadingWidth: 24,
+                      selected: c.name == open?.name,
                       contentPadding: EdgeInsets.only(left: 14.0 * c.depth),
                       leading: all.any((x) => x.parent == c.name)
                           ? IconButton(

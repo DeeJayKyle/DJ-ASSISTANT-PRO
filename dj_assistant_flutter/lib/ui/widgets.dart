@@ -58,35 +58,9 @@ class _PageFrameState extends State<PageFrame> {
                 child: Text(title, style: text.headlineSmall),
               )
             else
-              Tooltip(
-                message: hub.hub.hint,
-                waitDuration: const Duration(milliseconds: 350),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(Space.x2),
-                      decoration: BoxDecoration(
-                        color: t.tint(hub.hub.color(context), 0.18),
-                        borderRadius: Radii.medium,
-                      ),
-                      child: Icon(
-                        hub.hub.icon,
-                        size: IconSizes.lg,
-                        color: hub.hub.color(context),
-                      ),
-                    ),
-                    const SizedBox(width: Space.x3),
-                    Semantics(
-                      header: true,
-                      child: Text(hub.hub.label, style: text.headlineSmall),
-                    ),
-                  ],
-                ),
-              ),
-            if (hub != null) ...[
-              const SizedBox(height: Space.x3),
+              // the sidebar already names the hub: its tabs are the header
               HubTabs(scope: hub),
+            if (hub != null) ...[
               if (!(tab?.repeats(title) ?? false)) ...[
                 const SizedBox(height: Space.x3),
                 Text(title, style: text.titleMedium),
@@ -95,10 +69,6 @@ class _PageFrameState extends State<PageFrame> {
             if (subtitle != null) ...[
               const SizedBox(height: Space.x1),
               Text(subtitle, style: text.bodyMedium?.copyWith(color: t.faint)),
-            ],
-            if (hub != null) ...[
-              const SizedBox(height: Space.x2),
-              RelatedLinks(scope: hub),
             ],
           ],
         );

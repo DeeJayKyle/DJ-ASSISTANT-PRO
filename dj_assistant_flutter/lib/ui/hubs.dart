@@ -90,12 +90,20 @@ const hubs = <Hub>[
         related: ['crates', 'backups'],
       ),
       HubTab(
+        'templates',
+        'Templates',
+        Icons.account_tree_outlined,
+        pageTitle: 'Crate templates',
+        hint:
+            'Auto-organise: nested crates by genre, decade, energy, BPM, key… '
+            'sorted harmonically and written into Serato.',
+      ),
+      HubTab(
         'crates',
-        'Smart crates & templates',
+        'Smart crates',
         Icons.rule_folder_outlined,
         pageTitle: 'Virtual Crates',
-        hint: 'Rule-based smart crates and nested templates, written into Serato.',
-        related: ['serato', 'library'],
+        hint: 'Rule-based smart crates and hand-picked crates, saved into Serato.',
       ),
     ],
   ),
@@ -145,7 +153,7 @@ const hubs = <Hub>[
       ),
       HubTab(
         'activity',
-        'Sources & scans',
+        'Sources',
         Icons.refresh,
         pageTitle: 'Scan Activity',
         hint: 'Add music folders and scan them. New songs are tagged automatically.',
@@ -312,38 +320,6 @@ class HubTabs extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// "See also": links to the pages related to the open tab.
-class RelatedLinks extends StatelessWidget {
-  const RelatedLinks({super.key, required this.scope});
-  final HubScope scope;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = DjTokens.of(context);
-    final tab = tabOf(scope.current);
-    if (tab == null || tab.related.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: Space.x3,
-      runSpacing: Space.x1,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text(
-          'See also',
-          style: TextStyle(color: t.faint, fontSize: DjType.small),
-        ),
-        for (final id in tab.related)
-          if (tabOf(id) case final x?)
-            DjLink(
-              label: x.label,
-              hint: x.hint,
-              color: hubOf(id)?.color(context),
-              onTap: () => scope.onSelect(id),
-            ),
-      ],
     );
   }
 }

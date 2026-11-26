@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/crate_tree.dart';
+import '../core/serato_sync.dart';
 import 'format.dart';
 import 'hubs.dart';
-import 'shortcuts_sheet.dart';
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -27,7 +28,6 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(sessionProvider);
     final stats = ref.watch(statsProvider);
-    final crates = ref.watch(cratesProvider).where((c) => c.kind != 'folder');
     final online = ref.watch(onlineOnProvider);
     final t = DjTokens.of(context);
     final nav = ref.read(viewProvider.notifier);
@@ -58,23 +58,43 @@ class HomeScreen extends ConsumerWidget {
       // unreadable folder: shown as none
     }
 
+    final backups = s.seratoBackups.list();
+    final lastBackup = backups.isEmpty ? null : backups.first;
+    final waiting = seratoSyncQueued(s.cat);
+    final templates = savedTreeTemplates(s.cat);
+    final settingsHub = hubs[2];
+
     final tiles = <BentoTile>[
       BentoTile(
         span: 2,
+        color: cr.color(context),
+        icon: Icons.album_outlined,
+        title: 'Serato crates',
+        hint: tabOf('serato')!.hint,
+        onOpen: () => nav.go('serato'),
+        value: fmtNumber(seratoCrates),
+        caption: serato == null
+            ? 'No _Serato_ folder found yet. Choose it in Settings.'
+            : 'crates in ${serato.dir}',
+        links: [
+          page('templates', label: 'Auto-organise with a template'),
+          page('crates', label: 'Smart crates'),
+        ],
+      ),
+      BentoTile(
+        span: 2,
         color: lib.color(context),
-        icon: lib.icon,
-        title: 'Your library',
-        hint: lib.hint,
+        icon: Icons.library_music_outlined,
+        title: 'Library',
+        hint: tabOf('library')!.hint,
         onOpen: () => nav.go('library'),
         value: fmtNumber(tracks),
         caption: tracks == 0
             ? 'No tracks yet. Add a music folder to start.'
             : '${fmtLongDuration(stats['total_duration_ms'] ?? 0)} of music · '
                   '${fmtBytes(stats['total_bytes'])} · '
-                  '${stats['roots'] ?? 0} '
-                  '${stats['roots'] == 1 ? 'folder' : 'folders'}',
+                  '${plural(stats['roots'] ?? 0, 'folder')}',
         links: [
-          page('library', label: 'Browse tracks'),
           if ((stats['roots'] ?? 0) == 0)
             page('activity', label: 'Add a music folder')
           else
@@ -90,118 +110,48 @@ class HomeScreen extends ConsumerWidget {
         value: '${(pct * 100).round()}%',
         caption:
             '${fmtNumber(checked)} of ${fmtNumber(tracks)} checked online · '
-            '${online.isEmpty ? 'no analysers on' : '${online.length} analyser(s) on'}',
+            '${online.isEmpty ? 'no analysers on' : '${plural(online.length, 'analyser')} on'}',
         progress: pct,
-        links: [
-          page('analyse', label: 'Analyse'),
-          page('suggestions', label: 'See changes'),
-        ],
+        links: [page('suggestions', label: 'Changes')],
       ),
       BentoTile(
         color: problems > 0 ? t.warn : t.ok,
         icon: Icons.favorite_outline,
-        title: 'Library health',
+        title: 'Health',
         hint: tabOf('health')!.hint,
         onOpen: () => nav.go('health'),
         value: fmtNumber(problems),
         caption: problems == 0
             ? 'No problems found.'
             : '${stats['missing'] ?? 0} missing · ${stats['errors'] ?? 0} unreadable',
-        links: [page('health', label: 'Open Health')],
-      ),
-      BentoTile(
-        span: 2,
-        color: cr.color(context),
-        icon: Icons.album_outlined,
-        title: 'Serato crates',
-        hint: tabOf('serato')!.hint,
-        onOpen: () => nav.go('serato'),
-        value: fmtNumber(seratoCrates),
-        caption: serato == null
-            ? 'No _Serato_ folder found yet.'
-            : 'crates in ${serato.dir}',
-        links: [
-          page('serato', label: 'Reorganise Serato crates'),
-          page('crates', label: 'Build a new crate'),
-        ],
       ),
       BentoTile(
         color: cr.color(context),
-        icon: cr.icon,
-        title: 'Crate builder',
-        hint: tabOf('crates')!.hint,
-        onOpen: () => nav.go('crates'),
-        value: fmtNumber(crates.length),
-        caption: crates.isEmpty
-            ? 'No crates yet. Start from a template.'
-            : 'crates ready to save to Serato',
-        links: [
-          for (final c in crates.take(3))
-            BentoLink(
-              c.name,
-              () => nav.go('crate', crateId: c.id),
-              hint:
-                  '${c.smart ? 'Smart' : 'Manual'} crate · '
-                  '${c.trackCount} tracks',
-              icon: Icons.inventory_2_outlined,
-              color: cr.color(context),
-            ),
-          page(
-            'crates',
-            label: crates.isEmpty ? 'Create a crate' : 'All crates',
-          ),
-        ],
+        icon: Icons.account_tree_outlined,
+        title: 'Templates',
+        hint: tabOf('templates')!.hint,
+        onOpen: () => nav.go('templates'),
+        value: fmtNumber(templates.length),
+        caption: templates.isEmpty
+            ? 'Genre → Decade → Energy and more, written into Serato.'
+            : templates.keys.take(3).join(' · '),
       ),
       BentoTile(
-        span: 2,
-        color: homeColor(context),
-        icon: Icons.keyboard_outlined,
-        title: 'Keyboard & mouse',
-        hint: 'Every shortcut is listed under F1.',
-        onOpen: () => showShortcuts(context),
-        lines: const [
-          ('Ctrl+0 · Ctrl+1…3', 'Home · Library, Analysis, Crates'),
-          ('Ctrl+Tab · Ctrl+Shift+Tab', 'Next or previous tab'),
-          ('Ctrl+K', 'Go to any page by name'),
-          ('Alt+← / → · mouse side buttons', 'Back and forward'),
-          ('Mouse wheel over tabs', 'Switch tabs'),
-          ('Right-click a tile', 'Its links as a menu'),
-        ],
-        links: [
-          BentoLink(
-            'All shortcuts (F1)',
-            () => showShortcuts(context),
-            icon: Icons.keyboard,
-            color: homeColor(context),
-          ),
-        ],
-      ),
-      BentoTile(
-        color: homeColor(context),
-        icon: Icons.settings_outlined,
-        title: 'Settings',
-        hint: 'Look, library, Serato folder, writing to files, reset.',
-        onOpen: () => nav.go('settings'),
-        value: '${online.length}',
-        caption: online.isEmpty
-            ? 'online analysers on (all off)'
-            : 'online: ${online.join(', ')}',
-        links: [
-          BentoLink(
-            'Open Settings',
-            () => nav.go('settings'),
-            icon: Icons.settings_outlined,
-            color: homeColor(context),
-            hint: 'Ctrl+,',
-          ),
-        ],
+        color: settingsHub.color(context),
+        icon: Icons.archive_outlined,
+        title: 'Serato backups',
+        hint: tabOf('backups')!.hint,
+        onOpen: () => nav.go('backups'),
+        value: fmtNumber(backups.length),
+        caption: lastBackup == null
+            ? 'Made automatically before every change to Serato.'
+            : 'latest ${fmtDateTime(lastBackup.at.millisecondsSinceEpoch)}'
+                  '${waiting > 0 ? ' · ${plural(waiting, 'track')} wait for Serato to close' : ''}',
       ),
     ];
 
     return PageFrame(
       title: 'Home',
-      subtitle:
-          'Everything at a glance. Click any tile or link; hover for a hint.',
       child: BentoGrid(tiles: tiles),
     );
   }
@@ -339,17 +289,11 @@ class _BentoTileState extends State<BentoTile> {
         child: Material(
           color: Colors.transparent,
           child: Ink(
+            // a dark deck-style panel; the colour is only an accent
             decoration: BoxDecoration(
               borderRadius: Radii.large,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color.alphaBlend(t.tint(c, _hover ? 0.26 : 0.20), t.panel),
-                  Color.alphaBlend(t.tint(c, 0.05), t.panel),
-                ],
-              ),
-              border: Border.all(color: t.tint(c, _hover ? 0.70 : 0.35)),
+              color: _hover ? t.panel2 : t.panel,
+              border: Border.all(color: _hover ? t.tint(c, 0.55) : t.line),
             ),
             child: InkWell(
               borderRadius: Radii.large,
@@ -363,12 +307,21 @@ class _BentoTileState extends State<BentoTile> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Container(
+                        width: 28,
+                        height: 3,
+                        margin: const EdgeInsets.only(bottom: Space.x3),
+                        decoration: BoxDecoration(
+                          color: c,
+                          borderRadius: Radii.small,
+                        ),
+                      ),
                       Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(Space.x2),
                             decoration: BoxDecoration(
-                              color: t.tint(c, 0.22),
+                              color: t.tint(c, 0.14),
                               borderRadius: Radii.medium,
                             ),
                             child: Icon(w.icon, size: IconSizes.lg, color: c),
@@ -376,9 +329,11 @@ class _BentoTileState extends State<BentoTile> {
                           const SizedBox(width: Space.x3),
                           Expanded(
                             child: Text(
-                              w.title,
-                              style: text.titleMedium?.copyWith(
+                              w.title.toUpperCase(),
+                              style: text.labelLarge?.copyWith(
                                 fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: t.muted,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),

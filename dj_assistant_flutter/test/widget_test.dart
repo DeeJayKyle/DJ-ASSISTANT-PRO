@@ -66,7 +66,7 @@ void main() {
     ]) {
       expect(find.text(x), findsWidgets, reason: x);
     }
-    expect(find.text('Your library'), findsOneWidget);
+    expect(find.text('LIBRARY'), findsOneWidget);
     expect(find.text('DJ Decks'), findsNothing);
     await tester.ensureVisible(find.text('Backups & Settings').first);
     await tester.tap(find.text('Backups & Settings').first);
@@ -80,7 +80,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
-    expect(find.text('See also'), findsWidgets);
+    expect(find.text('Write to Serato'), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);
     await closeApp(tester, accounts);
   });

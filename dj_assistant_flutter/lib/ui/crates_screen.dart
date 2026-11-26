@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/crates.dart' hide crateColors;
-import '../core/templates.dart' show crateTemplates;
 import 'format.dart';
 import 'rules_ui.dart';
 import 'state.dart';
@@ -16,8 +15,6 @@ class CratesScreen extends ConsumerStatefulWidget {
 }
 
 class _CratesScreenState extends ConsumerState<CratesScreen> {
-  final genre = TextEditingController(text: 'Afrobeats');
-
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(sessionProvider);
@@ -25,22 +22,11 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
     final t = DjTokens.of(context);
     final crates = ref.watch(cratesProvider);
     final labels = s.templates.labels();
-    final hyg = s.templates.hygiene();
-    final issues = (hyg['issues'] as List?)?.cast<Map>() ?? const [];
-    final untagged = hyg['untagged_unrated'] as int? ?? 0;
     final top = crates.where((c) => c.parentId == null).toList();
     return PageFrame(
       title: 'Virtual Crates',
-      subtitle: 'Build crates by hand, by rules or from templates, then save them into Serato. Files are never copied or moved.',
+      subtitle: 'Crates built by hand or by rules, then saved into Serato. Files are never copied or moved.',
       actions: [
-        OutlinedButton.icon(
-          onPressed: () => guard(() {
-            final n = s.templates.colourByEnergy();
-            toast('Coloured ${plural(n, 'track')} by energy.');
-          }, bump: ref),
-          icon: const Icon(Icons.palette_outlined, size: 18),
-          label: const Text('Colour tracks by energy'),
-        ),
         OutlinedButton.icon(
           onPressed: () => showExportCrates(context, ref),
           icon: const Icon(Icons.album_outlined, size: 18),
@@ -55,94 +41,6 @@ class _CratesScreenState extends ConsumerState<CratesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (issues.isNotEmpty || untagged > 0) ...[
-            Card(
-              color: t.warn.withValues(alpha: 0.08),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Avoid this: unorganised crates mean missed moments.',
-                      style: TextStyle(
-                        color: t.warn,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    for (final i in issues)
-                      Text('“${i['crate']}” — ${i['issue']}. ${i['advice']}'),
-                    if (untagged > 0)
-                      Text(
-                        '${plural(untagged, 'track')} have no tags or rating yet.',
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            gap,
-          ],
-          Text(
-            'Start from a template',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 10),
-          AutoGrid(
-            minWidth: 300,
-            children: [
-              for (final tp in crateTemplates())
-                SizedBox(
-                  width: 300,
-                  child: Panel(
-                    title: tp.name,
-                    subtitle: tp.description,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final c in tp.crates.take(10))
-                          Text(
-                            '• $c',
-                            style: TextStyle(
-                              color: t.muted,
-                              fontSize: DjType.small,
-                            ),
-                          ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            if (tp.needsGenre)
-                              Expanded(
-                                child: TextField(
-                                  controller: genre,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Genre',
-                                  ),
-                                ),
-                              ),
-                            if (tp.needsGenre) const SizedBox(width: 8),
-                            FilledButton.tonal(
-                              onPressed: () => guard(() {
-                                final r = s.templates.apply(
-                                  tp.id,
-                                  genre: tp.needsGenre ? genre.text : null,
-                                );
-                                toast(
-                                  (r['created'] as int) > 0
-                                      ? 'Added ${plural(r['created']! as int, 'crate')} under “${r['parent']}”.'
-                                      : '“${r['parent']}” already has these crates.',
-                                );
-                              }, bump: ref),
-                              child: const Text('Add crates'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          gap,
           Wrap(
             spacing: 16,
             runSpacing: 16,

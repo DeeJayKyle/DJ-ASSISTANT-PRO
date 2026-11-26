@@ -98,7 +98,9 @@ class BackupsScreen extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.archive_outlined, color: t.accent),
                       title: Text(
-                        b.reason.isEmpty ? 'Backup' : b.reason,
+                        b.reason.isEmpty
+                            ? 'Backup'
+                            : b.reason.replaceAll('%%', ' › '),
                         overflow: TextOverflow.ellipsis,
                       ),
                       subtitle: Text(

@@ -11,7 +11,6 @@ import '../core/accounts.dart';
 import '../core/crates.dart';
 import '../core/jobs.dart';
 import '../online/http_online.dart' show appVersion;
-import 'crates_screen.dart';
 import 'format.dart';
 import 'screens.dart';
 import 'shortcuts_sheet.dart';
@@ -521,24 +520,18 @@ class _TitleBar extends ConsumerWidget {
 class _Sidebar extends ConsumerStatefulWidget {
   const _Sidebar({this.rail = false});
 
-  /// Icons only (compact windows): crates and sources are one click away on
-  /// the Virtual Crates and Scan Activity pages.
+  /// Icons only (compact windows): Home and the three hubs.
   final bool rail;
   @override
   ConsumerState<_Sidebar> createState() => _SidebarState();
 }
 
 class _SidebarState extends ConsumerState<_Sidebar> {
-  final open = <int>{};
-  bool sources = true;
-
   @override
   Widget build(BuildContext context) {
-    final t = DjTokens.of(context);
     final view = ref.watch(viewProvider);
     final stats = ref.watch(statsProvider);
     final crates = ref.watch(cratesProvider);
-    final roots = ref.watch(rootsProvider);
     final pending = ref.watch(pendingSuggestionsProvider);
     final problems =
         (stats['errors'] ?? 0) +
@@ -577,75 +570,6 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       );
     }
 
-    Widget section(String label, {Widget? trailing}) => widget.rail
-        ? const Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: Space.x4,
-              vertical: Space.x2,
-            ),
-            child: Divider(),
-          )
-        : Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 10, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: DjType.caption,
-                      letterSpacing: 1.2,
-                      color: t.faint,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ?trailing,
-              ],
-            ),
-          );
-
-    List<Widget> tree(int? parent, int depth) => [
-      for (final c in crates.where((c) => c.parentId == parent)) ...[
-        ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: EdgeInsets.only(left: 18.0 + depth * 14, right: 10),
-          selected: view.id == 'crate' && view.crateId == c.id,
-          selectedColor: t.accent,
-          leading: crates.any((k) => k.parentId == c.id)
-              ? InkWell(
-                  onTap: () => setState(
-                    () => open.contains(c.id)
-                        ? open.remove(c.id)
-                        : open.add(c.id),
-                  ),
-                  child: Icon(
-                    open.contains(c.id)
-                        ? Icons.expand_more
-                        : Icons.chevron_right,
-                    size: 18,
-                  ),
-                )
-              : (c.color != null
-                    ? ColorDot(c.color)
-                    : const Icon(Icons.inventory_2_outlined, size: 16)),
-          minLeadingWidth: 18,
-          title: Text(c.name, overflow: TextOverflow.ellipsis),
-          subtitle: c.smart
-              ? const Text('smart', style: TextStyle(fontSize: DjType.caption))
-              : null,
-          trailing: Text(
-            c.trackCount == 0 ? '' : '${c.trackCount}',
-            style: TextStyle(fontSize: DjType.caption, color: t.faint),
-          ),
-          onTap: () =>
-              ref.read(viewProvider.notifier).go('crate', crateId: c.id),
-        ),
-        if (open.contains(c.id)) ...tree(c.id, depth + 1),
-      ],
-    ];
-
     if (widget.rail) {
       return SizedBox(
         width: 64,
@@ -659,67 +583,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       width: 232,
       child: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 8),
-        children: [
-          homeItem,
-          for (final h in hubs) hubItem(h),
-          section(
-            'My crates',
-            trailing: IconButton(
-              tooltip: 'New crate',
-              iconSize: 18,
-              onPressed: () => showCrateDialog(context, ref),
-              icon: const Icon(Icons.add),
-            ),
-          ),
-          if (crates.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Text(
-                'No crates yet. Try a template under Virtual Crates.',
-                style: TextStyle(fontSize: DjType.small, color: t.faint),
-              ),
-            ),
-          ...tree(null, 0),
-          section(
-            'Sources',
-            trailing: IconButton(
-              iconSize: 18,
-              onPressed: () => setState(() => sources = !sources),
-              icon: Icon(sources ? Icons.expand_more : Icons.chevron_right),
-            ),
-          ),
-          if (sources)
-            for (final r in roots)
-              ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-                selected: view.id == 'root' && view.rootId == r.id,
-                leading: const Icon(Icons.storage_outlined, size: 18),
-                minLeadingWidth: 18,
-                title: Tooltip(
-                  message: r.path,
-                  child: Text(
-                    r.label ?? r.path,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                trailing: Icon(
-                  Icons.circle,
-                  size: 9,
-                  color: r.status == 'offline' ? t.warn : t.ok,
-                ),
-                onTap: () =>
-                    ref.read(viewProvider.notifier).go('root', rootId: r.id),
-              ),
-          if (sources && roots.isEmpty)
-            ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-              leading: const Icon(Icons.add, size: 16),
-              title: const Text('Add a music folder'),
-              onTap: () => ref.read(viewProvider.notifier).go('activity'),
-            ),
-        ],
+        children: [homeItem, for (final h in hubs) hubItem(h)],
       ),
     );
   }

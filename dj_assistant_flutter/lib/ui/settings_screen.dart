@@ -93,14 +93,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('camelot', 'Camelot (8A)'),
                   ('musical', 'Musical (Am)'),
                 ]),
-                choice('surface', 'Panels', [
-                  ('glass', 'Glass'),
-                  ('solid', 'Solid'),
-                ]),
-                choice('motion', 'Motion', [
-                  ('full', 'Full'),
-                  ('reduced', 'Reduced'),
-                ]),
                 choice('accent', 'Accent', [
                   ('mint', 'Mint'),
                   ('cyan', 'Cyan'),
@@ -108,7 +100,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('amber', 'Amber'),
                   ('rose', 'Rose'),
                 ]),
-                sw('premium_ui', 'Premium UI (Midnight Pro look)'),
               ],
             ),
           ),
@@ -121,11 +112,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'auto_prep',
                   'Analyse new songs automatically',
                   sub: 'After every scan, new songs get their artist and title from the file name if missing, BPM and key from Serato, then genre, year, album and label from the online analysers (majority wins), written into the files.',
-                ),
-                sw(
-                  'watch_enabled',
-                  'Folder watcher',
-                  sub: 'Notices new music in your folders and scans it.',
                 ),
                 Align(
                   alignment: Alignment.centerLeft,

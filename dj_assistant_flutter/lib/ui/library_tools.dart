@@ -173,8 +173,8 @@ class ActivityScreen extends ConsumerWidget {
           ),
           gap,
           Panel(
-            title: 'Energy analysis',
-            subtitle: 'Energy (1–10) and loudness measured on this computer. BPM and key come from Serato (Analysis → Analyse). Files are only read.',
+            title: 'Audio analysis',
+            subtitle: 'Energy (1–10) and loudness, plus BPM and key for tracks Serato has not analysed, measured on this computer. Start it from the Analyse tab.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -224,31 +224,10 @@ class ActivityScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                ] else
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      FilledButton(
-                        onPressed: () => guard(
-                          () => s.startAnalysis(),
-                          done: 'Measuring energy. Files are only read.',
-                          bump: ref,
-                        ),
-                        child: const Text('Analyse new tracks'),
-                      ),
-                      OutlinedButton(
-                        onPressed: () => guard(
-                          () => s.startAnalysis(force: true),
-                          done: 'Re-checking every track.',
-                          bump: ref,
-                        ),
-                        child: const Text('Re-check library'),
-                      ),
-                    ],
-                  ),
+                ],
                 const SizedBox(height: 6),
                 HintText(
-                  'Ogg Vorbis and Opus files are decoded by Windows when Microsoft\'s free Web Media Extensions are installed (Microsoft Store); without them they are catalogued and tagged but not analysed (method ${summary['method']} v${summary['version']}).',
+                  'Ogg and Opus files need Microsoft\'s free Web Media Extensions to be analysed (method ${summary['method']} v${summary['version']}).',
                 ),
               ],
             ),
@@ -774,12 +753,6 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
     return PageFrame(
       title: 'Changes',
       subtitle: 'Every change the analysers made to your tracks, with the sources that agreed. Undo puts the old value back, in the files too.',
-      actions: [
-        FilledButton.tonal(
-          onPressed: () => ref.read(viewProvider.notifier).go('analyse'),
-          child: const Text('Analyse'),
-        ),
-      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -920,8 +893,8 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
           if (list.isEmpty)
             EmptyState(
               icon: Icons.auto_fix_high_outlined,
-              title: status == 'pending' ? 'Nothing to review' : 'Nothing here',
-              message: 'Find suggestions from file names and folders, or turn on an online service in Settings.',
+              title: status == 'pending' ? 'Nothing waiting' : 'No changes yet',
+              message: 'Press Analyse to look your tracks up online. Every change it makes is listed here.',
             ),
           for (final x in list)
             Card(

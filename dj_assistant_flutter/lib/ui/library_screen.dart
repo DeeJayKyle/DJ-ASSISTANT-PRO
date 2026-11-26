@@ -447,7 +447,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         : root != null
         ? '${root.path} · ${root.status == 'offline' ? 'offline' : 'online'}'
         : 'Your local DJ music collection for Serato DJ';
-    final scanning = s.lastScan?.state == 'running';
     final activeRules =
         countRules(cleanRuleSet(base.filters)) +
         _quick.values.whereType<QuickOption>().length;
@@ -551,23 +550,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   onPressed: () => showCrateDialog(context, ref, crate: crate),
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: const Text('Edit crate'),
-                )
-              else
-                OutlinedButton.icon(
-                  onPressed: () => addMusicFolders(ref),
-                  icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-                  label: const Text('Add folder…'),
                 ),
-              FilledButton.icon(
-                onPressed: scanning
-                    ? null
-                    : () => guard(() {
-                        s.startScan();
-                        ref.read(versionProvider.notifier).bump();
-                      }, done: 'Read-only scan started.'),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: Text(scanning ? 'Scanning…' : 'Scan'),
-              ),
             ],
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
