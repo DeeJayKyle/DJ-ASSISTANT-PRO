@@ -1,3 +1,26 @@
+DJ Assistant 2.6.0
+
+**A Serato crate and metadata organiser**
+- Three hubs: **Serato Crates** (Crates, Templates, Smart crates), **Metadata & Analysis** (Tracks, Analyse, Changes, Health, Sources) and **Backups & Settings**. Home is a clean graphite bento overview.
+- Pages unrelated to crates and metadata are gone, and every action now lives in one place.
+- New app icon.
+
+**Serato crates, safely**
+- Create, rename, move, sort, merge and delete Serato crates and `%%` sub-crates.
+- Nothing is written while Serato DJ Pro or Lite is running.
+- Before every change, a dated ZIP of Serato's Subcrates and database V2 is saved. Backups & Settings → Serato backups restores one.
+
+**Metadata**
+- Analyse uses Serato's BPM and key first, then this computer's detector, plus energy and every online analyser. Discogs is new (needs a free token).
+- The majority answer is written into the files (now with label and Grouping, e.g. "E7 · Uplifting") and into Serato's library, so Serato shows it without a rescan. Every change can be undone.
+
+**Crate templates**
+- Auto-organise the library into nested Serato crates such as Genre → Decade → Energy, filtered by AND / OR rules, each crate sorted harmonically (Camelot key, then BPM).
+- New Event field for tracks.
+
+**Automatic updates**
+- New versions download in the background, are signature-checked, and install when you close the app (or Restart and update in Settings → Updates).
+
 DJ Assistant 2.5.0
 
 **A cleaner app, built around analysis and crates**

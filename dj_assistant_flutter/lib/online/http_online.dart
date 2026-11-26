@@ -9,7 +9,7 @@ import '../core/text.dart';
 import 'online.dart';
 import 'parsers.dart';
 
-const appVersion = '2.5.0';
+const appVersion = '2.6.0';
 const userAgent =
     'DJAssistant/$appVersion ( https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO )';
 
