@@ -32,11 +32,10 @@ class NavPage {
   final IconData icon;
 }
 
-/// Every page, hub by hub, for Go to (Ctrl+K). Ctrl+1…4 opens the hubs.
+/// Every page, hub by hub, for Go to (Ctrl+K). Ctrl+1…3 opens the hubs.
 final allPages = [
   for (final h in hubs)
     for (final x in h.tabs) NavPage(x.id, x.pageTitle ?? x.label, x.icon),
-  const NavPage('settings', 'Settings', Icons.settings_outlined),
 ];
 
 /// Ctrl+K: type part of a page's name and press Enter to go there.
@@ -545,14 +544,6 @@ class _SidebarState extends ConsumerState<_Sidebar> {
         (stats['errors'] ?? 0) +
         (stats['missing'] ?? 0) +
         (stats['low_bitrate'] ?? 0);
-    Widget item(_Nav n, {String? count, bool warn = false}) => _NavItem(
-      nav: n,
-      selected: view.id == n.id,
-      rail: widget.rail,
-      count: count,
-      warn: warn,
-      onTap: () => ref.read(viewProvider.notifier).go(n.id),
-    );
     final here = hubOf(view.id);
     final homeItem = _NavItem(
       nav: const _Nav('home', 'Home', Icons.dashboard_outlined),
@@ -565,9 +556,9 @@ class _SidebarState extends ConsumerState<_Sidebar> {
     // One entry per hub; it opens the hub's first tab.
     Widget hubItem(Hub h) {
       final (count, warn) = switch (h.id) {
-        'hub:library' => (fmtNumber(stats['tracks'] ?? 0), false),
-        'hub:analysis' when pending > 0 => ('$pending', false),
-        'hub:analysis' when problems > 0 => ('$problems', true),
+        'hub:metadata' when pending > 0 => ('$pending', false),
+        'hub:metadata' when problems > 0 => ('$problems', true),
+        'hub:metadata' => (fmtNumber(stats['tracks'] ?? 0), false),
         'hub:crates' when crates.isNotEmpty => ('${crates.length}', false),
         _ => (null, false),
       };
@@ -580,7 +571,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
             '${h.tabs.map((x) => x.label).join(', ')}',
         selected: identical(here, h),
         rail: widget.rail,
-        count: widget.rail && h.id == 'hub:library' ? null : count,
+        count: widget.rail && h.id == 'hub:metadata' ? null : count,
         warn: warn,
         onTap: () => ref.read(viewProvider.notifier).go(h.tabs.first.id),
       );
@@ -663,8 +654,6 @@ class _SidebarState extends ConsumerState<_Sidebar> {
           children: [
             homeItem,
             for (final h in hubs) hubItem(h),
-            section(''),
-            item(const _Nav('settings', 'Settings', Icons.settings_outlined)),
           ],
         ),
       );
@@ -733,8 +722,6 @@ class _SidebarState extends ConsumerState<_Sidebar> {
               title: const Text('Add a music folder'),
               onTap: () => ref.read(viewProvider.notifier).go('activity'),
             ),
-          const Divider(height: 24),
-          item(const _Nav('settings', 'Settings', Icons.settings_outlined)),
         ],
       ),
     );

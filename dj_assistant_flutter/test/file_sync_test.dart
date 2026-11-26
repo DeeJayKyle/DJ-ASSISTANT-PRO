@@ -43,7 +43,8 @@ void main() {
       cat.db.select('SELECT path FROM tracks WHERE id=?', [id]).first['path']
           as String;
 
-  test('off (the default): edits stay in DJ Assistant', () async {
+  test('off: edits stay in DJ Assistant', () async {
+    cat.setSetting(syncSetting, '0');
     final before = hashes(music);
     lib.updateUserFields([idOf('Low Tide.flac')], {'genre': 'Deep House'});
     expect(fileSyncQueued(cat), 0);
@@ -52,7 +53,9 @@ void main() {
   });
 
   test('on: edits are written into MP3 and FLAC tags, safely', () async {
-    cat.setSetting(syncSetting, '1');
+    cat
+      ..setSetting(syncSetting, '1')
+      ..setSetting('write_backups', '1');
     final mp3 = idOf('Lagos Lights - Sunrise Groove.mp3');
     final flac = idOf('Low Tide.flac');
     final others = hashes(music)
@@ -137,6 +140,7 @@ void main() {
   });
 
   test('earlier edits can be written when switching on', () async {
+    cat.setSetting(syncSetting, '0');
     final flac = idOf('Low Tide.flac');
     lib.updateUserFields([flac], {'year': 2021});
     expect(fileSyncQueued(cat), 0, reason: 'off at the time');

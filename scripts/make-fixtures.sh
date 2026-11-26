@@ -3,7 +3,7 @@
 # Every file is a generated sine tone (no copyrighted audio). Tags use
 # invented artist/title names chosen to exercise matching edge cases.
 set -euo pipefail
-OUT="${1:-crates/dj-core/tests/fixtures/library}"
+OUT="${1:-dj_assistant_flutter/test/fixtures/library}"
 rm -rf "$OUT"; mkdir -p "$OUT/Afrobeats" "$OUT/House/Old School" "$OUT/Café Ünïcode" "$OUT/Copies" "$OUT/Broken" "$OUT/Lossless"
 tone() { # dur freq
   echo "-f lavfi -i sine=frequency=$2:duration=$1:sample_rate=44100 -ac 1"
@@ -60,7 +60,7 @@ echo "not music" > "$OUT/Broken/notes.txt"
 echo "Fixtures written to $OUT"; find "$OUT" -type f | sort
 
 # ---- Video fixtures (separate folder so audio tests keep their counts) ----
-VOUT="${2:-crates/dj-core/tests/fixtures/video}"
+VOUT="${2:-dj_assistant_flutter/test/fixtures/video}"
 rm -rf "$VOUT"; mkdir -p "$VOUT/Clips"
 vsrc="-f lavfi -i testsrc2=size=320x180:rate=25:duration=2 -f lavfi -i sine=frequency=440:duration=2:sample_rate=44100"
 ff $vsrc -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -b:a 96k -shortest -metadata artist="Lagos Lights" -metadata title="Sunrise Groove (Official Video)" -metadata genre="Afrobeats" -metadata date="2016" "$VOUT/Clips/Lagos Lights - Sunrise Groove (Video).mp4"

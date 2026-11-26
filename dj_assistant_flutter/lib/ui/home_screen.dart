@@ -43,7 +43,7 @@ class HomeScreen extends ConsumerWidget {
       );
     }
 
-    final lib = hubs[0], ana = hubs[1], cr = hubs[2];
+    final cr = hubs[0], lib = hubs[1], ana = hubs[1];
     final tracks = stats['tracks'] ?? 0;
     final checked = s.cat.db
         .select('SELECT COUNT(*) AS n FROM catalog_checked')

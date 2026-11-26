@@ -44,12 +44,15 @@ void main() {
         );
   }
 
-  test('off by default; preview, apply, verified backup, exact rollback', () {
+  test('off when switched off; preview, apply, verified backup, exact rollback', () {
+    cat.setSetting('sync_to_files', '0');
     expect(
       () => sw.preview([id], {'genre': 'Afro Pop'}),
       throwsA(isA<SafeWriteException>()),
     );
-    cat.setSetting('allow_file_changes', '1');
+    cat
+      ..setSetting('allow_file_changes', '1')
+      ..setSetting('write_backups', '1');
     final original = target.readAsBytesSync();
     final audioBefore = audioHash(target.path, 'mp3');
 

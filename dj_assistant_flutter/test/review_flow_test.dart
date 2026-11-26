@@ -109,7 +109,8 @@ void main() {
     final titlesBefore = {for (final id in tracks) id: title(id)};
     container.read(viewProvider.notifier).go('suggestions');
     await settle(tester);
-    expect(find.text('Suggestions now wait for you'), findsOneWidget);
+    await tester.tap(find.textContaining('Waiting ('));
+    await settle(tester);
 
     await tester.ensureVisible(find.bySemanticsLabel('Select all shown'));
     await settle(tester);
@@ -126,9 +127,9 @@ void main() {
       'you',
     });
 
-    await tester.ensureVisible(find.textContaining('Accepted ('));
+    await tester.ensureVisible(find.textContaining('Applied ('));
     await settle(tester);
-    await tester.tap(find.textContaining('Accepted ('));
+    await tester.tap(find.textContaining('Applied ('));
     await settle(tester);
     expect(find.text('by you'), findsWidgets);
     await tester.ensureVisible(find.bySemanticsLabel('Select all shown'));
@@ -156,9 +157,9 @@ void main() {
     expect(n, greaterThan(0));
     container.read(viewProvider.notifier).go('settings');
     await settle(tester);
-    await tester.ensureVisible(find.text('Undo automatic changes…'));
+    await tester.ensureVisible(find.text('Undo every automatic change…'));
     await settle(tester);
-    await tester.tap(find.text('Undo automatic changes…'));
+    await tester.tap(find.text('Undo every automatic change…'));
     await settle(tester);
     await tester.tap(find.text('Undo them'));
     await settle(tester);

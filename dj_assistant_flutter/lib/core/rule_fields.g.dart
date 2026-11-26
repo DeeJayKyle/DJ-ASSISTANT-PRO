@@ -1,4 +1,4 @@
-// Generated from 1.x crates/dj-core/src/rules.rs FIELD_LIST. Do not edit.
+// Rule fields (originally generated from 1.x rules.rs). Edit by hand.
 
 /// A field usable in filters and smart crates.
 class RuleField {

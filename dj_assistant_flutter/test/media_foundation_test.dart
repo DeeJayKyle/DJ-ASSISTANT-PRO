@@ -10,7 +10,7 @@ import 'package:path/path.dart' as p;
 /// Windows Media Foundation decoding (runs in the Windows CI job and on the DJ's PC).
 void main() {
   final skip = Platform.isWindows ? null : 'Media Foundation is Windows-only';
-  final fixtures = p.join('..', 'crates', 'dj-core', 'tests', 'fixtures');
+  final fixtures = p.join('test', 'fixtures');
 
   (int, int, int, List<double>) decodeAll(PcmReader r) {
     final all = <double>[];

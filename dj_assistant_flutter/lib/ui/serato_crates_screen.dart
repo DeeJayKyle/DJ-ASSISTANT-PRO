@@ -31,20 +31,14 @@ class _SeratoCratesState extends ConsumerState<SeratoCratesScreen> {
     final s = ref.read(sessionProvider);
     final dirs = s.seratoDirs;
     final d = _dir != null && dirs.contains(_dir) ? _dir : dirs.firstOrNull;
-    return d == null ? null : SeratoLibrary(d);
+    return d == null ? null : s.seratoLibraryFor(d);
   }
 
-  /// Runs a change to Serato's crates, refusing while Serato is open.
+  /// Runs a change to Serato's crates (refused while Serato is open, and
+  /// backed up first).
   Future<void> _change(String done, void Function(SeratoLibrary lib) f) async {
     final lib = _lib();
     if (lib == null) return;
-    if (await SeratoLibrary.running()) {
-      toast(
-        'Close Serato DJ first: it rewrites its crates when it quits, which would undo this change.',
-        error: true,
-      );
-      return;
-    }
     await guard(() => f(lib), done: done, bump: ref);
     if (mounted) setState(() {});
   }

@@ -7,6 +7,7 @@ import 'catalogue.dart';
 import 'serato_tags.dart';
 import 'limits.dart';
 import 'jobs.dart';
+import 'suggestions.dart';
 
 /// Stores analysis estimates and runs analysis as a background job (1.x
 /// `analysis_store.rs`). Only the catalogue is written; music files are only read.
@@ -101,6 +102,7 @@ class AnalysisStore {
         a.beatgrid == null ? null : jsonEncode(a.beatgrid!.toJson()),
       ],
     );
+    _suggest(id, a);
   }
 
   /// The best beatgrid for a track: Serato's own (read from the file's tags,
@@ -122,6 +124,65 @@ class AnalysisStore {
       "VALUES (?,?,?,?,?,?,'error',?)",
       [id, an.method, an.version, nowMs(), size, mtime, error],
     );
+  }
+
+  /// BPM and key from this computer fill only what nothing else has given:
+  /// Serato's own analysis (read first) and the file's tags win. Filled
+  /// values are applied at once as automatic changes, so they show under
+  /// Changes, go into the file and Serato, and can be undone.
+  void _suggest(int id, an.Analysis a) {
+    final t = cat.db.select(
+      'SELECT COALESCE(u.bpm, t.bpm_tag) AS bpm, '
+      'COALESCE(u.musical_key, t.key_tag) AS k '
+      'FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id WHERE t.id=?',
+      [id],
+    ).first;
+    final sugg = SuggestionsService(cat);
+    void fill(String field, String value, String evidence, double conf) {
+      insertSuggestion(
+        cat,
+        id,
+        field,
+        null,
+        value,
+        'This computer',
+        evidence,
+        conf,
+      );
+      final r = cat.db.select(
+        "SELECT id FROM suggestions WHERE track_id=? AND field=? AND "
+        "suggested_value=? AND source='This computer' AND status='pending'",
+        [id, field, value],
+      );
+      if (r.isEmpty) return;
+      try {
+        sugg.accept(r.first['id'] as int, by: 'auto');
+      } on Object {
+        // left for the DJ under Changes
+      }
+    }
+
+    final bpm = a.bpm;
+    if (t['bpm'] == null && bpm != null) {
+      final alt = a.bpmAlt == null
+          ? ''
+          : ' It could also be heard as ${a.bpmAlt!.toStringAsFixed(1)} BPM (half/double time).';
+      fill(
+        'bpm',
+        bpm.toStringAsFixed(1),
+        'Serato has not analysed this track; tempo estimated from the audio.$alt',
+        a.bpmConfidence,
+      );
+    }
+    final k = a.key, cam = a.camelot;
+    if (t['k'] == null && k != null && cam != null) {
+      fill(
+        'key',
+        cam,
+        'Serato has not analysed this track; key estimated from the audio: $k ($cam).',
+        a.keyConfidence,
+      );
+    }
   }
 
   /// Scales energy 1–10 against the DJ's own library: half percentile rank, half

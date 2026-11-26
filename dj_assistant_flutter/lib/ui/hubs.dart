@@ -69,15 +69,44 @@ const homeDark = Color(0xFF5EEAD4), homeLight = Color(0xFF0F766E);
 Color homeColor(BuildContext context) =>
     Theme.of(context).brightness == Brightness.light ? homeLight : homeDark;
 
-/// The app's hubs in sidebar order (Ctrl+1…3 opens them).
+/// The app's three hubs in sidebar order (Ctrl+1…3 opens them).
 const hubs = <Hub>[
   Hub(
-    'hub:library',
-    'Library',
-    Icons.library_music_outlined,
-    'Every track you have, where it lives and how it is scanned.',
-    Color(0xFF38BDF8),
-    Color(0xFF0369A1),
+    'hub:crates',
+    'Serato Crates',
+    Icons.album_outlined,
+    'Your Serato crates: tree, editor, smart crates and templates.',
+    Color(0xFFFBBF24),
+    Color(0xFFB45309),
+    [
+      HubTab(
+        'serato',
+        'Crates',
+        Icons.album_outlined,
+        pageTitle: 'Serato crates',
+        hint:
+            'The crates saved in Serato: rename, move, sort, edit and delete '
+            'them. Serato must be closed while you change them.',
+        related: ['crates', 'backups'],
+      ),
+      HubTab(
+        'crates',
+        'Smart crates & templates',
+        Icons.rule_folder_outlined,
+        pageTitle: 'Virtual Crates',
+        hint:
+            'Rule-based smart crates and nested templates, written into Serato.',
+        related: ['serato', 'library'],
+      ),
+    ],
+  ),
+  Hub(
+    'hub:metadata',
+    'Metadata & Analysis',
+    Icons.insights_outlined,
+    'Your tracks, audio analysis and online tag lookup, synced to files and Serato.',
+    Color(0xFFA78BFA),
+    Color(0xFF6D28D9),
     [
       HubTab(
         'library',
@@ -88,30 +117,13 @@ const hubs = <Hub>[
         related: ['analyse', 'serato'],
       ),
       HubTab(
-        'activity',
-        'Sources & scans',
-        Icons.refresh,
-        pageTitle: 'Scan Activity',
-        hint: 'Add music folders and scan them. New songs are tagged automatically.',
-        related: ['analyse', 'health'],
-      ),
-    ],
-  ),
-  Hub(
-    'hub:analysis',
-    'Analysis',
-    Icons.insights_outlined,
-    'BPM and key from Serato; genre, year and tags from online sources.',
-    Color(0xFFA78BFA),
-    Color(0xFF6D28D9),
-    [
-      HubTab(
         'analyse',
         'Analyse',
         Icons.travel_explore_outlined,
         hint:
-            'One button: BPM and key from Serato, then every online analyser '
-            'at once. The majority answer is written into your files.',
+            'One button: BPM and key (Serato first, then this computer), '
+            'energy, and every online analyser at once. The majority answer '
+            'is written into your files and Serato.',
         related: ['suggestions', 'health'],
       ),
       HubTab(
@@ -132,42 +144,50 @@ const hubs = <Hub>[
         hint: 'Tracks missing genre, year, BPM or key, unreadable or missing files.',
         related: ['analyse'],
       ),
+      HubTab(
+        'activity',
+        'Sources & scans',
+        Icons.refresh,
+        pageTitle: 'Scan Activity',
+        hint: 'Add music folders and scan them. New songs are tagged automatically.',
+        related: ['analyse', 'health'],
+      ),
     ],
   ),
   Hub(
-    'hub:crates',
-    'Crates',
-    Icons.inventory_2_outlined,
-    'Your Serato crates: detect, reorganise, edit, delete and build new ones.',
-    Color(0xFFFBBF24),
-    Color(0xFFB45309),
+    'hub:settings',
+    'Backups & Settings',
+    Icons.settings_outlined,
+    'Serato backups, app settings, reset and updates.',
+    Color(0xFF38BDF8),
+    Color(0xFF0369A1),
     [
       HubTab(
-        'serato',
-        'Serato crates',
-        Icons.album_outlined,
-        hint:
-            'The crates saved in Serato: rename, move, sort, edit and delete '
-            'them. Serato must be closed while you change them.',
-        related: ['crates', 'library'],
+        'settings',
+        'Settings',
+        Icons.settings_outlined,
+        hint: 'Appearance, library, Serato folder, file changes, reset. Ctrl+,',
+        related: ['backups'],
       ),
       HubTab(
-        'crates',
-        'Crate builder',
-        Icons.inventory_2_outlined,
-        pageTitle: 'Virtual Crates',
-        hint: 'Manual and smart crates and templates, saved into Serato.',
-        related: ['serato', 'library'],
+        'backups',
+        'Serato backups',
+        Icons.archive_outlined,
+        pageTitle: 'Serato backups',
+        hint:
+            "ZIPs of Serato's crates and library, taken before every change. "
+            'Restore puts one back.',
+        related: ['serato'],
       ),
     ],
   ),
 ];
 
 /// The hub a page belongs to, if any. A crate or a source folder is shown as
-/// part of Crates or Library in the sidebar, but without the hub's tabs.
+/// part of Serato Crates or Metadata & Analysis in the sidebar, but without the hub's tabs.
 Hub? hubOf(String viewId) => switch (viewId) {
-  'crate' => hubs[2],
-  'root' => hubs[0],
+  'crate' => hubs[0],
+  'root' => hubs[1],
   _ => hubs.where((h) => h.owns(viewId)).firstOrNull,
 };
 

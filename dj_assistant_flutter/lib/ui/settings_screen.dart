@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/diag_log.dart';
 import '../core/folders.dart' show openFolder;
 import '../core/file_sync.dart';
-import '../core/serato_library.dart';
 import '../core/updater.dart';
 import '../online/http_online.dart';
 import 'format.dart';
@@ -462,14 +461,10 @@ class ResetPanel extends ConsumerWidget {
               )) {
                 return;
               }
-              if (await SeratoLibrary.running()) {
-                toast('Close Serato DJ first.', error: true);
-                return;
-              }
               await guard(() {
                 var n = 0;
                 for (final d in dirs) {
-                  n += SeratoLibrary(d).deleteAll();
+                  n += s.seratoLibraryFor(d).deleteAll();
                 }
                 toast('Deleted ${plural(n, 'Serato crate')}.');
               }, bump: ref);

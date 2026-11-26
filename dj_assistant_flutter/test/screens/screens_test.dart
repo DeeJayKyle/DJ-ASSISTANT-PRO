@@ -108,7 +108,7 @@ void main() {
     dir = Directory.systemTemp.createTempSync('dja_screens');
     lib = Directory(p.join(dir.path, 'Music'))..createSync();
     final src = Directory(
-      p.join('..', 'crates', 'dj-core', 'tests', 'fixtures', 'library'),
+      p.join('test', 'fixtures', 'library'),
     );
     for (final f in src.listSync(recursive: true).whereType<File>()) {
       final to = File(p.join(lib.path, p.relative(f.path, from: src.path)));

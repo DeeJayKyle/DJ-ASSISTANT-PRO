@@ -39,10 +39,7 @@ void main() {
   test('whole files hash as in 1.x', () {
     for (final e in (golden['files'] as Map).entries) {
       final path = p.join(
-        '..',
-        'crates',
-        'dj-core',
-        'tests',
+        'test',
         'fixtures',
         e.key as String,
       );

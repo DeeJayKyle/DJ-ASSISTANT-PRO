@@ -16,10 +16,7 @@ void parity(String set, String goldenFile) {
   final fixtures = p.normalize(
     p.join(
       Directory.current.path,
-      '..',
-      'crates',
-      'dj-core',
-      'tests',
+      'test',
       'fixtures',
       set,
     ),

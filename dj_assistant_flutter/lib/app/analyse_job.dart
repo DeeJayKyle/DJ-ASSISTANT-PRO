@@ -15,7 +15,8 @@ import '../online/online.dart';
 ///
 /// 1. **Names**: tracks with no artist or title get them from the file name.
 /// 2. **Serato**: BPM and key from Serato DJ's own analysis.
-/// 3. **Energy**: a 1–10 energy score from the audio (switchable).
+/// 3. **This computer**: a 1–10 energy score from the audio (switchable),
+///    and BPM/key for tracks Serato hasn't analysed.
 /// 4. **OneTagger** (when installed and on) works on temporary copies, which
 ///    are deleted afterwards; its findings count as one vote.
 /// 5. **Online analysers**: all of them at once per track; the majority
@@ -62,21 +63,25 @@ List<int> _ids(Catalogue cat, String where) => [
 ];
 
 /// The tracks a run covers.
-List<int> analyseScope(Catalogue cat, String scope, List<int>? chosen) =>
-    switch (scope) {
-      'ids' => [
-        for (final i in _ids(cat, '1')) if (chosen?.contains(i) ?? false) i,
-      ],
-      'all' => _ids(cat, '1'),
-      _ => _ids(
-        cat,
-        't.id NOT IN (SELECT track_id FROM catalog_checked) OR '
-        't.id NOT IN (SELECT track_id FROM analysis) OR '
-        'COALESCE(u.title, t.title) IS NULL OR COALESCE(u.artist, t.artist) IS NULL OR '
-        'COALESCE(u.genre, t.genre) IS NULL OR COALESCE(u.year, t.year) IS NULL OR '
-        'COALESCE(u.bpm, t.bpm_tag) IS NULL OR COALESCE(u.musical_key, t.key_tag) IS NULL',
-      ),
-    };
+List<int> analyseScope(
+  Catalogue cat,
+  String scope,
+  List<int>? chosen,
+) => switch (scope) {
+  'ids' => [
+    for (final i in _ids(cat, '1'))
+      if (chosen?.contains(i) ?? false) i,
+  ],
+  'all' => _ids(cat, '1'),
+  _ => _ids(
+    cat,
+    't.id NOT IN (SELECT track_id FROM catalog_checked) OR '
+    't.id NOT IN (SELECT track_id FROM analysis) OR '
+    'COALESCE(u.title, t.title) IS NULL OR COALESCE(u.artist, t.artist) IS NULL OR '
+    'COALESCE(u.genre, t.genre) IS NULL OR COALESCE(u.year, t.year) IS NULL OR '
+    'COALESCE(u.bpm, t.bpm_tag) IS NULL OR COALESCE(u.musical_key, t.key_tag) IS NULL',
+  ),
+};
 
 /// Fills empty artist and title fields from file names. Returns how many.
 int fillFromNames(Catalogue cat, List<int> ids) {
@@ -119,7 +124,9 @@ JobBody analyseJob(
     if (ids.isEmpty) {
       ctx
         ..message = 'Nothing to do: every track is analysed and tagged.'
-        ..result = {'summary': 'Nothing to do: every track is analysed and tagged.'};
+        ..result = {
+          'summary': 'Nothing to do: every track is analysed and tagged.',
+        };
       return;
     }
 
@@ -143,13 +150,26 @@ JobBody analyseJob(
       '${notInSerato > 0 ? ' ($notInSerato not analysed in Serato yet)' : ''}',
     );
 
-    // 3. energy
-    if (plan.energy && !await ctx.checkpoint()) {
-      final todo = AnalysisStore(cat).pending(only: ids);
+    // 3. this computer: energy, and BPM/key where Serato has none
+    if (!await ctx.checkpoint()) {
+      final noBpmKey = _ids(
+        cat,
+        't.id IN (${ids.join(',')}) AND (COALESCE(u.bpm, t.bpm_tag) IS NULL '
+        'OR COALESCE(u.musical_key, t.key_tag) IS NULL)',
+      );
+      final store = AnalysisStore(cat);
+      final todo = noBpmKey.isEmpty && !plan.energy
+          ? const <(int, String, int, int?)>[]
+          : store.pending(only: plan.energy ? ids : noBpmKey);
       if (todo.isNotEmpty) {
-        ctx.message = 'Measuring energy of ${todo.length} track(s)…';
-        await analysisJob(plan.dbPath, only: ids)(ctx);
-        steps.add('energy for ${todo.length} track(s)');
+        ctx.message = plan.energy
+            ? 'Measuring energy of ${todo.length} track(s)…'
+            : 'Working out BPM and key of ${todo.length} track(s)…';
+        await analysisJob(plan.dbPath, only: [for (final x in todo) x.$1])(ctx);
+        steps.add(
+          '${plan.energy ? 'energy' : 'BPM/key'} for ${todo.length} track(s) '
+          'on this computer',
+        );
       }
     }
 
@@ -219,13 +239,10 @@ JobBody analyseJob(
       final (w, _, f) = await flushFileSync(cat, dataDir: plan.dataDir);
       written = w;
       failed = f;
-      steps.add(
-        'wrote $w file(s)${f > 0 ? ' ($f could not be written)' : ''}',
-      );
+      steps.add('wrote $w file(s)${f > 0 ? ' ($f could not be written)' : ''}');
     }
 
-    final summary =
-        'Analysed ${ids.length} track(s): ${steps.join('; ')}.';
+    final summary = 'Analysed ${ids.length} track(s): ${steps.join('; ')}.';
     final report = {
       'finished_at': nowMs(),
       'tracks': ids.length,

@@ -65,7 +65,10 @@ class DjExportService {
 
   /// Saves the chosen crates (all when null) into [lib]. Crates that only
   /// group sub-crates are created empty so Serato shows the nesting.
-  Map<String, Object?> saveToSerato(SeratoLibrary lib, {List<int>? crateIds}) {
+  Map<String, Object?> saveToSerato(SeratoLibrary lib, {List<int>? crateIds}) =>
+      lib.batch('Save crates from the app', () => _save(lib, crateIds));
+
+  Map<String, Object?> _save(SeratoLibrary lib, List<int>? crateIds) {
     final all = _all();
     final written = <Map<String, Object?>>[];
     var other = 0;

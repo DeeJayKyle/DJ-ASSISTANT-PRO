@@ -14,10 +14,7 @@ import 'package:path/path.dart' as p;
 final fixtures = p.normalize(
   p.join(
     Directory.current.path,
-    '..',
-    'crates',
-    'dj-core',
-    'tests',
+    'test',
     'fixtures',
     'library',
   ),

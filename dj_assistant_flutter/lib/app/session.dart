@@ -18,6 +18,7 @@ import '../core/roots.dart';
 import '../core/safe_write.dart';
 import '../core/scanner.dart';
 import '../core/serato.dart';
+import '../core/serato_backup.dart';
 import '../core/serato_library.dart';
 import '../core/settings.dart';
 import '../core/suggestions.dart';
@@ -88,10 +89,17 @@ class AppSession {
     return SeratoLibrary.find();
   }
 
+  /// ZIP backups taken before every change to Serato's files.
+  late final seratoBackups = SeratoBackups(p.join(dataDir, 'serato_backups'));
+
+  /// [dir] as a Serato library whose changes are checked and backed up.
+  SeratoLibrary seratoLibraryFor(String dir) =>
+      SeratoLibrary(dir, backups: seratoBackups);
+
   /// The `_Serato_` folder crates are managed in (the first one found).
   SeratoLibrary? get seratoLibrary {
     final d = seratoDirs;
-    return d.isEmpty ? null : SeratoLibrary(d.first);
+    return d.isEmpty ? null : seratoLibraryFor(d.first);
   }
 
   /// Starts a background job without waiting for it; errors land in its state.

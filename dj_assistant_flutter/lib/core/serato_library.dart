@@ -8,6 +8,9 @@ import 'keys.dart';
 import 'library.dart';
 import 'library_edit.dart';
 import 'paths.dart';
+import 'serato_backup.dart';
+import 'serato_database.dart';
+import 'serato_guard.dart';
 import 'serato_tags.dart';
 import 'suggestions.dart';
 import 'text.dart';
@@ -126,7 +129,10 @@ Uint8List crateBytes(List<String> paths, {Uint8List? previous}) {
     head
       ..addAll(_chunk('vrsn', _u16be('1.0/Serato ScratchLive Crate')))
       ..addAll(
-        _chunk('osrt', [..._chunk('tvcn', _u16be('song')), ..._chunk('brev', [0])]),
+        _chunk('osrt', [
+          ..._chunk('tvcn', _u16be('song')),
+          ..._chunk('brev', [0]),
+        ]),
       );
     for (final col in ['song', 'artist', 'bpm', 'key', 'length', 'genre']) {
       head.addAll(
@@ -182,10 +188,44 @@ String crateFileName(String part) => part
 // --------------------------------------------------------------- service
 
 class SeratoLibrary {
-  SeratoLibrary(this.dir);
+  SeratoLibrary(this.dir, {this.backups});
 
   /// The `_Serato_` folder.
   final String dir;
+
+  /// Where a ZIP of the crates and library goes before every change (none:
+  /// no backup, used by tests).
+  final SeratoBackups? backups;
+
+  /// Is Serato DJ open? Replaceable in tests.
+  static bool Function() isRunning = seratoRunningNow;
+
+  int _depth = 0;
+
+  /// Every change goes through here: the folder is checked, the change is
+  /// refused while Serato DJ is open (or when that can't be told), and the
+  /// crates and library are backed up first. Nested changes (a [batch])
+  /// are checked and backed up once.
+  T _change<T>(String reason, T Function() f) {
+    if (_depth > 0) return f();
+    _check();
+    if (isRunning()) {
+      _no(
+        'Close Serato DJ first: it rewrites its crates and library when it '
+        'quits, which would undo this change.',
+      );
+    }
+    backups?.create(dir, reason: reason);
+    _depth++;
+    try {
+      return f();
+    } finally {
+      _depth--;
+    }
+  }
+
+  /// Runs several changes with one check and one backup.
+  T batch<T>(String reason, T Function() f) => _change(reason, f);
 
   String get subcrates => p.join(dir, 'Subcrates');
   String get databasePath => p.join(dir, 'database V2');
@@ -223,28 +263,9 @@ class SeratoLibrary {
     return found;
   }
 
-  /// Is Serato DJ running? Crates must not change under it.
-  static Future<bool> running() async {
-    try {
-      if (Platform.isWindows) {
-        final r = await Process.run('tasklist', [
-          '/FI',
-          'IMAGENAME eq Serato*',
-          '/FO',
-          'CSV',
-          '/NH',
-        ]);
-        return '${r.stdout}'.toLowerCase().contains('serato');
-      }
-      if (Platform.isMacOS || Platform.isLinux) {
-        final r = await Process.run('pgrep', ['-if', 'serato dj']);
-        return r.exitCode == 0;
-      }
-    } on Object {
-      // can't tell: assume closed
-    }
-    return false;
-  }
+  /// Is Serato DJ open? Changes are refused while it is. Throws when it
+  /// can't be told.
+  static Future<bool> running() async => isRunning();
 
   void _check() {
     if (p.basename(dir).toLowerCase() != '_serato_') {
@@ -252,7 +273,9 @@ class SeratoLibrary {
         "Choose Serato's _Serato_ folder (in your Music folder, or at the top of an external drive).",
       );
     }
-    if (!Directory(dir).existsSync()) _no("That _Serato_ folder doesn't exist.");
+    if (!Directory(dir).existsSync()) {
+      _no("That _Serato_ folder doesn't exist.");
+    }
   }
 
   String _file(String name) => p.join(subcrates, '$name.crate');
@@ -322,49 +345,56 @@ class SeratoLibrary {
 
   /// Creates (or replaces the tracks of) a crate. Paths are absolute; tracks
   /// on another drive than this `_Serato_` folder are left out and counted.
-  (int, int) save(String name, List<String> absPaths) {
-    _check();
-    final n = _cleanName(name);
-    final rel = <String>[];
-    var other = 0;
-    for (final a in absPaths) {
-      final r = relative(a);
-      if (r == null) {
-        other++;
-      } else if (!rel.contains(r)) {
-        rel.add(r);
-      }
-    }
-    _write(n, rel);
-    return (rel.length, other);
-  }
+  (int, int) save(String name, List<String> absPaths) =>
+      _change('Save crate “$name”', () {
+        _check();
+        final n = _cleanName(name);
+        final rel = <String>[];
+        var other = 0;
+        for (final a in absPaths) {
+          final r = relative(a);
+          if (r == null) {
+            other++;
+          } else if (!rel.contains(r)) {
+            rel.add(r);
+          }
+        }
+        _write(n, rel);
+        return (rel.length, other);
+      });
 
   /// Sets a crate's track list (Serato paths, in order).
-  void setTracks(String name, List<String> seratoPaths) {
-    _check();
-    _write(name, [...{...seratoPaths}]);
-  }
+  void setTracks(String name, List<String> seratoPaths) =>
+      _change('Change crate “$name”', () {
+        _check();
+        _write(name, [
+          ...{...seratoPaths},
+        ]);
+      });
 
   /// Renames a crate and moves its sub-crates with it. [newName] may contain
   /// "%%" to place it under another crate.
-  void rename(String name, String newName) {
-    _check();
-    final to = _cleanName(newName);
-    if (to == name) return;
-    if (to.startsWith('$name%%')) _no("A crate can't go inside itself.");
-    final all = crates();
-    if (all.any((c) => c.name == to)) _no('There is already a crate “$to”.');
-    for (final c in all) {
-      if (c.name != name && !c.name.startsWith('$name%%')) continue;
-      final target = to + c.name.substring(name.length);
-      final f = File(c.file);
-      if (f.existsSync()) {
-        f.renameSync(_file(target));
-      } else {
-        _write(target, const []);
+  void rename(String name, String newName) => _change(
+    'Rename crate “$name”',
+    () {
+      _check();
+      final to = _cleanName(newName);
+      if (to == name) return;
+      if (to.startsWith('$name%%')) _no("A crate can't go inside itself.");
+      final all = crates();
+      if (all.any((c) => c.name == to)) _no('There is already a crate “$to”.');
+      for (final c in all) {
+        if (c.name != name && !c.name.startsWith('$name%%')) continue;
+        final target = to + c.name.substring(name.length);
+        final f = File(c.file);
+        if (f.existsSync()) {
+          f.renameSync(_file(target));
+        } else {
+          _write(target, const []);
+        }
       }
-    }
-  }
+    },
+  );
 
   /// Moves a crate under [parent] (null: to the top level).
   void move(String name, String? parent) {
@@ -373,7 +403,7 @@ class SeratoLibrary {
   }
 
   /// Deletes a crate and its sub-crates. The tracks are not touched.
-  int delete(String name) {
+  int delete(String name) => _change('Delete crate “$name”', () {
     _check();
     var n = 0;
     for (final c in crates()) {
@@ -385,10 +415,10 @@ class SeratoLibrary {
       }
     }
     return n;
-  }
+  });
 
   /// Deletes every crate in this `_Serato_` folder.
-  int deleteAll() {
+  int deleteAll() => _change('Delete every crate', () {
     _check();
     var n = 0;
     final d = Directory(subcrates);
@@ -400,27 +430,28 @@ class SeratoLibrary {
       }
     }
     return n;
-  }
+  });
 
   /// Merges [names] into [into] (created when missing), keeping each track
   /// once. With [removeSources] the merged crates are deleted afterwards.
-  int merge(List<String> names, String into, {bool removeSources = false}) {
-    final all = {for (final c in crates()) c.name: c};
-    final target = _cleanName(into);
-    final paths = <String>[...?all[target]?.paths];
-    for (final n in names) {
-      for (final x in all[n]?.paths ?? const <String>[]) {
-        if (!paths.contains(x)) paths.add(x);
-      }
-    }
-    _write(target, paths);
-    if (removeSources) {
-      for (final n in names) {
-        if (n != target) File(_file(n)).existsSync() ? delete(n) : null;
-      }
-    }
-    return paths.length;
-  }
+  int merge(List<String> names, String into, {bool removeSources = false}) =>
+      _change('Merge crates into “$into”', () {
+        final all = {for (final c in crates()) c.name: c};
+        final target = _cleanName(into);
+        final paths = <String>[...?all[target]?.paths];
+        for (final n in names) {
+          for (final x in all[n]?.paths ?? const <String>[]) {
+            if (!paths.contains(x)) paths.add(x);
+          }
+        }
+        _write(target, paths);
+        if (removeSources) {
+          for (final n in names) {
+            if (n != target) File(_file(n)).existsSync() ? delete(n) : null;
+          }
+        }
+        return paths.length;
+      });
 
   /// Tracks of [name] whose files no longer exist.
   List<String> missing(String name) => [
@@ -429,17 +460,58 @@ class SeratoLibrary {
   ];
 
   /// Removes tracks whose files are gone from a crate. Returns how many.
-  int removeMissing(String name) {
-    final c = crate(name);
-    if (c == null) return 0;
-    final keep = [
-      for (final x in c.paths)
-        if (File(absolute(x)).existsSync()) x,
-    ];
-    final gone = c.paths.length - keep.length;
-    if (gone > 0) _write(name, keep);
-    return gone;
+  int removeMissing(String name) =>
+      _change('Remove missing tracks from “$name”', () {
+        final c = crate(name);
+        if (c == null) return 0;
+        final keep = [
+          for (final x in c.paths)
+            if (File(absolute(x)).existsSync()) x,
+        ];
+        final gone = c.paths.length - keep.length;
+        if (gone > 0) _write(name, keep);
+        return gone;
+      });
+
+  /// Writes [changes] (absolute track path → field → text, fields as in
+  /// [seratoDbFields]) into Serato's library, so Serato shows them without
+  /// a rescan. Tracks Serato doesn't know, or on another drive, are skipped.
+  /// Returns (tracks changed, fields changed).
+  (int, int) updateDatabase(Map<String, Map<String, String>> changes) {
+    final f = File(databasePath);
+    if (!f.existsSync()) return (0, 0);
+    final rel = <String, Map<String, String>>{};
+    for (final e in changes.entries) {
+      final r = relative(e.key);
+      if (r != null && e.value.isNotEmpty) rel[r] = e.value;
+    }
+    if (rel.isEmpty) return (0, 0);
+    final bytes = f.readAsBytesSync();
+    if (bytes.length > _maxFileBytes) {
+      _no("Serato's library is too large to change.");
+    }
+    final up = updateSeratoDatabase(bytes, rel);
+    if (up.fields == 0) return (0, 0);
+    return _change('Update ${up.tracks} track(s) in Serato\'s library', () {
+      // read again under the guard: Serato may have changed it meanwhile
+      final now = updateSeratoDatabase(f.readAsBytesSync(), rel);
+      final tmp = '$databasePath.djassistant-tmp';
+      File(tmp).writeAsBytesSync(now.bytes, flush: true);
+      File(tmp).renameSync(databasePath);
+      return (now.tracks, now.fields);
+    });
   }
+
+  /// Puts a backup's crates and library back. The current state is backed
+  /// up first, so a restore can itself be undone.
+  void restore(SeratoBackup backup) => _change(
+    'Before restoring the backup of ${backup.at.toIso8601String()}',
+    () {
+      final b = backups;
+      if (b == null) _no('Backups are not set up.');
+      b.restoreInto(backup, dir);
+    },
+  );
 
   /// Serato's BPM and key for every track in its library (database V2).
   /// Keys are absolute paths' [pathKey]s.
@@ -563,7 +635,11 @@ int? camelotSortKey(String? key) {
       key ??= kt == null ? null : normalizeKey(kt);
       v = (bpm == null && key == null)
           ? null
-          : SeratoValues(bpm: bpm, key: key, source: v?.source ?? 'Serato tags');
+          : SeratoValues(
+              bpm: bpm,
+              key: key,
+              source: v?.source ?? 'Serato tags',
+            );
     }
     if (v == null) {
       unanalysed++;

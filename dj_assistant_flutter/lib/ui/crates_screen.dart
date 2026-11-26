@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/crates.dart' hide crateColors;
-import '../core/serato_library.dart';
 import '../core/templates.dart' show crateTemplates;
 import 'format.dart';
 import 'rules_ui.dart';
@@ -517,10 +516,6 @@ Future<void> showExportCrates(BuildContext context, WidgetRef ref) async {
             onPressed: lib == null || picked.isEmpty
                 ? null
                 : () async {
-                    if (await SeratoLibrary.running()) {
-                      toast('Close Serato DJ first.', error: true);
-                      return;
-                    }
                     final r = await guard(
                       () => s.djExport.saveToSerato(
                         lib,

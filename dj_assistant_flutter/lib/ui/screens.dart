@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'analyse_screen.dart';
+import 'backups_screen.dart';
 import 'crates_screen.dart';
 import 'home_screen.dart';
 import 'library_screen.dart';
@@ -25,5 +26,6 @@ Widget screenFor(AppView v) => switch (v.id) {
   'analyse' => const AnalyseScreen(),
   'suggestions' => const SuggestionsScreen(),
   'settings' => const SettingsScreen(),
+  'backups' => const BackupsScreen(),
   _ => const LibraryScreen(key: ValueKey('library')),
 };
