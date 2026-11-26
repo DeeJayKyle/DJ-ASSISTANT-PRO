@@ -14,7 +14,7 @@ void main() {
     File('test/golden/pcm.json').readAsStringSync(),
   ) as Map).cast<String, Map<String, dynamic>>();
   String locate(String rel) => rel.startsWith('library/')
-      ? p.join('..', 'crates', 'dj-core', 'tests', 'fixtures', rel)
+      ? p.join('test', 'fixtures', rel)
       : p.join('test', 'fixtures', rel);
 
   for (final e in golden.entries) {
@@ -43,16 +43,7 @@ void main() {
 
   test('broken files fail with a readable error', () {
     for (final name in ['truncated.flac', 'corrupt.mp3', 'empty.mp3']) {
-      final path = p.join(
-        '..',
-        'crates',
-        'dj-core',
-        'tests',
-        'fixtures',
-        'library',
-        'Broken',
-        name,
-      );
+      final path = p.join('test', 'fixtures', 'library', 'Broken', name);
       if (name.endsWith('.mp3') && Platform.isWindows) continue;
       expect(
         () => openPcm(path),
@@ -81,10 +72,7 @@ void main() {
 
   test('formats that need Media Foundation are refused off Windows', () {
     final mp3 = p.join(
-      '..',
-      'crates',
-      'dj-core',
-      'tests',
+      'test',
       'fixtures',
       'library',
       'House',

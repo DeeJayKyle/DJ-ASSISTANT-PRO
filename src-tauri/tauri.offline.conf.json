@@ -1,6 +1,0 @@
-{
-  "bundle": {
-    "createUpdaterArtifacts": false,
-    "windows": { "webviewInstallMode": { "type": "offlineInstaller", "silent": true } }
-  }
-}

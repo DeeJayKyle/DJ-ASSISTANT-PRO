@@ -1,16 +1,10 @@
 import 'dart:convert';
 
-import 'package:path/path.dart' as p;
-
-import '../analysis/beatgrid.dart' show bpmRanges;
-import '../assistant/ai_config.dart';
 import '../online/lookups.dart';
 import '../online/online.dart';
 import 'autoprep.dart';
 import 'catalogue.dart';
-import 'inbox.dart' show defaultDownloadsFolder, defaultInboxFolder;
 import 'library.dart';
-import 'organize.dart' show organiseModeOn;
 
 class SettingsException implements Exception {
   SettingsException(this.message);
@@ -42,55 +36,38 @@ class SettingsService {
     return {
       'low_bitrate_kbps': LibraryService(cat).lowBitrateKbps,
       'theme': cat.getSetting('theme') ?? 'dark',
-      'chat_open': _flag('chat_open', true),
       'privacy_acknowledged': _flag('privacy_acknowledged', false),
-      'allow_file_changes': _flag('allow_file_changes', false),
-      'sync_to_files': _flag('sync_to_files', false),
-      'docs_enabled': _flag('docs_enabled', false),
+      'sync_to_files': _flag('sync_to_files', true),
+      'write_backups': _flag('write_backups', false),
       'watch_enabled': _flag('watch_enabled', false),
-      'inbox_enabled': _flag('inbox_enabled', false),
-      'inbox_downloads':
-          cat.getSetting('inbox_downloads') ?? defaultDownloadsFolder(),
-      'inbox_folder': cat.getSetting('inbox_folder') ?? defaultInboxFolder(),
-      'learning_enabled': _flag('learning_enabled', true),
-      'gig_mode': _flag('gig_mode', false),
       'auto_update': _flag('auto_update', true),
+      'auto_install_update': _flag('auto_install_update', true),
       'surface': cat.getSetting('surface') ?? 'glass',
       'motion': cat.getSetting('motion') ?? 'full',
       'accent': cat.getSetting('accent') ?? 'mint',
       'key_notation': cat.getSetting('key_notation') ?? 'camelot',
-      'scan_video': _flag('scan_video', true),
-      'bpm_range': bpmRanges.containsKey(cat.getSetting('bpm_range'))
-          ? cat.getSetting('bpm_range')
-          : 'auto',
       'premium_ui': _flag('premium_ui', false),
       'auto_prep': autoPrepEnabled(cat),
+      'energy_analysis': _flag('energy_analysis', true),
+      'energy_to_comment': _flag('energy_to_comment', false),
+      'serato_dir': cat.getSetting('serato_dir') ?? '',
       'ui_prefs': prefs is Map ? prefs : <String, Object?>{},
-      'auto_fix_min': autoFixMin(cat),
-      'fix_mode': fixMode(cat),
-      'fix_mode_notice_seen': _flag('fix_mode_notice_seen', false),
-      'organise_mode': organiseModeOn(cat),
-      'ai_provider': cat.getSetting('ai_provider') ?? 'off',
     };
   }
 
   Never _bad(String m) => throw SettingsException(m);
 
   static const flags = {
-    'chat_open',
     'privacy_acknowledged',
-    'allow_file_changes',
     'sync_to_files',
-    'docs_enabled',
-    'learning_enabled',
+    'write_backups',
     'auto_update',
-    'scan_video',
+    'auto_install_update',
     'premium_ui',
     'auto_prep',
+    'energy_analysis',
+    'energy_to_comment',
     'watch_enabled',
-    'inbox_enabled',
-    'fix_mode_notice_seen',
-    'organise_mode',
   };
 
   void set(String key, Object? value) {
@@ -118,16 +95,8 @@ class SettingsService {
         choice(['glass', 'solid'], 'unknown surface style');
       case 'motion':
         choice(['full', 'reduced'], 'unknown motion setting');
-      case 'inbox_downloads':
-      case 'inbox_folder':
-        final v = s().trim();
-        if (v.isEmpty || !p.isAbsolute(v)) _bad('choose a full folder path');
-        cat.setSetting(key, v);
-      case 'bpm_range':
-        choice(
-          bpmRanges.keys.toList(),
-          'BPM range must be auto, 58-115, 68-135, 78-155 or 88-175',
-        );
+      case 'serato_dir':
+        cat.setSetting(key, s().trim());
       case 'accent':
         choice([
           'mint',
@@ -146,63 +115,6 @@ class SettingsService {
         final text = jsonEncode(value);
         if (text.length > 4096) _bad('ui_prefs is too large');
         cat.setSetting(key, text);
-      case 'auto_fix_min':
-        final v = value is num ? value.toDouble() : null;
-        if (v == null || v < 0.5 || v > 1.0) {
-          _bad('confidence must be between 0.5 and 1.0');
-        }
-        cat.setSetting(key, '$v');
-      case 'fix_mode':
-        choice(fixModes, 'fix mode must be review, fill_empty or auto');
-      case 'ai_provider':
-        if (!isProvider(s())) _bad('unknown AI provider');
-        cat.setSetting(key, s());
-        // remembered so the Online services switch turns the same one back on
-        if (s() != 'off' && s() != 'local') {
-          cat.setSetting('ai_online_last', s());
-        }
-      case 'ai_custom_url':
-        final v = s().trim().replaceAll(RegExp(r'/+$'), '');
-        if (!validCustomUrl(v)) {
-          _bad(
-            'enter an https:// address, or http:// on this computer (e.g. http://127.0.0.1:1234/v1)',
-          );
-        }
-        cat.setSetting(key, v);
-      case 'ai_model':
-        if (!claudeModels.any((m) => m.$1 == s())) _bad('unknown Claude model');
-        cat.setSetting(key, s());
-      case 'ai_local_model':
-        final v = s().trim();
-        if (v.isEmpty ||
-            v.length > 100 ||
-            !RegExp(r'^[A-Za-z0-9:._\-/]+$').hasMatch(v)) {
-          _bad("that doesn't look like a model name (e.g. qwen2.5:7b)");
-        }
-        cat.setSetting(key, v);
-      case 'ai_local_url':
-        final v = s().trim().replaceAll(RegExp(r'/+$'), '');
-        // Local means local: only this computer's model server.
-        final ok = ['http://127.0.0.1:', 'http://localhost:', 'http://[::1]:']
-            .any(
-              (p) =>
-                  v.startsWith(p) &&
-                  v.length > p.length &&
-                  RegExp(r'^\d+$').hasMatch(v.substring(p.length)),
-            );
-        if (!ok) {
-          _bad(
-            'the local model server must be on this computer, e.g. http://127.0.0.1:11434',
-          );
-        }
-        cat.setSetting(key, v);
-      case final k
-          when k.startsWith('ai_model_') && aiService(k.substring(9)) != null:
-        final v = s().trim();
-        if (!validModelName(v)) {
-          _bad("that doesn't look like a model name (e.g. gpt-4.1-mini)");
-        }
-        cat.setSetting(key, v);
       case final k when flags.contains(k):
         cat.setSetting(key, value == true ? '1' : '0');
       default:
@@ -210,19 +122,11 @@ class SettingsService {
     }
   }
 
-  static const _keyed = {
-    'acoustid',
-    'lastfm',
-    'anthropic',
-    'spotify',
-    'getsongbpm',
-    'youtube',
-  };
+  static const _keyed = {'spotify', 'youtube', 'discogs'};
 
   /// Every online service with its switch and whether a key is saved (the
   /// key itself never leaves the credential store).
   List<Map<String, Object?>> services() {
-    final provider = cat.getSetting('ai_provider');
     return [
       for (final s in onlineServices)
         {
@@ -232,8 +136,6 @@ class SettingsService {
           'sends': s.sends,
           'enabled': switch (s.id) {
             'updates' => _flag('auto_update', true),
-            'anthropic' =>
-              provider != null && provider != 'off' && provider != 'local',
             _ => serviceEnabled(cat, s.id),
           },
           'needs_key': _keyed.contains(s.id),
@@ -244,14 +146,6 @@ class SettingsService {
 
   void setService(String svc, bool on) {
     if (!onlineServices.any((s) => s.id == svc)) _bad('unknown service');
-    if (svc == 'anthropic') {
-      final last = cat.getSetting('ai_online_last');
-      cat.setSetting(
-        'ai_provider',
-        on ? ((last != null && isProvider(last)) ? last : 'claude') : 'off',
-      );
-      return;
-    }
     cat.setSetting(
       svc == 'updates' ? 'auto_update' : 'svc_$svc',
       on ? '1' : '0',
@@ -259,13 +153,9 @@ class SettingsService {
   }
 
   void setSecret(String svc, String value) {
-    final aiKey = svc.startsWith('ai_') && aiService(svc.substring(3)) != null;
-    if (!_keyed.contains(svc) && !aiKey) _bad('unknown service');
+    if (!_keyed.contains(svc)) _bad('unknown service');
     if (svc == 'spotify' && !value.trim().contains(':')) {
       _bad('enter the Spotify Client ID and Client secret');
-    }
-    if (svc == 'anthropic' && !value.trim().startsWith('sk-ant-')) {
-      _bad('Anthropic API keys start with sk-ant-');
     }
     final v = value.trim();
     if (v.isEmpty ||
@@ -281,4 +171,17 @@ class SettingsService {
   }
 
   void deleteSecret(String svc) => secrets.delete(svc);
+
+  /// Every setting back to its default, and every saved API key removed.
+  /// The library, crates and music files are not touched.
+  void resetAll() {
+    for (final k in _keyed) {
+      try {
+        secrets.delete(k);
+      } on Object {
+        // not saved
+      }
+    }
+    cat.db.execute('DELETE FROM settings');
+  }
 }

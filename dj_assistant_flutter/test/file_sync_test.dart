@@ -1,14 +1,14 @@
 import 'dart:io';
 
 import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/crew.dart';
 import 'package:dj_assistant/core/file_sync.dart';
-import 'package:dj_assistant/core/jobs.dart';
 import 'package:dj_assistant/core/library.dart';
 import 'package:dj_assistant/core/library_edit.dart';
 import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/safe_write.dart';
 import 'package:dj_assistant/core/scanner.dart';
+import 'package:dj_assistant/core/serato_library.dart';
+import 'package:dj_assistant/core/serato_sync.dart';
 import 'package:dj_assistant/core/suggestions.dart';
 import 'package:dj_assistant/core/tag_writer.dart' show audioHash;
 import 'package:dj_assistant/core/tags.dart';
@@ -44,7 +44,8 @@ void main() {
       cat.db.select('SELECT path FROM tracks WHERE id=?', [id]).first['path']
           as String;
 
-  test('off (the default): edits stay in DJ Assistant', () async {
+  test('off: edits stay in DJ Assistant', () async {
+    cat.setSetting(syncSetting, '0');
     final before = hashes(music);
     lib.updateUserFields([idOf('Low Tide.flac')], {'genre': 'Deep House'});
     expect(fileSyncQueued(cat), 0);
@@ -53,7 +54,9 @@ void main() {
   });
 
   test('on: edits are written into MP3 and FLAC tags, safely', () async {
-    cat.setSetting(syncSetting, '1');
+    cat
+      ..setSetting(syncSetting, '1')
+      ..setSetting('write_backups', '1');
     final mp3 = idOf('Lagos Lights - Sunrise Groove.mp3');
     final flac = idOf('Low Tide.flac');
     final others = hashes(music)
@@ -138,6 +141,7 @@ void main() {
   });
 
   test('earlier edits can be written when switching on', () async {
+    cat.setSetting(syncSetting, '0');
     final flac = idOf('Low Tide.flac');
     lib.updateUserFields([flac], {'year': 2021});
     expect(fileSyncQueued(cat), 0, reason: 'off at the time');
@@ -159,30 +163,66 @@ void main() {
     expect(s + f, 1);
   });
 
-  test('the crew writes the fixes it applies', () async {
-    cat
-      ..setSetting(syncSetting, '1')
-      ..setSetting('fix_mode', 'fill_empty');
-    final jobs = JobsController();
-    final st = await jobs.start(
-      'crew',
-      crewJob(CrewPlan(dbPath: db, dataDir: music.parent.path)),
+  test('energy and mood go into Grouping, then into Serato\'s library', () async {
+    cat.setSetting(syncSetting, '1');
+    final mp3 = idOf('Lagos Lights - Sunrise Groove.mp3');
+    lib.updateUserFields(
+      [mp3],
+      {'energy': 7, 'mood': 'Uplifting', 'genre': 'Afro House'},
     );
-    await jobs.shutdown();
-    expect(st.state, 'completed', reason: st.message);
-    final clerk = ((st.result! as Map)['agents'] as List)
-        .cast<Map>()
-        .firstWhere((a) => a['id'] == 'clerk');
-    expect(clerk['summary'], contains('music file'));
-    cat.close();
-    cat = Catalogue.open(db);
-    expect(fileSyncQueued(cat), 0);
-    final last = lastFileSync(cat)!;
+    expect(await flushFileSync(cat), (1, 0, 0));
+    final log = cat.db.select(
+      "SELECT changes_json FROM change_log WHERE track_id=? AND status='done'",
+      [mp3],
+    );
+    expect(log.single['changes_json'], contains('E7 · Uplifting'));
+    expect(seratoSyncQueued(cat), 1);
+
+    // a _Serato_ folder whose library knows the track
+    final serato = Directory(p.join(music.parent.path, '_Serato_'))
+      ..createSync();
+    SeratoLibrary.isRunning = () => false;
+    addTearDown(() => SeratoLibrary.isRunning = () => false);
+    final sl = SeratoLibrary(serato.path);
+    final rel = sl.relative(pathOf(mp3))!;
+    List<int> chunk(String t, List<int> d) => [
+      ...t.codeUnits,
+      d.length >> 24 & 255,
+      d.length >> 16 & 255,
+      d.length >> 8 & 255,
+      d.length & 255,
+      ...d,
+    ];
+    List<int> u16(String x) => [
+      for (final c in x.codeUnits) ...[c >> 8, c & 255],
+    ];
+    File(sl.databasePath).writeAsBytesSync([
+      ...chunk('vrsn', u16('2.0/Serato Scratch LIVE Database')),
+      ...chunk('otrk', [
+        ...chunk('pfil', u16(rel)),
+        ...chunk('tbpm', u16('120.00')),
+      ]),
+    ]);
+    final (t, f, note) = flushSeratoSync(cat, [
+      serato.path,
+    ], backupsDir: p.join(music.parent.path, 'serato_backups'));
+    expect(note, isNull);
+    expect(t, 1);
+    expect(f, greaterThanOrEqualTo(2));
+    final bytes = File(sl.databasePath).readAsBytesSync();
+    final fields = {
+      for (final (tag, d) in seratoChunks(seratoChunks(bytes)[1].$2))
+        tag: String.fromCharCodes([
+          for (var i = 0; i + 1 < d.length; i += 2) d[i] << 8 | d[i + 1],
+        ]),
+    };
+    expect(fields['tgen'], 'Afro House');
+    expect(fields['tgrp'], 'E7 · Uplifting');
+    expect(fields['tbpm'], '120.00', reason: "Serato's own BPM is kept");
+    expect(seratoSyncQueued(cat), 0);
     expect(
-      (last['written'] as int) + (last['skipped'] as int),
-      greaterThan(0),
-      reason: 'every applied fix went through the writer',
+      Directory(p.join(music.parent.path, 'serato_backups')).listSync(),
+      hasLength(1),
     );
-    expect(last['failed'], 0);
   });
 }

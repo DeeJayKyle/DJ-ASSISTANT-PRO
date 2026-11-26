@@ -4,33 +4,17 @@ import 'package:file_selector/file_selector.dart' show getDirectoryPath;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../assistant/ai_config.dart';
-import '../assistant/quick_ai.dart';
-import '../core/catalogue.dart';
-import '../core/inbox.dart' show InboxService, inboxCrateName;
 import '../core/diag_log.dart';
-import '../core/limits.dart';
-import '../core/export.dart' show openFolder;
+import '../core/folders.dart' show openFolder;
 import '../core/file_sync.dart';
 import '../core/updater.dart';
+import 'updates.dart';
 import '../online/http_online.dart';
-import 'assistant_panel.dart';
 import 'format.dart';
 import 'shortcuts_sheet.dart';
 import 'state.dart';
 import 'theme.dart';
 import 'widgets.dart';
-
-const safetyPoints = [
-  'Your music is only read unless you turn on writing your changes into the files, tag writing or Organise Files mode below. All are off by default.',
-  'With either on, nothing happens silently: every change is listed in a preview, you approve it one by one or in batches, a verified backup or restorable copy is kept, and it can be undone.',
-  'Files are never permanently deleted except when you empty the Removed files area yourself, after seeing what is in it.',
-  'Metadata suggestions wait for your review unless you choose otherwise. Accepting one changes the catalogue (and, with write-through on, the file\'s tags, backed up first) and can be undone.',
-  "Serato's databases, cues, beatgrids, history and settings are never written, and existing Serato crates are never changed. Exporting a crate to Serato only adds a new .crate file. Serato crates and history can be imported read-only.",
-  "Your ratings, energy, tags, crates, sets and notes stay in DJ Assistant's own catalogue on this computer.",
-  'Only folders you choose are scanned. Personal files are a separate, opt-in module.',
-  'Core features work offline with no sign-in and no telemetry; accounts live only on this computer. Online services are off until you turn each one on, and each says exactly what it sends.',
-];
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -39,36 +23,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  Map<String, Object?>? ai, local;
   UpdateInfo? update;
   String? updateMsg;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAi();
-  }
-
-  Future<void> _loadAi() async {
-    final a = await ref.read(agentProvider).status();
-    Map<String, Object?>? l;
-    if (a['provider'] == 'local') {
-      l = await AiHelpers(ref.read(sessionProvider)).localSetup();
-    }
-    if (mounted) {
-      setState(() {
-        ai = a;
-        local = l;
-      });
-    }
-  }
 
   void _set(String k, Object? v) => guard(() {
     final s = ref.read(sessionProvider);
     s.settings.set(k, v);
     if (k == 'watch_enabled') v == true ? s.watcher.start() : s.watcher.stop();
-    if (k.startsWith('inbox_')) s.inbox.start();
-  }, bump: ref).then((_) => _loadAi());
+  }, bump: ref);
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +38,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.watch(versionProvider);
     final t = DjTokens.of(context);
     final st = ref.watch(settingsProvider);
-    final services = s.settings.services();
     final base = ref.watch(accountsProvider).base;
     Widget sw(String key, String title, {String? sub}) => SwitchListTile(
       contentPadding: EdgeInsets.zero,
@@ -114,26 +75,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         );
+    final serato = s.seratoDirs;
     return PageFrame(
       title: 'Settings',
       subtitle: 'Everything here is stored on this computer, per account.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Panel(
-            title: 'Your library is safe',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final p in safetyPoints)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: HintText(p, icon: Icons.verified_user_outlined),
-                  ),
-              ],
-            ),
-          ),
-          gap,
           Panel(
             title: 'Appearance',
             child: Column(
@@ -146,14 +94,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('camelot', 'Camelot (8A)'),
                   ('musical', 'Musical (Am)'),
                 ]),
-                choice('surface', 'Panels', [
-                  ('glass', 'Glass'),
-                  ('solid', 'Solid'),
-                ]),
-                choice('motion', 'Motion', [
-                  ('full', 'Full'),
-                  ('reduced', 'Reduced'),
-                ]),
                 choice('accent', 'Accent', [
                   ('mint', 'Mint'),
                   ('cyan', 'Cyan'),
@@ -161,7 +101,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ('amber', 'Amber'),
                   ('rose', 'Rose'),
                 ]),
-                sw('premium_ui', 'Premium UI (Midnight Pro look)'),
               ],
             ),
           ),
@@ -170,85 +109,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: 'Library',
             child: Column(
               children: [
-                Row(
-                  children: [
-                    const Expanded(child: Text('Low-bitrate warning below')),
-                    SizedBox(
-                      width: 120,
-                      child: TextFormField(
-                        key: ValueKey(st['low_bitrate_kbps']),
-                        initialValue: '${st['low_bitrate_kbps']}',
-                        decoration: const InputDecoration(suffixText: 'kbps'),
-                        onFieldSubmitted: (v) =>
-                            _set('low_bitrate_kbps', int.tryParse(v) ?? -1),
-                      ),
-                    ),
-                  ],
-                ),
-                sw('scan_video', 'Include music videos when scanning'),
-                sw(
-                  'watch_enabled',
-                  'Folder watcher',
-                  sub: 'Notices new music in your folders; never moves anything.',
-                ),
-                choice('bpm_range', 'BPM range for analysis', const [
-                  ('auto', 'Automatic'),
-                  ('58-115', '58–115'),
-                  ('68-135', '68–135'),
-                  ('78-155', '78–155'),
-                  ('88-175', '88–175'),
-                ]),
-                Text(
-                  'Half- and double-time readings are folded into this range (for example 174 becomes 87 in 58–115). Changing it applies to tracks analysed from now on; use Re-analyse to update the rest.',
-                  style: TextStyle(color: t.faint, fontSize: DjType.small),
-                ),
                 sw(
                   'auto_prep',
-                  'Auto-prep after every scan',
-                  sub: 'Analyses new music and finds suggestions. What happens to the suggestions is chosen below.',
+                  'Analyse new songs automatically',
+                  sub: 'After every scan, new songs get their artist and title from the file name if missing, BPM and key from Serato, then genre, year, album and label from the online analysers (majority wins), written into the files.',
                 ),
-                choice('fix_mode', 'Metadata suggestions', const [
-                  ('review', 'Review first'),
-                  ('fill_empty', 'Fill empty fields'),
-                  ('auto', 'Apply confident fixes'),
-                ]),
-                Text(switch (st['fix_mode']) {
-                  'fill_empty' => 'Auto-prep fills empty fields (title, artist, genre, year…) from the best evidence. Values you already have are never replaced; changes to them wait in Suggestions.',
-                  'auto' => 'Auto-prep fills empty fields and replaces existing values when it is at least as confident as the slider below. This was how DJ Assistant worked before 2.4.',
-                  _ => 'Nothing is changed until you approve it in Suggestions, one at a time or in batches. Recommended.',
-                }, style: TextStyle(color: t.faint, fontSize: DjType.small)),
-                if (st['fix_mode'] == 'auto')
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text('Replace existing values at or above'),
-                      ),
-                      SizedBox(
-                        width: 220,
-                        child: Slider(
-                          value: ((st['auto_fix_min'] as num?) ?? 0.85)
-                              .toDouble(),
-                          min: 0.5,
-                          max: 1,
-                          divisions: 10,
-                          label:
-                              '${((((st['auto_fix_min'] as num?) ?? 0.85) * 100)).round()}%',
-                          onChanged: (v) =>
-                              _set('auto_fix_min', (v * 100).round() / 100),
-                        ),
-                      ),
-                    ],
-                  ),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     icon: const Icon(Icons.undo),
-                    label: const Text('Undo automatic changes…'),
+                    label: const Text('Undo every automatic change…'),
                     onPressed: () async {
                       final ok = await confirm(
                         context,
                         title: 'Undo every automatic change?',
-                        message: 'Every value auto-prep put into your catalogue goes back to what it was before, and the suggestion waits for your review again. Values you have changed since are left as they are. Files are not touched.',
+                        message: 'Every value the analysers changed goes back to what it was before, in the catalogue and in the files. Values you have changed since are left as they are.',
                         ok: 'Undo them',
                       );
                       if (!ok) return;
@@ -265,204 +140,98 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           gap,
-          const RemovedSongsPanel(),
-          gap,
-          const AutoImportPanel(),
-          gap,
-          const LimitsPanel(),
-          gap,
           Panel(
-            title: 'Online services',
-            subtitle: 'All off until you turn one on. Each says exactly what it sends. Keys are kept in Windows Credential Manager and never shown again.',
+            title: 'Serato',
+            subtitle: 'Where Serato DJ keeps its crates and library. Used for BPM, key and crates.',
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final x in services)
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: Text('${x['name']}'),
-                    subtitle: Text(
-                      '${x['provides']}',
-                      style: TextStyle(color: t.faint, fontSize: DjType.small),
+                Text(
+                  serato.isEmpty
+                      ? 'No _Serato_ folder found.'
+                      : 'Using: ${serato.join(', ')}',
+                  style: TextStyle(color: t.muted),
+                ),
+                const SizedBox(height: Space.x2),
+                Wrap(
+                  spacing: Space.x2,
+                  children: [
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.folder_open, size: 18),
+                      label: const Text('Choose the _Serato_ folder…'),
+                      onPressed: () async {
+                        final d = await getDirectoryPath(
+                          confirmButtonText: 'Use this _Serato_ folder',
+                        );
+                        if (d != null) _set('serato_dir', d);
+                      },
                     ),
-                    leading: Switch(
-                      value: x['enabled'] == true,
-                      onChanged: (v) => guard(
-                        () => s.settings.setService('${x['id']}', v),
-                        bump: ref,
-                      ).then((_) => _loadAi()),
-                    ),
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Sends: ${x['sends']}',
-                          style: TextStyle(
-                            color: t.muted,
-                            fontSize: DjType.small,
-                          ),
-                        ),
+                    if ('${st['serato_dir']}'.isNotEmpty)
+                      TextButton(
+                        onPressed: () => _set('serato_dir', ''),
+                        child: const Text('Find it automatically'),
                       ),
-                      if (x['needs_key'] == true && x['id'] != 'anthropic')
-                        Row(
-                          children: [
-                            Text(
-                              x['has_key'] == true ? 'Key saved' : 'No key yet',
-                              style: TextStyle(
-                                color: x['has_key'] == true ? t.ok : t.warn,
-                              ),
-                            ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () async {
-                                final v = await askText(
-                                  context,
-                                  title: '${x['name']} key',
-                                  label: x['id'] == 'spotify'
-                                      ? 'Client ID:Client secret'
-                                      : 'API key',
-                                  obscure: true,
-                                );
-                                if (v != null) {
-                                  await guard(
-                                    () => s.settings.setSecret('${x['id']}', v),
-                                    done: 'Key saved.',
-                                    bump: ref,
-                                  );
-                                }
-                              },
-                              child: Text(
-                                x['has_key'] == true
-                                    ? 'Replace key'
-                                    : 'Add key',
-                              ),
-                            ),
-                            if (x['has_key'] == true)
-                              TextButton(
-                                onPressed: () => guard(
-                                  () => s.settings.deleteSecret('${x['id']}'),
-                                  bump: ref,
-                                ),
-                                child: const Text('Remove key'),
-                              ),
-                          ],
-                        ),
-                    ],
-                  ),
+                  ],
+                ),
               ],
             ),
           ),
           gap,
-          _aiPanel(context, s.cat),
-          gap,
           Panel(
             title: 'Changes to music files',
-            subtitle: 'All off by default. Every change is backed up and verified, and can be undone. Test on copies of your music first.',
+            subtitle: 'Fixes are written straight into your original files. No copies are made.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Write my changes into the music files'),
-                  subtitle: Text(
-                    'When you (or an approved suggestion, the crew, or Undo) change a track\'s title, artist, album, genre, year, BPM or key here, the file\'s own tags change too, so Serato, rekordbox and every other app see it. Written in the background, one file at a time: verified backup first, audio checked bit for bit, Serato\'s cues and beatgrids kept. MP3, FLAC and M4A (M4A: no BPM/key). Roll back any write below.',
-                    style: TextStyle(color: t.faint, fontSize: DjType.small),
-                  ),
-                  value: st['sync_to_files'] == true,
-                  onChanged: (v) async {
-                    if (!v) return _set('sync_to_files', false);
-                    final pick = await showDialog<String>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text(
-                          'Write changes into your music files?',
-                        ),
-                        content: const SizedBox(
-                          width: 460,
-                          child: Text(
-                            'From now on, changes you make to title, artist, album, genre, year, BPM and key in DJ Assistant are written into the files themselves. Each file is backed up and verified first and every write can be rolled back.\n\n'
-                            'You can also write the values you changed earlier in DJ Assistant into their files now.',
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(c),
-                            child: const Text('Cancel'),
-                          ),
-                          OutlinedButton(
-                            onPressed: () => Navigator.pop(c, 'new'),
-                            child: const Text('Only new changes'),
-                          ),
-                          FilledButton(
-                            onPressed: () => Navigator.pop(c, 'all'),
-                            child: const Text('Also write earlier changes'),
+                sw(
+                  'sync_to_files',
+                  'Write changes into the music files',
+                  sub: 'Title, artist, album, genre, year, label, BPM, key and Grouping (energy and mood, like "E7 · Uplifting") go into the file\'s own tags, and then into Serato\'s library so Serato shows them without a rescan. The audio is checked bit for bit and Serato\'s cues and beatgrids are kept. MP3 and FLAC get every field; M4A all but BPM, key and label; WAV, AIFF and Ogg keep their values in DJ Assistant only.',
+                ),
+                sw(
+                  'energy_to_comment',
+                  'Also write energy and mood into Comments',
+                  sub: 'Off: Comments are left alone (Mixed In Key and many DJs keep "8A - Energy 6" there). On: Comments get the same text as Grouping.',
+                ),
+                sw(
+                  'write_backups',
+                  'Keep a backup copy before each write',
+                  sub: 'Off: the original file is changed in place and no copy is kept; Undo writes the previous values back. On: a verified copy is kept in the app\'s data folder and can be restored.',
+                ),
+                Builder(
+                  builder: (_) {
+                    final queued = fileSyncQueued(s.cat);
+                    final last = lastFileSync(s.cat);
+                    final job = s.jobs.status('file_sync');
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: Space.x3),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (job.state == 'running')
+                            ProgressLine(
+                              label: 'Writing to music files…',
+                              done: job.done,
+                              total: job.total,
+                            ),
+                          Text(
+                            [
+                              if (queued > 0)
+                                '$queued track(s) waiting to be written.',
+                              if (last != null)
+                                'Last: ${last['written']} written, ${last['skipped']} already up to date or not writable, ${last['failed']} failed · ${fmtDateTime(last['at'] as int?)}.',
+                              if (queued == 0 && last == null)
+                                'Nothing written yet.',
+                            ].join(' '),
+                            style: TextStyle(
+                              color: t.muted,
+                              fontSize: DjType.small,
+                            ),
                           ),
                         ],
                       ),
                     );
-                    if (pick == null) return;
-                    _set('sync_to_files', true);
-                    if (pick == 'all') {
-                      final n = enqueueAllEdited(s.cat);
-                      toast(
-                        n == 0 ? 'Nothing to write yet.' : 'Writing your earlier changes to their files in the background.',
-                      );
-                    }
                   },
-                ),
-                if (st['sync_to_files'] == true)
-                  Builder(
-                    builder: (_) {
-                      final queued = fileSyncQueued(s.cat);
-                      final last = lastFileSync(s.cat);
-                      final job = s.jobs.status('file_sync');
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: Space.x3),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (job.state == 'running')
-                              ProgressLine(
-                                label: 'Writing to music files…',
-                                done: job.done,
-                                total: job.total,
-                              ),
-                            Text(
-                              [
-                                if (queued > 0)
-                                  '$queued track(s) waiting to be written.',
-                                if (last != null)
-                                  'Last: ${last['written']} written, ${last['skipped']} already up to date or not writable, ${last['failed']} failed · ${fmtDateTime(last['at'] as int?)}.',
-                                if (queued == 0 && last == null)
-                                  'Nothing written yet.',
-                              ].join(' '),
-                              style: TextStyle(
-                                color: t.muted,
-                                fontSize: DjType.small,
-                              ),
-                            ),
-                            for (final e
-                                in ((last?['errors'] as List?) ?? const []))
-                              Text(
-                                '$e',
-                                style: TextStyle(
-                                  color: t.danger,
-                                  fontSize: DjType.small,
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                sw(
-                  'allow_file_changes',
-                  'Write tags to music files',
-                  sub: 'Puts catalogue values into the files\' own tags (MP3, FLAC, M4A) after an exact preview and a verified backup. Serato\'s cue and beatgrid data in the file is kept byte for byte.',
-                ),
-                sw(
-                  'organise_mode',
-                  'Organise Files mode',
-                  sub: 'Adds Organise Files: edit tags, rename and move files or folders, replace tracks and remove duplicates. Renaming or moving a file breaks Serato\'s link to it until you relocate it in Serato; every preview says which tracks Serato knows about.',
                 ),
                 const Text(
                   'Change log',
@@ -482,7 +251,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ? TextButton(
                             onPressed: () => guard(
                               () => s.safeWrite.rollback(c['id']! as int),
-                              done: 'Restored the original file from its verified backup.',
+                              done:
+                                  'Restored the original file from its backup.',
                               bump: ref,
                             ),
                             child: const Text('Roll back'),
@@ -493,36 +263,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           gap,
-          Panel(
-            title: 'Learning and personal files',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                sw(
-                  'learning_enabled',
-                  'Learn from ratings and plays',
-                  sub: 'Used only for recommendations in Discovery.',
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () => guard(
-                      () => toast(
-                        'Forgot ${s.discovery.resetLearning()} like(s)/dislike(s).',
-                      ),
-                      bump: ref,
-                    ),
-                    child: const Text('Reset what was learned'),
-                  ),
-                ),
-                sw(
-                  'docs_enabled',
-                  'Personal files module',
-                  sub: 'A separate, opt-in index of document folders.',
-                ),
-              ],
-            ),
-          ),
+          const RemovedSongsPanel(),
+          gap,
+          const ResetPanel(),
           gap,
           Panel(
             title: 'Updates',
@@ -531,14 +274,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 sw(
                   'auto_update',
-                  'Check for updates when the app starts',
-                  sub: 'Sends only the request for the release manifest to GitHub.',
+                  'Check for updates automatically',
+                  sub: 'When the app starts and every few hours. Sends only the request for the release manifest to GitHub.',
                 ),
+                if (st['auto_update'] == true)
+                  sw(
+                    'auto_install_update',
+                    'Install updates automatically',
+                    sub: 'A new version is downloaded in the background, its signature is checked, and it installs when you close DJ Assistant. Your library, crates and settings are kept.',
+                  ),
                 Row(
                   children: [
                     Text('DJ Assistant $appVersion'),
                     const Spacer(),
-                    if (update != null)
+                    ValueListenableBuilder(
+                      valueListenable: waitingUpdate,
+                      builder: (context, w, _) => w == null
+                          ? const SizedBox.shrink()
+                          : FilledButton.icon(
+                              onPressed: () => guard(restartToUpdate),
+                              icon: const Icon(Icons.restart_alt, size: 18),
+                              label: Text('Restart and update to ${w.version}'),
+                            ),
+                    ),
+                    if (update != null &&
+                        waitingUpdate.value?.version != update!.version)
                       FilledButton(
                         onPressed: () => guard(() async {
                           final dest =
@@ -626,517 +386,148 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
+}
 
-  Widget _aiPanel(BuildContext context, Catalogue cat) {
+/// Reset and delete: crates, settings, the whole account, or all app data.
+class ResetPanel extends ConsumerWidget {
+  const ResetPanel({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(sessionProvider);
     final t = DjTokens.of(context);
-    final a = ai;
-    final s = ref.read(sessionProvider);
-    if (a == null) {
-      return const Panel(
-        title: 'AI assistant',
-        child: LinearProgressIndicator(),
-      );
-    }
-    final provider = '${a['provider']}';
-    final svcs = (a['services'] as List).cast<Map>();
-    return Panel(
-      title: 'AI assistant',
-      subtitle: '${a['sends']}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DropdownButtonFormField<String>(
-            isExpanded: true,
-            style: Theme.of(context).textTheme.bodyMedium,
-            initialValue: provider,
-            decoration: const InputDecoration(labelText: 'Model service'),
-            items: [
-              const DropdownMenuItem(
-                value: 'off',
-                child: Text('Off — built-in helper only'),
-              ),
-              const DropdownMenuItem(
-                value: 'local',
-                child: Text('Local model on this computer (Ollama) — private'),
-              ),
-              const DropdownMenuItem(
-                value: 'claude',
-                child: Text('Claude (Anthropic)'),
-              ),
-              for (final x in svcs)
-                DropdownMenuItem(
-                  value: '${x['id']}',
-                  child: Text('${x['label']}'),
-                ),
-            ],
-            onChanged: (v) => _set('ai_provider', v),
-          ),
-          const SizedBox(height: 8),
-          if (a['ready'] != true && a['reason'] != null)
-            Text('${a['reason']}', style: TextStyle(color: t.warn)),
-          if (provider == 'claude') ...[
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              style: Theme.of(context).textTheme.bodyMedium,
-              initialValue: '${a['model']}',
-              decoration: const InputDecoration(labelText: 'Claude model'),
-              items: [
-                for (final m in (a['claude_models'] as List).cast<Map>())
-                  DropdownMenuItem(
-                    value: '${m['id']}',
-                    child: Text('${m['label']}'),
-                  ),
-              ],
-              onChanged: (v) => _set('ai_model', v),
-            ),
-            _keyRow(
-              context,
-              'anthropic',
-              a['has_key'] == true,
-              'Anthropic API key (sk-ant-…)',
-            ),
-          ],
-          if (aiService(provider) != null) ...[
-            TextFormField(
-              key: ValueKey('model-$provider'),
-              initialValue: '${a['model']}',
-              decoration: InputDecoration(
-                labelText: 'Model',
-                helperText: 'Suggested: ${aiService(provider)!.model}',
-              ),
-              onFieldSubmitted: (v) => _set('ai_model_$provider', v),
-            ),
-            if (provider == 'custom')
-              TextFormField(
-                initialValue: '${a['custom_url']}',
-                decoration: const InputDecoration(
-                  labelText: 'Server address (https://… or http://127.0.0.1:…)',
-                ),
-                onFieldSubmitted: (v) => _set('ai_custom_url', v),
-              ),
-            _keyRow(
-              context,
-              'ai_$provider',
-              svcs.firstWhere((x) => x['id'] == provider)['has_key'] == true,
-              'API key',
-            ),
-            if (aiService(provider)!.keyUrl.isNotEmpty)
-              TextButton(
-                onPressed: () => openUrl(aiService(provider)!.keyUrl),
-                child: const Text('Get a key'),
-              ),
-            TextButton(
-              onPressed: () async {
-                final m = await guard(() => AiHelpers(s).listModels());
-                if (m != null && context.mounted) {
-                  final pick = await showDialog<String>(
-                    context: context,
-                    builder: (c) => SimpleDialog(
-                      title: const Text('Models'),
-                      children: [
-                        for (final x in m)
-                          SimpleDialogOption(
-                            onPressed: () => Navigator.pop(c, x),
-                            child: Text(x),
-                          ),
-                      ],
-                    ),
-                  );
-                  if (pick != null) _set('ai_model_$provider', pick);
-                }
-              },
-              child: const Text('List models'),
-            ),
-          ],
-          if (provider == 'local') _localPanel(context),
-        ],
+    Widget item(
+      IconData icon,
+      String title,
+      String sub,
+      String button,
+      Future<void> Function() run,
+    ) => ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: t.danger),
+      title: Text(title),
+      subtitle: Text(
+        sub,
+        style: TextStyle(color: t.faint, fontSize: DjType.small),
+      ),
+      trailing: OutlinedButton(
+        style: OutlinedButton.styleFrom(foregroundColor: t.danger),
+        onPressed: run,
+        child: Text(button),
       ),
     );
-  }
+    Future<bool> ask(String title, String message, String ok) =>
+        confirm(context, title: title, message: message, ok: ok, danger: true);
 
-  Widget _keyRow(BuildContext context, String svc, bool has, String label) {
-    final s = ref.read(sessionProvider);
-    final t = DjTokens.of(context);
-    return Row(
-      children: [
-        Text(
-          has ? 'Key saved' : 'No key yet',
-          style: TextStyle(color: has ? t.ok : t.warn),
-        ),
-        const Spacer(),
-        TextButton(
-          onPressed: () async {
-            final v = await askText(context, title: label, obscure: true);
-            if (v != null) {
+    return Panel(
+      title: 'Reset and delete',
+      subtitle: 'Your music files are never deleted by any of these.',
+      child: Column(
+        children: [
+          item(
+            Icons.inventory_2_outlined,
+            'Delete all crates in DJ Assistant',
+            'Every crate and crate folder made in the Crate builder.',
+            'Delete crates',
+            () async {
+              if (!await ask(
+                'Delete all crates?',
+                'Every crate in DJ Assistant is deleted. Crates saved in Serato stay until you delete them there (Crates → Serato crates).',
+                'Delete crates',
+              )) {
+                return;
+              }
               await guard(
-                () => s.settings.setSecret(svc, v),
-                done: 'Key saved.',
+                () {
+                  var n = 0;
+                  for (final c in s.crates.list()) {
+                    if (c.parentId == null) {
+                      s.crates.delete(c.id);
+                      n++;
+                    }
+                  }
+                  return n;
+                },
+                done: 'All crates deleted.',
                 bump: ref,
               );
+            },
+          ),
+          item(Icons.album_outlined, 'Delete all Serato crates', 'Every .crate file in your _Serato_ folder(s). Close Serato first.', 'Delete in Serato', () async {
+            final dirs = s.seratoDirs;
+            if (dirs.isEmpty) {
+              toast('No _Serato_ folder found.', error: true);
+              return;
             }
-            await _loadAi();
-          },
-          child: Text(has ? 'Replace key' : 'Add key'),
-        ),
-        if (has)
-          TextButton(
-            onPressed: () => guard(
-              () => s.settings.deleteSecret(svc),
-              bump: ref,
-            ).then((_) => _loadAi()),
-            child: const Text('Remove key'),
-          ),
-      ],
-    );
-  }
-
-  Widget _localPanel(BuildContext context) {
-    final t = DjTokens.of(context);
-    final s = ref.read(sessionProvider);
-    final l = local;
-    final h = AiHelpers(s);
-    final pack = s.jobs.status('ai_pack'), pull = s.jobs.status('ai_model');
-    final probe = (l?['probe'] as Map?) ?? const {};
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          probe['running'] == true
-              ? 'Ollama is running with ${(probe['models'] as List?)?.length ?? 0} model(s).'
-              : (probe['installed'] == true
-                    ? 'Ollama is installed but not running.'
-                    : 'Ollama is not installed yet.'),
-          style: TextStyle(color: t.muted),
-        ),
-        if (pack.state == 'running')
-          ProgressLine(
-            label: 'Setting up the private assistant…',
-            done: pack.done,
-            total: pack.total,
-            message: pack.message,
-          ),
-        if (pull.state == 'running')
-          ProgressLine(
-            label: 'Downloading the model…',
-            done: pull.done,
-            total: pull.total,
-            message: pull.message,
-          ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton(
-              onPressed: () => guard(
-                () => h.packSetup(),
-                done: 'Setting up: install, start and download as needed.',
+            if (!await ask(
+              'Delete every Serato crate?',
+              'All crates in ${dirs.join(', ')} are deleted. Serato\'s library and your music stay.',
+              'Delete Serato crates',
+            )) {
+              return;
+            }
+            await guard(() {
+              var n = 0;
+              for (final d in dirs) {
+                n += s.seratoLibraryFor(d).deleteAll();
+              }
+              toast('Deleted ${plural(n, 'Serato crate')}.');
+            }, bump: ref);
+          }),
+          item(
+            Icons.settings_backup_restore,
+            'Reset settings',
+            'Every setting back to its default; saved API keys are removed.',
+            'Reset settings',
+            () async {
+              if (!await ask(
+                'Reset all settings?',
+                'Every setting goes back to its default and saved API keys are removed. Your library and crates stay.',
+                'Reset settings',
+              )) {
+                return;
+              }
+              await guard(
+                () => s.settings.resetAll(),
+                done: 'Settings reset.',
                 bump: ref,
-              ),
-              child: const Text('One-click setup'),
-            ),
-            OutlinedButton(
-              onPressed: () => guard(
-                () async => toast(
-                  await h.localStart()
-                      ? 'Ollama is running.'
-                      : "Ollama didn't answer yet.",
-                ),
-              ).then((_) => _loadAi()),
-              child: const Text('Start Ollama'),
-            ),
-            for (final m
-                in (l?['recommended'] as List?)?.cast<Map>() ?? const <Map>[])
-              OutlinedButton(
-                onPressed: () => guard(
-                  () => h.localPull('${m['id']}'),
-                  done: 'Downloading ${m['id']}…',
-                  bump: ref,
-                ),
-                child: Text('Get ${m['id']} (${m['size']})'),
-              ),
-            TextButton(onPressed: _loadAi, child: const Text('Refresh')),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// Settings → Limits and batch sizes: every number that bounds a feature.
-/// Nothing is limited unless the DJ sets a number here.
-class LimitsPanel extends ConsumerStatefulWidget {
-  const LimitsPanel({super.key});
-  @override
-  ConsumerState<LimitsPanel> createState() => _LimitsPanelState();
-}
-
-class _LimitsPanelState extends ConsumerState<LimitsPanel> {
-  Future<void> _edit(LimitDef d, int? now) async {
-    final ctl = TextEditingController(text: now?.toString() ?? '');
-    var none = now == null;
-    final r = await showDialog<(bool, int?)>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          title: Text(d.label),
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(d.help),
-                const SizedBox(height: Space.x3),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: none,
-                  title: const Text('No limit'),
-                  onChanged: (v) => set(() => none = v ?? true),
-                ),
-                TextField(
-                  controller: ctl,
-                  enabled: !none,
-                  autofocus: !none,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Limit',
-                    suffixText: d.unit,
-                    helperText: 'At least ${d.min}',
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, (
-                none,
-                none ? null : int.tryParse(ctl.text.trim()),
-              )),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (r == null || !mounted) return;
-    final (noLimit, n) = r;
-    if (!noLimit && (n == null || n < d.min)) {
-      toast('Enter a whole number of at least ${d.min}.', error: true);
-      return;
-    }
-    setLimit(ref.read(sessionProvider).cat, d.key, noLimit ? null : n);
-    ref.read(versionProvider.notifier).bump();
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    ref.watch(versionProvider);
-    final t = DjTokens.of(context);
-    final cat = ref.read(sessionProvider).cat;
-    final text = Theme.of(context).textTheme;
-    return Panel(
-      title: 'Limits and batch sizes',
-      subtitle: 'Nothing is limited unless you set a number here. Online services still keep their own pace (MusicBrainz: one track a second).',
-      trailing: TextButton(
-        onPressed: () {
-          for (final d in limitDefs) {
-            setLimit(cat, d.key, null);
-          }
-          ref.read(versionProvider.notifier).bump();
-          setState(() {});
-        },
-        child: const Text('Remove all limits'),
-      ),
-      child: Column(
-        children: [
-          for (final d in limitDefs)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: Space.x1),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(d.label),
-                        Text(
-                          d.help,
-                          style: text.bodySmall?.copyWith(color: t.faint),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: Space.x3),
-                  Text(
-                    switch (limitOf(cat, d.key)) {
-                      null => 'No limit',
-                      final n => '$n ${d.unit}',
-                    },
-                    style: TextStyle(
-                      fontFeatures: DjType.tabular,
-                      color: limitOf(cat, d.key) == null ? t.ok : t.text,
-                    ),
-                  ),
-                  const SizedBox(width: Space.x2),
-                  TextButton(
-                    onPressed: () => _edit(d, limitOf(cat, d.key)),
-                    child: const Text('Change'),
-                  ),
-                ],
-              ),
-            ),
+          item(Icons.cleaning_services_outlined, 'Empty this account', 'Library list, crates, analysis, change history and settings of this account.', 'Empty account', () async {
+            if (!await ask(
+              'Empty this account?',
+              'Everything DJ Assistant stored for this account is deleted. Your music files are not touched; scan your folders again to start over.',
+              'Empty account',
+            )) {
+              return;
+            }
+            await guard(
+              () => ref.read(sessionProvider.notifier).resetAccount(),
+              done: 'The account is empty.',
+            );
+            ref.read(viewProvider.notifier).go('home');
+          }),
+          item(Icons.delete_forever_outlined, 'Delete all app data', 'Every account, crate, setting, API key and backup. DJ Assistant starts as new.', 'Delete everything', () async {
+            if (!await ask(
+              'Delete all DJ Assistant data?',
+              'Every account with its library list, crates, analysis, settings, API keys and backups is deleted. This cannot be undone. Your music files and Serato are not touched.',
+              'Delete everything',
+            )) {
+              return;
+            }
+            await guard(() async {
+              s.settings.resetAll();
+              await ref.read(sessionProvider.notifier).resetEverything();
+            }, done: 'All app data deleted. DJ Assistant starts fresh.');
+            ref.read(viewProvider.notifier).go('home');
+          }),
         ],
       ),
     );
   }
 }
 
-/// Settings → Auto-import: finished downloads go straight into the library.
-class AutoImportPanel extends ConsumerStatefulWidget {
-  const AutoImportPanel({super.key});
-  @override
-  ConsumerState<AutoImportPanel> createState() => _AutoImportPanelState();
-}
-
-class _AutoImportPanelState extends ConsumerState<AutoImportPanel> {
-  bool checking = false;
-
-  void _set(String k, Object? v) => guard(() {
-    final s = ref.read(sessionProvider);
-    s.settings.set(k, v);
-    s.inbox.start();
-  }, bump: ref);
-
-  Future<void> _pick(String key, String title) async {
-    final d = await getDirectoryPath(confirmButtonText: title);
-    if (d != null) _set(key, d);
-  }
-
-  Future<void> _check() async {
-    final s = ref.read(sessionProvider);
-    setState(() => checking = true);
-    try {
-      final msg = await s.inbox.runNow();
-      toast(msg);
-      ref.read(versionProvider.notifier).bump();
-    } on Object catch (e) {
-      toast(_errText(e), error: true);
-    } finally {
-      if (mounted) setState(() => checking = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = ref.watch(sessionProvider);
-    ref.watch(versionProvider);
-    final st = ref.watch(settingsProvider);
-    final t = DjTokens.of(context);
-    final on = st['inbox_enabled'] == true;
-    final recent = InboxService(s.cat).recent(limit: 6);
-    Widget folder(String key, String label, String button, String help) => Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label),
-              Text(
-                '${st[key] ?? ''}',
-                style: TextStyle(color: t.muted, fontSize: DjType.small),
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                help,
-                style: TextStyle(color: t.faint, fontSize: DjType.small),
-              ),
-            ],
-          ),
-        ),
-        TextButton(
-          onPressed: () => _pick(key, button),
-          child: const Text('Change'),
-        ),
-      ],
-    );
-    return Panel(
-      title: 'Auto-import',
-      subtitle: 'Music you buy or download (Beatport, Bandcamp, Juno, promo and record pools) goes straight into your library, analysed and ready to prep.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Import finished downloads automatically'),
-            subtitle: Text(
-              'New audio files and ZIPs are copied into the Inbox folder, scanned, analysed (BPM, key, beatgrid) and added to the "$inboxCrateName" crate. Your downloads folder is only read: nothing there is moved or deleted.',
-              style: TextStyle(color: t.faint, fontSize: DjType.small),
-            ),
-            value: on,
-            onChanged: (v) => _set('inbox_enabled', v),
-          ),
-          folder(
-            'inbox_downloads',
-            'Downloads folder (watched)',
-            'Watch this folder',
-            'Where your browser or store app saves downloads.',
-          ),
-          const SizedBox(height: 6),
-          folder(
-            'inbox_folder',
-            'Inbox folder (in your library)',
-            'Import here',
-            'New tracks are copied here, in a folder per day. Not inside the downloads folder.',
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              FilledButton.icon(
-                onPressed: !on || checking ? null : _check,
-                icon: const Icon(Icons.download_done_outlined),
-                label: Text(checking ? 'Checking…' : 'Check now'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  s.inbox.lastMessage ??
-                      (on ? 'Watching for finished downloads.' : 'Off.'),
-                  style: TextStyle(color: t.muted, fontSize: DjType.small),
-                ),
-              ),
-            ],
-          ),
-          if (recent.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Recent', style: TextStyle(color: t.muted)),
-            for (final r in recent)
-              Text(
-                '${r['status'] == 'imported'
-                    ? '✓'
-                    : r['status'] == 'error'
-                    ? '✗'
-                    : '–'} ${r['file']}'
-                '${r['message'] == null ? '' : ' (${r['message']})'}',
-                style: TextStyle(
-                  color: r['status'] == 'error' ? t.warn : t.faint,
-                  fontSize: DjType.small,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Songs the DJ deleted from the library, with a way to bring them back.
 class RemovedSongsPanel extends ConsumerWidget {
   const RemovedSongsPanel({super.key});
   @override
@@ -1187,9 +578,4 @@ class RemovedSongsPanel extends ConsumerWidget {
             ),
     );
   }
-}
-
-String _errText(Object e) {
-  final s = '$e';
-  return s.startsWith('Exception: ') ? s.substring(11) : s;
 }

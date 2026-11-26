@@ -15,7 +15,7 @@ void main() {
     File('test/golden/analysis.json').readAsStringSync(),
   ) as Map).cast<String, Map<String, dynamic>>();
   String locate(String rel) => rel.startsWith('library/')
-      ? p.join('..', 'crates', 'dj-core', 'tests', 'fixtures', rel)
+      ? p.join('test', 'fixtures', rel)
       : p.join('test', 'fixtures', rel);
 
   // Known 1.x errors that 2.0 deliberately does not reproduce.

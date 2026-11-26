@@ -20,51 +20,15 @@ class LimitDef {
 
 const limitDefs = <LimitDef>[
   LimitDef(
-    'autoprep_musicbrainz',
-    'Auto-prep: MusicBrainz lookups per run',
-    'Tracks missing a year or genre looked up on MusicBrainz each time auto-prep runs (one a second, so 3,600 take an hour).',
-    unit: 'tracks',
-  ),
-  LimitDef(
-    'autoprep_catalogs',
-    'Auto-prep: catalogue checks per run',
-    'Tracks checked against the online catalogues you turned on, each time auto-prep runs.',
-    unit: 'tracks',
-  ),
-  LimitDef(
-    'lookup_musicbrainz',
-    'Suggestions: MusicBrainz button',
-    'Tracks looked up when you press MusicBrainz on the Suggestions page.',
-    unit: 'tracks',
-  ),
-  LimitDef(
-    'lookup_catalogs',
-    'Suggestions: online catalogues button',
-    'Tracks checked when you press the online catalogues button.',
-    unit: 'tracks',
-  ),
-  LimitDef(
     'analysis_minutes',
     'Analysis: minutes read per track',
-    'BPM, key, energy, loudness and cues are worked out from this much of each track. Without a limit the whole file is read (slower for long mixes).',
+    'Energy is worked out from this much of each track. Without a limit the whole file is read (slower for long mixes).',
     unit: 'minutes',
   ),
   LimitDef(
-    'picker_results',
-    'Song pickers: results shown',
-    'Songs listed in the Gig Mode song picker.',
-    unit: 'songs',
-  ),
-  LimitDef(
     'suggestions_shown',
-    'Suggestions: items shown',
-    'Suggestions listed at once on the Suggestions page.',
-    unit: 'items',
-  ),
-  LimitDef(
-    'discovery_items',
-    'Discovery: recommendations kept',
-    'Recommendations listed on the Discovery page.',
+    'Changes: items shown',
+    'Changes listed at once on the Changes page.',
     unit: 'items',
   ),
   LimitDef(
@@ -72,19 +36,6 @@ const limitDefs = <LimitDef>[
     'Long lists: rows before "Show all"',
     'Logs, histories, previews and reports show this many rows, then a Show all button. Without a limit everything is shown at once.',
     unit: 'rows',
-  ),
-  LimitDef(
-    'assistant_steps',
-    'AI assistant: steps per request',
-    'Tool calls the AI assistant may make to answer one request. Each step is a call to the AI service you chose.',
-    unit: 'steps',
-  ),
-  LimitDef(
-    'assistant_tokens',
-    'AI assistant: length of an answer',
-    'The most the AI service may write in one answer (tokens). Some services refuse values above their own maximum.',
-    unit: 'tokens',
-    min: 256,
   ),
 ];
 
@@ -111,7 +62,7 @@ void setLimit(Catalogue cat, String key, int? value) {
   cat.setSetting('limit_$key', '$value');
 }
 
-/// Every limit, for the settings page and the assistant.
+/// Every limit.
 Map<String, int?> allLimits(Catalogue cat) => {
   for (final d in limitDefs) d.key: limitOf(cat, d.key),
 };

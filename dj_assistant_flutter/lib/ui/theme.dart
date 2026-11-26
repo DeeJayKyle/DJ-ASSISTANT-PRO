@@ -118,14 +118,14 @@ class DjTokens extends ThemeExtension<DjTokens> {
     accent: mint,
     onAccent: Color(0xFF04241B),
     bg: ink,
-    panel: Color(0xFF121821),
-    panel2: Color(0xFF18202B),
-    panel3: Color(0xFF1F2935),
-    line: Color(0x17FFFFFF),
-    lineStrong: Color(0x2EFFFFFF),
-    text: Color(0xFFE8EDF2),
-    muted: Color(0xFFB3BDC8),
-    faint: Color(0xFF8794A3),
+    panel: Color(0xFF131417),
+    panel2: Color(0xFF1A1C20),
+    panel3: Color(0xFF23262B),
+    line: Color(0x14FFFFFF),
+    lineStrong: Color(0x29FFFFFF),
+    text: Color(0xFFECEDEF),
+    muted: Color(0xFFB6B9BF),
+    faint: Color(0xFF8B8F97),
     warn: Color(0xFFF5B454),
     danger: Color(0xFFFF7A7A),
     ok: Color(0xFF7ED3A0),
@@ -194,7 +194,7 @@ class DjTokens extends ThemeExtension<DjTokens> {
 }
 
 const mint = Color(0xFF3DDBB0);
-const ink = Color(0xFF0B0F14);
+const ink = Color(0xFF0A0B0D);
 const panel = Color(0xFF121821);
 const line = Color(0x17FFFFFF);
 

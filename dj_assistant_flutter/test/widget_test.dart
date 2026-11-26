@@ -58,25 +58,29 @@ void main() {
     );
     await tester.pump();
     // Home first: the hubs in the sidebar and the bento tiles
-    for (final x in ['Home', 'Library', 'Analysis', 'Crates', 'Prep & Gigs']) {
+    for (final x in [
+      'Home',
+      'Serato Crates',
+      'Metadata & Analysis',
+      'Backups & Settings',
+    ]) {
       expect(find.text(x), findsWidgets, reason: x);
     }
-    expect(find.text('Your library'), findsOneWidget);
+    expect(find.text('LIBRARY'), findsOneWidget);
     expect(find.text('DJ Decks'), findsNothing);
-    await tester.ensureVisible(find.text('Settings').first);
-    await tester.tap(find.text('Settings').first);
+    await tester.ensureVisible(find.text('Backups & Settings').first);
+    await tester.tap(find.text('Backups & Settings').first);
     await tester.pump();
     expect(find.text('Appearance'), findsOneWidget);
-    await tester.ensureVisible(find.text('Crates').first);
-    await tester.tap(find.text('Crates').first);
+    await tester.ensureVisible(find.text('Serato Crates').first);
+    await tester.tap(find.text('Serato Crates').first);
     await tester.pump();
-    expect(find.text('Virtual crates'), findsWidgets);
     // Ctrl+Tab steps to the hub's next tab
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pump();
-    expect(find.text('See also'), findsWidgets);
+    expect(find.text('Write to Serato'), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);
     await closeApp(tester, accounts);
   });
@@ -120,9 +124,9 @@ void main() {
     // a tab switches the page
     container.read(viewProvider.notifier).go('suggestions');
     await tester.pump();
-    await tester.tap(find.text('Duplicates').first);
+    await tester.tap(find.text('Health').first);
     await tester.pump();
-    expect(container.read(viewProvider).id, 'duplicates');
+    expect(container.read(viewProvider).id, 'health');
     expect(tester.takeException(), isNull);
     await closeApp(tester, accounts, container);
   });

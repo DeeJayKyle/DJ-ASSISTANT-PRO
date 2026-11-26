@@ -49,7 +49,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f1);
     await tester.pumpAndSettle();
     expect(find.text('Keyboard shortcuts'), findsOneWidget);
-    expect(find.text('Open or close the assistant'), findsOneWidget);
+    expect(find.text('Show these shortcuts'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
     expect(find.text('Keyboard shortcuts'), findsNothing);

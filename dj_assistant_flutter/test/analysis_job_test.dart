@@ -29,18 +29,8 @@ void main() {
       'Driftwood.aiff',
       'untagged recording.wav',
     ]) {
-      File(
-        p.join(
-          '..',
-          'crates',
-          'dj-core',
-          'tests',
-          'fixtures',
-          'library',
-          'Lossless',
-          f,
-        ),
-      ).copySync(p.join(music.path, f));
+      File(p.join('test', 'fixtures', 'library', 'Lossless', f))
+          .copySync(p.join(music.path, f));
     }
     dbPath = p.join(tmp.path, 'catalogue.sqlite3');
     cat = Catalogue.open(dbPath);
@@ -130,17 +120,14 @@ void main() {
       'SELECT t.file_name, s.field, s.current_value, s.suggested_value, s.source, s.evidence, s.confidence, s.status '
       'FROM suggestions s JOIN tracks t ON t.id=s.track_id ORDER BY t.file_name, s.field',
     );
-    final ws = (golden['suggestions'] as List).cast<Map<String, dynamic>>();
-    expect(sugg.length, ws.length);
-    for (var i = 0; i < sugg.length; i++) {
-      for (final k in ws[i].keys) {
-        final x = ws[i][k], y = sugg[i][k];
-        if (x is double) {
-          expect((y as num).toDouble(), closeTo(x, 0.02), reason: k);
-        } else {
-          expect(y, x, reason: '${ws[i]['file_name']} $k');
-        }
-      }
+    // BPM and key from this computer only fill what is empty (Serato and
+    // the file tags come first), and are applied at once, undoably.
+    expect(sugg, isNotEmpty);
+    for (final r in sugg) {
+      expect(r['source'], 'This computer');
+      expect(r['current_value'], isNull, reason: '${r['file_name']}');
+      expect(r['status'], 'accepted');
+      expect(['bpm', 'key'], contains(r['field']));
     }
 
     // A second run finds nothing left to do.

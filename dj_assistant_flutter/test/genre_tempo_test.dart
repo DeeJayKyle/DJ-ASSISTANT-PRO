@@ -1,17 +1,6 @@
-import 'dart:io';
-
 import 'package:dj_assistant/analysis/analysis.dart' show analyseFile;
 import 'package:dj_assistant/analysis/beatgrid.dart';
-import 'package:dj_assistant/core/analysis_store.dart';
-import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/crew.dart';
-import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/roots.dart';
-import 'package:dj_assistant/core/scanner.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
-
-import 'scanner_test.dart' show copyLibrary, hashes;
 
 /// Half or double time can't be heard; the genre settles it.
 void main() {
@@ -43,63 +32,4 @@ void main() {
     );
     expect(slow.bpm, 90.0);
   });
-
-  test(
-    'the Judge has the Listener re-time a track once its genre is known',
-    () async {
-      final music = copyLibrary();
-      File('test/fixtures/analysis/dnb174.flac')
-          .copySync(p.join(music.path, 'Roller Dub.flac'));
-      final db = p.join(music.parent.path, 'catalogue.sqlite3');
-      final cat = Catalogue.open(db);
-      addTearDown(() {
-        cat.close();
-        music.parent.deleteSync(recursive: true);
-      });
-      RootsService(cat).add(music.path);
-      await runScan(cat);
-      final before = hashes(music);
-      final id =
-          cat.db
-                  .select(
-                    "SELECT id FROM tracks WHERE file_name='Roller Dub.flac'",
-                  )
-                  .first['id']
-              as int;
-      final jobs = JobsController();
-      await jobs.start('analysis', analysisJob(db, only: [id]));
-      await jobs.shutdown();
-      double? bpm() =>
-          (cat.db.select('SELECT bpm FROM analysis WHERE track_id=?', [
-                    id,
-                  ]).first['bpm']
-                  as num?)
-              ?.toDouble();
-      expect(bpm(), 87.0, reason: 'no genre yet');
-      // the Detective / Librarian / Taggers / the DJ set the genre
-      cat.db.execute(
-        "INSERT INTO track_user (track_id, genre, updated_at) VALUES (?, 'Drum & Bass', 0)",
-        [id],
-      );
-      final b = CrewBoard(
-        cat,
-        CrewPlan(
-          dbPath: db,
-          dataDir: music.parent.path,
-          scope: 'ids',
-          ids: [id],
-          off: const {'listener', 'detective', 'librarian', 'taggers', 'clerk'},
-        ),
-      );
-      await runCrew(b, LocalProgress());
-      expect(bpm(), 174.0);
-      expect(b.reports['judge']!.summary, contains('re-time 1 track'));
-      expect(hashes(music), before);
-      // a chosen BPM range wins over the genre
-      cat.setSetting('bpm_range', '58-115');
-      final again = CrewBoard(cat, b.plan);
-      await runCrew(again, LocalProgress());
-      expect(bpm(), 174.0, reason: 'not re-timed when a range is chosen');
-    },
-  );
 }

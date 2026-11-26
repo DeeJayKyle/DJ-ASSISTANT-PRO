@@ -577,30 +577,7 @@ class SuggestionsService {
       final stem = dot > 0 ? file.substring(0, dot) : file;
       final named = parseFileName(stem);
       final parsed = named == null ? null : (named.artist, named.title);
-      if (named?.camelot case final k? when r['cur_key'] == null) {
-        insertSuggestion(
-          cat,
-          id,
-          'key',
-          null,
-          k,
-          'File name',
-          'The file name starts with the key "$k" (as DJ tools write it).',
-          0.5,
-        );
-      }
-      if (named?.bpm case final b? when r['cur_bpm'] == null) {
-        insertSuggestion(
-          cat,
-          id,
-          'bpm',
-          null,
-          rustNumber(b),
-          'File name',
-          'The file name starts with the tempo "${rustNumber(b)}".',
-          0.5,
-        );
-      }
+      // BPM and key come from Serato's analysis, never from the name.
       if (parsed != null) {
         if (artist == null) {
           insertSuggestion(

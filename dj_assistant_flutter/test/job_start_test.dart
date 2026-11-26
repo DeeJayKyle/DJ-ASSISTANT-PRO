@@ -1,12 +1,8 @@
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:dj_assistant/app/session.dart';
-import 'package:dj_assistant/assistant/quick_ai.dart';
 import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/online/online.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
 
 /// 2.0.3: "Get Pro Stems AI" stayed on Downloading forever. The job closure
 /// was written inline in the Settings page, so it captured the page's state;
@@ -27,28 +23,5 @@ void main() {
     expect(st.state, 'failed');
     expect(st.message, contains("couldn't start"));
     expect(jobs.running('x'), isFalse);
-  });
-
-  test('the AI model download jobs start in their isolates', () async {
-    final app = AppSession(
-      dbPath: p.join(dir.path, 'catalogue.sqlite3'),
-      online: NoOnline(),
-      secrets: MemorySecrets(),
-      onlineFactory: NoOnline.new,
-    );
-    addTearDown(app.close);
-    final ai = AiHelpers(app);
-    ai.localPull('qwen2.5:7b');
-    ai.packSetup('qwen2.5:7b');
-    for (final kind in ['ai_model', 'ai_pack']) {
-      for (var i = 0; i < 100 && app.jobs.running(kind); i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      }
-      expect(
-        app.jobs.status(kind).message,
-        isNot(contains("couldn't start")),
-        reason: kind,
-      );
-    }
   });
 }

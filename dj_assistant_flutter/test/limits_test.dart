@@ -16,16 +16,16 @@ void main() {
   });
 
   test('a limit can be set, changed and removed', () {
-    setLimit(c, 'autoprep_musicbrainz', 5000);
-    expect(limitOf(c, 'autoprep_musicbrainz'), 5000);
+    setLimit(c, 'analysis_minutes', 5000);
+    expect(limitOf(c, 'analysis_minutes'), 5000);
     expect(sqlLimit(5000), ' LIMIT 5000');
     expect(upTo([1, 2, 3], 2), [1, 2]);
-    setLimit(c, 'autoprep_musicbrainz', null);
-    expect(limitOf(c, 'autoprep_musicbrainz'), isNull);
+    setLimit(c, 'analysis_minutes', null);
+    expect(limitOf(c, 'analysis_minutes'), isNull);
   });
 
   test('values below the minimum and unknown limits are refused', () {
-    expect(() => setLimit(c, 'assistant_tokens', 10), throwsArgumentError);
+    expect(() => setLimit(c, 'analysis_minutes', 0), throwsArgumentError);
     expect(() => setLimit(c, 'no_such_limit', 3), throwsArgumentError);
   });
 }

@@ -7,43 +7,34 @@ import '../core/analysis_store.dart';
 import '../core/autoprep.dart';
 import '../core/catalogue.dart';
 import '../core/crates.dart';
-import '../core/discovery.dart';
 import '../core/dj_export.dart';
-import '../core/duplicates.dart';
-import '../core/export.dart';
-import '../core/gig.dart';
-import '../core/gigpack.dart';
+import '../core/file_sync.dart';
 import '../core/health.dart';
-import '../core/inbox.dart';
 import '../core/jobs.dart';
 import '../core/library.dart';
-import '../core/organize.dart';
 import '../core/paths.dart';
 import '../core/removal.dart';
 import '../core/roots.dart';
 import '../core/safe_write.dart';
 import '../core/scanner.dart';
 import '../core/serato.dart';
-import '../core/crew.dart';
-import '../core/file_sync.dart';
-import '../core/sets.dart';
-import '../core/taggers.dart';
+import '../core/serato_backup.dart';
+import '../core/serato_library.dart';
 import '../core/settings.dart';
 import '../core/suggestions.dart';
+import '../core/taggers.dart';
 import '../core/templates.dart';
 import '../core/watcher.dart';
 import '../online/credentials.dart';
 import '../online/http_online.dart';
-import '../online/lookups.dart';
 import '../online/online.dart';
-import 'inbox_runner.dart';
+import 'analyse_job.dart';
 
 /// Builds the online implementation inside a job's isolate (top-level, so it
 /// can be sent there).
 Online defaultOnline() => HttpOnline();
 
-/// One open catalogue (one DJ account) with every service on it. Widgets and
-/// the assistant call these services directly; there is no command bridge.
+/// One open catalogue (one DJ account) with every service on it.
 class AppSession {
   AppSession({
     required this.dbPath,
@@ -65,14 +56,14 @@ class AppSession {
   final Secrets secrets;
   final JobsController jobs;
 
-  /// Makes an [Online] inside background isolates (auto-prep, lookups).
+  /// Makes an [Online] inside background isolates.
   final Online Function() onlineFactory;
 
   late final ScanService scan;
   ScanProgress? lastScan;
   StreamSubscription<ScanProgress>? _scanSub;
 
-  /// The account's data folder (backups, packs, removed files area…).
+  /// The account's data folder.
   String get dataDir => p.dirname(dbPath);
 
   late final library = LibraryService(cat);
@@ -80,25 +71,36 @@ class AppSession {
   late final crates = CratesService(cat);
   late final templates = TemplatesService(cat);
   late final health = HealthService(cat);
-  late final duplicates = DuplicatesService(cat);
   late final suggestions = SuggestionsService(cat);
   late final analysis = AnalysisStore(cat);
   late final settings = SettingsService(cat, secrets);
-  late final discovery = DiscoveryService(cat);
-  late final sets = SetsService(cat);
-  late final gig = GigService(cat, jobs: jobs);
   late final safeWrite = SafeWriteService(cat, dataDir);
-  late final organize = OrganizeService(cat, dataDir);
-  late final exports = ExportService(cat);
   late final djExport = DjExportService(cat);
-  late final gigPack = GigPackService(cat);
   late final serato = SeratoService(cat);
   late final removal = RemovalService(cat);
   late final taggers = TaggerService(cat, dataDir);
   late final watcher = FolderWatcher(cat);
 
-  /// Auto-import of finished downloads (Settings → Auto-import).
-  late final inbox = InboxRunner(this);
+  /// The `_Serato_` folders used: the one chosen in Settings, else every one
+  /// found on this computer.
+  List<String> get seratoDirs {
+    final chosen = cat.getSetting('serato_dir') ?? '';
+    if (chosen.isNotEmpty && Directory(chosen).existsSync()) return [chosen];
+    return SeratoLibrary.find();
+  }
+
+  /// ZIP backups taken before every change to Serato's files.
+  late final seratoBackups = SeratoBackups(p.join(dataDir, 'serato_backups'));
+
+  /// [dir] as a Serato library whose changes are checked and backed up.
+  SeratoLibrary seratoLibraryFor(String dir) =>
+      SeratoLibrary(dir, backups: seratoBackups);
+
+  /// The `_Serato_` folder crates are managed in (the first one found).
+  SeratoLibrary? get seratoLibrary {
+    final d = seratoDirs;
+    return d.isEmpty ? null : seratoLibraryFor(d.first);
+  }
 
   /// Starts a background job without waiting for it; errors land in its state.
   Map<String, Object?> _launch(String kind, JobBody body) {
@@ -114,29 +116,24 @@ class AppSession {
   }
 
   void _afterScan() {
-    if (autoPrepEnabled(cat) && !gig.active) runAutoPrep();
+    if (autoPrepEnabled(cat)) runAnalyse();
   }
 
-  /// Music dropped onto the window: folders become library folders, files
-  /// are imported through the Inbox. Then they are scanned and, with
-  /// Auto-prep on, analysed and fixed in the catalogue at once (new imports
-  /// also land in the Inbox crate). Returns a one-line summary.
+  /// Music dropped onto the window: folders, and the folders of dropped
+  /// files, become library folders (nothing is copied). Then they are scanned
+  /// and, with auto-analyse on, analysed and tagged at once.
   Future<String> importMusic(List<String> paths) async {
-    final folders = [
+    final folders = <String>{
       for (final x in paths)
-        if (FileSystemEntity.isDirectorySync(x)) x,
-    ];
-    final files = [
-      for (final x in paths)
-        if (!FileSystemEntity.isDirectorySync(x)) x,
-    ];
+        FileSystemEntity.isDirectorySync(x) ? x : p.dirname(x),
+    };
     final rootIds = <int>{};
     final notes = <String>[];
-    var addedFolders = 0;
+    var added = 0;
     for (final f in folders) {
       try {
         rootIds.add(roots.add(f).id);
-        addedFolders++;
+        added++;
       } on Exception catch (e) {
         // already a library folder (or inside one): just scan it
         final k = pathKey(f);
@@ -153,23 +150,6 @@ class AppSession {
         }
       }
     }
-    var imported = <String>[];
-    if (files.isNotEmpty) {
-      final inbox = InboxService(cat);
-      final (got, n) = inbox.importFiles(files);
-      imported = got;
-      notes.addAll(n);
-      if (got.isNotEmpty) {
-        final inboxRoot = inbox.ensureRoot(inbox.settings.inbox);
-        final keys = {for (final x in got) pathKey(x)};
-        for (final r in roots.list()) {
-          final rk = pathKey(r.path);
-          if (r.id == inboxRoot || keys.any((k) => keyIsWithin(k, rk))) {
-            rootIds.add(r.id);
-          }
-        }
-      }
-    }
     if (rootIds.isEmpty) {
       return notes.isEmpty ? 'Nothing to add.' : notes.join(' · ');
     }
@@ -178,17 +158,13 @@ class AppSession {
     } on StateError {
       return 'A scan is already running; try again when it finishes.';
     }
-    final crated = InboxService(cat).addToCrate(imported);
-    final prep = autoPrepEnabled(cat) && !gig.active;
-    if (prep) runAutoPrep();
+    final prep = autoPrepEnabled(cat);
+    if (prep) runAnalyse();
     return [
-      if (addedFolders > 0)
-        'Added ${addedFolders == 1 ? 'a folder' : '$addedFolders folders'}',
-      if (imported.isNotEmpty)
-        'imported ${imported.length} file(s) ($crated in the Inbox crate)',
+      if (added > 0) 'Added ${added == 1 ? 'a folder' : '$added folders'}',
       prep
-          ? 'analysing and fixing them now'
-          : 'Auto-prep is off, so run analysis when ready',
+          ? 'analysing and tagging the new songs now'
+          : 'Auto-analyse is off, so press Analyse when ready',
       ...notes.take(3),
     ].join('; ');
   }
@@ -196,127 +172,56 @@ class AppSession {
   Map<String, Object?> startAnalysis({List<int>? ids, bool force = false}) =>
       _launch('analysis', analysisJob(dbPath, only: ids, force: force));
 
-  Map<String, Object?> startHash() => _launch('hash', hashJob(dbPath));
-
-  /// The Analysis Crew: every analyser as one team of agents (crew.dart).
-  /// Auto-prep after scans and imports is the crew on new and incomplete
-  /// tracks; the DJ can also send it a scope or chosen tracks.
-  Map<String, Object?> runCrew({String scope = 'new', List<int>? ids}) {
+  /// The Analyse button: Serato BPM/key, energy, every online analyser at
+  /// once (majority wins) and writing into the files. After scans it runs
+  /// on new and incomplete tracks by itself.
+  Map<String, Object?> runAnalyse({String scope = 'new', List<int>? ids}) {
     final make = onlineFactory;
     final store = secrets is MemorySecrets ? secrets : null;
-    final online = settings.services().any(
-      (x) => x['enabled'] == true && x['id'] != 'updates',
-    );
+    final oneTagger = taggers.enabled('onetagger')
+        ? taggers.path('onetagger')
+        : null;
     return _launch(
-      'crew',
-      crewJob(
-        CrewPlan(
+      'online',
+      analyseJob(
+        AnalysePlan(
           dbPath: dbPath,
           dataDir: dataDir,
           scope: scope,
           ids: ids,
-          off: crewOff(cat),
-          taggerExe: {
-            for (final d in taggerDefs)
-              if (d.mode == TaggerMode.automatic &&
-                  taggers.enabled(d.id) &&
-                  taggers.path(d.id) != null)
-                d.id: taggers.path(d.id)!,
-          },
-          platforms: taggers.oneTaggerPlatforms,
-          beetsPlugins: taggers.beetsPlugins,
+          seratoDirs: seratoDirs,
+          oneTaggerExe: oneTagger,
+          oneTaggerPlatforms: taggers.oneTaggerPlatforms,
+          energy: settings.all()['energy_analysis'] == true,
         ),
-        onlineSteps: [
-          if (online)
-            (c, ctx) =>
-                autoPrepOnline(c, ctx, make(), store ?? platformSecrets()),
-        ],
+        makeOnline: make,
+        makeSecrets: () => store ?? platformSecrets(),
       ),
     );
   }
 
-  Map<String, Object?> runAutoPrep() => runCrew();
-
   /// Writes queued catalogue changes into the music files (write-through,
   /// file_sync.dart), in the background. No-op when nothing is queued.
   Map<String, Object?>? startFileSync() {
-    if (!fileSyncOn(cat) || jobs.running('file_sync') || gig.active) {
+    if (!fileSyncOn(cat) ||
+        jobs.running('file_sync') ||
+        jobs.running('online')) {
       return null;
     }
     if (fileSyncQueued(cat) == 0) return null;
-    return _launch('file_sync', fileSyncJob(dbPath, dataDir));
+    return _launch(
+      'file_sync',
+      fileSyncJob(dbPath, dataDir, seratoDirs: seratoDirs),
+    );
   }
 
-  /// Looks tracks up in the switched-on catalogues (a background job).
-  Map<String, Object?> lookupCatalogs(List<int> ids) {
-    if (!catalogSourcesOn(cat, secrets)) {
-      throw SuggestionException(
-        'Turn on Deezer & Apple Music, Spotify, GetSongBPM or YouTube in Settings → Online services first.',
-      );
-    }
-    final make = onlineFactory;
-    final store = secrets is MemorySecrets ? secrets : null;
-    final path = dbPath;
-    return _launch('catalogs', (ctx) async {
-      final c = Catalogue.open(path);
-      try {
-        ctx.result = {
-          'suggestions': await catalogLookup(
-            c,
-            make(),
-            store ?? platformSecrets(),
-            ids,
-            ctx,
-          ),
-        };
-      } finally {
-        c.close();
-      }
-    });
-  }
-
-  Map<String, Object?> lookupMusicbrainz(List<int> ids) {
-    requireService(cat, 'musicbrainz');
-    final make = onlineFactory;
-    final path = dbPath;
-    return _launch('musicbrainz', (ctx) async {
-      final c = Catalogue.open(path);
-      try {
-        await musicbrainzLookup(c, make(), ids, ctx);
-      } finally {
-        c.close();
-      }
-    });
-  }
-
-  /// AcoustID: the UI asks the DJ to confirm before calling this.
-  Map<String, Object?> lookupAcoustid(
-    List<int> ids, {
-    required bool confirmed,
-  }) {
-    if (!confirmed) {
-      throw SuggestionException(
-        'Confirm the AcoustID lookup first: it sends an audio fingerprint of each track.',
-      );
-    }
-    requireService(cat, 'acoustid');
-    final make = onlineFactory;
-    final store = secrets is MemorySecrets ? secrets : null;
-    final path = dbPath;
-    return _launch('acoustid', (ctx) async {
-      final c = Catalogue.open(path);
-      try {
-        await acoustidLookup(c, make(), store ?? platformSecrets(), ids, ctx);
-      } finally {
-        c.close();
-      }
-    });
-  }
+  bool _closed = false;
 
   Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
     await _scanSub?.cancel();
     watcher.stop();
-    inbox.stop();
     scan.cancel();
     await jobs.shutdown();
     cat.close();

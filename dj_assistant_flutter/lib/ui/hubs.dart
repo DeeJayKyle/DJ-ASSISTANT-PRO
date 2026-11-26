@@ -69,15 +69,51 @@ const homeDark = Color(0xFF5EEAD4), homeLight = Color(0xFF0F766E);
 Color homeColor(BuildContext context) =>
     Theme.of(context).brightness == Brightness.light ? homeLight : homeDark;
 
-/// The app's hubs in sidebar order (Ctrl+1…4 opens them).
+/// The app's three hubs in sidebar order (Ctrl+1…3 opens them).
 const hubs = <Hub>[
   Hub(
-    'hub:library',
-    'Library',
-    Icons.library_music_outlined,
-    'Every track you have, where it lives and how it is scanned.',
-    Color(0xFF38BDF8),
-    Color(0xFF0369A1),
+    'hub:crates',
+    'Serato Crates',
+    Icons.album_outlined,
+    'Your Serato crates: tree, editor, smart crates and templates.',
+    Color(0xFFFBBF24),
+    Color(0xFFB45309),
+    [
+      HubTab(
+        'serato',
+        'Crates',
+        Icons.album_outlined,
+        pageTitle: 'Serato crates',
+        hint:
+            'The crates saved in Serato: rename, move, sort, edit and delete '
+            'them. Serato must be closed while you change them.',
+        related: ['crates', 'backups'],
+      ),
+      HubTab(
+        'templates',
+        'Templates',
+        Icons.account_tree_outlined,
+        pageTitle: 'Crate templates',
+        hint:
+            'Auto-organise: nested crates by genre, decade, energy, BPM, key… '
+            'sorted harmonically and written into Serato.',
+      ),
+      HubTab(
+        'crates',
+        'Smart crates',
+        Icons.rule_folder_outlined,
+        pageTitle: 'Virtual Crates',
+        hint: 'Rule-based smart crates and hand-picked crates, saved into Serato.',
+      ),
+    ],
+  ),
+  Hub(
+    'hub:metadata',
+    'Metadata & Analysis',
+    Icons.insights_outlined,
+    'Your tracks, audio analysis and online tag lookup, synced to files and Serato.',
+    Color(0xFFA78BFA),
+    Color(0xFF6D28D9),
     [
       HubTab(
         'library',
@@ -85,156 +121,80 @@ const hubs = <Hub>[
         Icons.library_music_outlined,
         pageTitle: 'Music Library',
         hint: 'Search, filter, select and edit every track. Ctrl+F searches.',
-        related: ['crates', 'suggestions', 'health'],
+        related: ['analyse', 'serato'],
       ),
       HubTab(
-        'map',
-        'Map',
-        Icons.scatter_plot_outlined,
-        pageTitle: 'Library Map',
-        hint: 'Every analysed track by tempo and energy, coloured by key.',
-        related: ['library', 'crates'],
-      ),
-      HubTab(
-        'activity',
-        'Sources & scans',
-        Icons.refresh,
-        pageTitle: 'Scan Activity',
-        hint: 'Add music folders, scan them and run audio analysis.',
-        related: ['health', 'suggestions'],
-      ),
-    ],
-  ),
-  Hub(
-    'hub:analysis',
-    'Analysis',
-    Icons.insights_outlined,
-    'Check and fix your metadata: BPM, key, genre, quality and duplicates.',
-    Color(0xFFA78BFA),
-    Color(0xFF6D28D9),
-    [
-      HubTab(
-        'crew',
+        'analyse',
         'Analyse',
-        Icons.groups_2_outlined,
+        Icons.travel_explore_outlined,
         hint:
-            'One button runs every analyser as a crew of agents: Scout, '
-            'Listener, Detective, Librarian, Taggers, Judge and Clerk.',
-        related: ['suggestions', 'taggers', 'health'],
+            'One button: BPM and key (Serato first, then this computer), '
+            'energy, and every online analyser at once. The majority answer '
+            'is written into your files and Serato.',
+        related: ['suggestions', 'health'],
       ),
       HubTab(
         'suggestions',
-        'Suggestions',
-        Icons.auto_fix_high_outlined,
+        'Changes',
+        Icons.history,
+        pageTitle: 'Suggestions',
         hint:
-            'Proposed fixes with evidence and confidence. Approve or reject; '
-            'Undo puts the old value back.',
-        related: ['crew', 'taggers', 'health'],
-      ),
-      HubTab(
-        'taggers',
-        'Taggers',
-        Icons.auto_awesome_motion_outlined,
-        hint:
-            'MusicBrainz Picard, OneTagger, Mp3tag and beets on copies of '
-            'your tracks; what they agree on becomes Suggestions.',
-        related: ['suggestions', 'health', 'library'],
+            'Every change the analysers made, with its sources. Undo puts the '
+            'old value back in the file.',
+        related: ['analyse', 'health'],
       ),
       HubTab(
         'health',
         'Health',
         Icons.favorite_outline,
         pageTitle: 'Library Health',
-        hint: 'Missing tags, low bitrate, unreadable and missing files.',
-        related: ['suggestions', 'duplicates', 'upgrades'],
+        hint: 'Tracks missing genre, year, BPM or key, unreadable or missing files.',
+        related: ['analyse'],
       ),
       HubTab(
-        'duplicates',
-        'Duplicates',
-        Icons.copy_all_outlined,
-        pageTitle: 'Duplicate Review',
-        hint: 'Exact copies, possible duplicates and alternate versions.',
-        related: ['organize', 'health'],
-      ),
-      HubTab(
-        'upgrades',
-        'Upgrades',
-        Icons.high_quality_outlined,
-        hint: 'Low-bitrate tracks and better copies to replace them with.',
-        related: ['health', 'organize'],
+        'activity',
+        'Sources',
+        Icons.refresh,
+        pageTitle: 'Scan Activity',
+        hint: 'Add music folders and scan them. New songs are tagged automatically.',
+        related: ['analyse', 'health'],
       ),
     ],
   ),
   Hub(
-    'hub:crates',
-    'Crates',
-    Icons.inventory_2_outlined,
-    'Build manual and smart crates and export them to Serato or rekordbox.',
-    Color(0xFFFBBF24),
-    Color(0xFFB45309),
+    'hub:settings',
+    'Backups & Settings',
+    Icons.settings_outlined,
+    'Serato backups, app settings, reset and updates.',
+    Color(0xFF38BDF8),
+    Color(0xFF0369A1),
     [
       HubTab(
-        'crates',
-        'Virtual crates',
-        Icons.inventory_2_outlined,
-        pageTitle: 'Virtual Crates',
-        hint: 'Manual and smart crates, templates and export.',
-        related: ['discovery', 'library', 'gig-pack'],
+        'settings',
+        'Settings',
+        Icons.settings_outlined,
+        hint: 'Appearance, library, Serato folder, file changes, reset. Ctrl+,',
+        related: ['backups'],
       ),
       HubTab(
-        'discovery',
-        'Discovery',
-        Icons.explore_outlined,
-        hint: 'Tracks that fit a crate, gaps, tracklist matching, new music.',
-        related: ['crates', 'map'],
-      ),
-    ],
-  ),
-  Hub(
-    'hub:prep',
-    'Prep & Gigs',
-    Icons.bolt_outlined,
-    'Prepare new downloads, organise files and play out.',
-    Color(0xFFFB7185),
-    Color(0xFFBE123C),
-    [
-      HubTab(
-        'quick',
-        'Quick Prep',
-        Icons.bolt_outlined,
-        hint: 'A fast lane for a folder of fresh downloads.',
-        related: ['activity', 'suggestions'],
-      ),
-      HubTab(
-        'organize',
-        'Organise Files',
-        Icons.build_outlined,
-        hint: 'Opt-in: write tags, rename and move files, with preview, undo.',
-        related: ['duplicates', 'upgrades'],
-      ),
-      HubTab(
-        'gig',
-        'Gig Mode',
-        Icons.sensors,
-        hint: 'Live: set list, requests, notes and Next up.',
-        related: ['gig-pack', 'crates'],
-      ),
-      HubTab(
-        'gig-pack',
-        'Gig Pack',
-        Icons.usb_outlined,
-        hint: 'Copy a crate or set to a USB drive, verified.',
-        related: ['gig', 'crates'],
+        'backups',
+        'Serato backups',
+        Icons.archive_outlined,
+        pageTitle: 'Serato backups',
+        hint:
+            "ZIPs of Serato's crates and library, taken before every change. "
+            'Restore puts one back.',
+        related: ['serato'],
       ),
     ],
   ),
 ];
 
 /// The hub a page belongs to, if any. A crate or a source folder is shown as
-/// part of Crates or Library in the sidebar, but without the hub's tabs.
+/// part of Serato Crates or Metadata & Analysis in the sidebar, but without the hub's tabs.
 Hub? hubOf(String viewId) => switch (viewId) {
-  'crate' => hubs[2],
-  'root' => hubs[0],
+  'crate' => hubs[0],
+  'root' => hubs[1],
   _ => hubs.where((h) => h.owns(viewId)).firstOrNull,
 };
 
@@ -360,38 +320,6 @@ class HubTabs extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// "See also": links to the pages related to the open tab.
-class RelatedLinks extends StatelessWidget {
-  const RelatedLinks({super.key, required this.scope});
-  final HubScope scope;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = DjTokens.of(context);
-    final tab = tabOf(scope.current);
-    if (tab == null || tab.related.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: Space.x3,
-      runSpacing: Space.x1,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text(
-          'See also',
-          style: TextStyle(color: t.faint, fontSize: DjType.small),
-        ),
-        for (final id in tab.related)
-          if (tabOf(id) case final x?)
-            DjLink(
-              label: x.label,
-              hint: x.hint,
-              color: hubOf(id)?.color(context),
-              onTap: () => scope.onSelect(id),
-            ),
-      ],
     );
   }
 }

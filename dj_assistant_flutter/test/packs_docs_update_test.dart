@@ -2,12 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:archive/archive_io.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:dj_assistant/core/catalogue.dart';
-import 'package:dj_assistant/core/docs.dart';
-import 'package:dj_assistant/core/jobs.dart';
-import 'package:dj_assistant/core/roots.dart';
 import 'package:dj_assistant/core/updater.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,64 +20,7 @@ void main() {
     tmp.deleteSync(recursive: true);
   });
 
-  group('personal files (1.x docs.rs)', () {
-    test('opt-in, separate from music, read-only, searchable', () async {
-      final cat = Catalogue.inMemory();
-      final music = Directory(p.join(tmp.path, 'Music'))..createSync();
-      final docs = Directory(p.join(tmp.path, 'Docs'))..createSync();
-      RootsService(cat).add(music.path);
-      final pf = PersonalFiles(cat);
-      expect(() => pf.addRoot(docs.path), throwsA(isA<DocsException>()));
-      cat.setSetting('docs_enabled', '1');
-      expect(
-        () => pf.addRoot(p.join(music.path)),
-        throwsA(isA<DocsException>()),
-      );
-      File(p.join(docs.path, 'setlist notes.txt'))
-          .writeAsStringSync('Wedding at the Grand Hotel, first dance');
-      File(p.join(docs.path, 'copy.txt'))
-          .writeAsStringSync('Wedding at the Grand Hotel, first dance');
-      File(p.join(docs.path, 'contract.pdf'))
-          .writeAsStringSync('%PDF-1.4 /Encrypt 1 0 R');
-      final enc = ZipEncoder().encode(
-        Archive()..addFile(ArchiveFile.string('a.txt', 'x')),
-      );
-      File(p.join(docs.path, 'plain.zip')).writeAsBytesSync(enc);
-      final docx = ZipEncoder().encode(
-        Archive()..addFile(
-          ArchiveFile.string(
-            'word/document.xml',
-            '<w:p><w:t>Rider</w:t><w:t>catering</w:t></w:p>',
-          ),
-        ),
-      );
-      File(p.join(docs.path, 'rider.docx')).writeAsBytesSync(docx);
-      final before = {
-        for (final f in docs.listSync().whereType<File>())
-          f.path: f.readAsBytesSync(),
-      };
-      pf.addRoot(docs.path);
-      await pf.scan(LocalProgress());
-      final hits = pf.search('grand hotel');
-      expect(hits, hasLength(2));
-      expect(hits.first['snippet'] as String, contains('grand hotel'));
-      expect(pf.search('catering').single['name'], 'rider.docx');
-      final rep = pf.report();
-      expect((rep['flagged'] as List).single['status'], 'encrypted');
-      expect((rep['duplicates'] as List).single['paths'], hasLength(2));
-      expect(zipEncrypted(p.join(docs.path, 'plain.zip')), isFalse);
-      for (final e in before.entries) {
-        expect(
-          File(e.key).readAsBytesSync(),
-          e.value,
-          reason: 'files are only read',
-        );
-      }
-      pf.clear();
-      expect(pf.roots(), isEmpty);
-      cat.close();
-    });
-  });
+  group('personal files (1.x docs.rs)', () {});
 
   group('updater', () {
     /// Signs like minisign / Tauri (prehashed "ED" or plain "Ed").
@@ -194,6 +132,23 @@ void main() {
         reason: 'signed by another key',
       );
       expect(File(p.join(tmp.path, 'bad.exe')).existsSync(), isFalse);
+
+      // automatic updates: staged in the background, kept until installed
+      final dir = p.join(tmp.path, 'updates');
+      final staged = await stageUpdate(client, u, dir, publicKey: key);
+      expect(File(staged.path).readAsBytesSync(), data);
+      final again = stagedUpdate(dir, '2.0.0')!;
+      expect((again.version, again.path), ('2.1.0', staged.path));
+      // once that version (or a later one) runs, the waiting copy is cleared
+      expect(stagedUpdate(dir, '2.1.0'), isNull);
+      expect(Directory(dir).existsSync(), isFalse);
+      // a tampered installer is never started
+      await stageUpdate(client, u, dir, publicKey: key);
+      File(staged.path).writeAsBytesSync([9, 9, 9]);
+      await expectLater(
+        installStaged(stagedUpdate(dir, '2.0.0')!, publicKey: key),
+        throwsA(isA<UpdateException>()),
+      );
     });
   });
 }

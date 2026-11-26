@@ -38,6 +38,7 @@ const _patchCols = {
   'energy': 'energy',
   'rating': 'rating',
   'mood': 'mood',
+  'event': 'event',
   'color': 'color',
   'notes': 'notes',
   'version_label': 'version_label',
@@ -49,7 +50,12 @@ const _patchCols = {
   'record_label': 'record_label',
 };
 const _textMax = {
-  'genre': 120, 'key': 12, 'mood': 80, 'notes': 4000, 'version_label': 80, //
+  'genre': 120,
+  'key': 12,
+  'mood': 80,
+  'event': 80,
+  'notes': 4000,
+  'version_label': 80, //
   'title': 300, 'artist': 300, 'album': 300, 'record_label': 200,
 };
 
@@ -199,6 +205,7 @@ extension LibraryEdits on LibraryService {
       'format' => 't.format',
       'key' => 'keynorm(COALESCE(u.musical_key, t.key_tag, a.camelot))',
       'mood' => 'u.mood',
+      'event' => 'u.event',
       'label' => 'COALESCE(u.record_label, t.label)',
       'decade' => 'CAST((COALESCE(u.year, t.year)/10)*10 AS TEXT)',
       'version' => 'COALESCE(u.version_label, t.version_hint)',

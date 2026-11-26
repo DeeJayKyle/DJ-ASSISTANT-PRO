@@ -6,23 +6,14 @@ import 'package:path/path.dart' as p;
 import 'catalogue.dart';
 import 'jobs.dart';
 import 'keys.dart';
-import 'library.dart';
-import 'library_edit.dart';
 import 'suggestions.dart';
 import 'tags.dart';
 import 'text.dart';
 
-/// External taggers (MusicBrainz Picard, OneTagger, Mp3tag, beets) working
-/// hand in hand with DJ Assistant's own analysis.
-///
-/// The rule: **no tool ever touches the DJ's music.** Each tool gets its own
-/// copies of the chosen tracks in a workspace in the app's data folder. The
-/// automatic tools (OneTagger, beets) run on their copies in the background;
-/// the interactive ones (Picard, Mp3tag) open on theirs and the DJ saves there.
-/// Then DJ Assistant reads every copy back, compares it with the original tags,
-/// and merges what the tools found into review-first Suggestions: values that
-/// several tools agree on score higher, and disagreements are spelled out in
-/// the evidence. Accepting a suggestion changes the catalogue only.
+/// OneTagger, one of the analysers Analyse asks. It runs on temporary copies
+/// of the tracks in the app's data folder (it rewrites whatever files it is
+/// given), DJ Assistant reads what it found back as OneTagger's vote, and the
+/// copies are deleted. The originals are changed only by the majority vote.
 
 enum TaggerMode { automatic, interactive }
 
@@ -78,88 +69,6 @@ const taggerDefs = <TaggerDef>[
       'album': 0.70,
       'title': 0.60,
       'artist': 0.60,
-    },
-  ),
-  TaggerDef(
-    id: 'beets',
-    name: 'beets',
-    mode: TaggerMode.automatic,
-    strength:
-        'MusicBrainz releases: correct title, artist, album, year, original '
-        'year and label (genre with the lastgenre plugin).',
-    sends:
-        'beets (not DJ Assistant) sends each copy\'s tags to MusicBrainz, and '
-        'to any plugin services you list.',
-    site: 'https://beets.io',
-    exeNames: ['beet'],
-    windowsPaths: [
-      r'%APPDATA%\Python\Scripts\beet.exe',
-      r'%LOCALAPPDATA%\Programs\Python\Python313\Scripts\beet.exe',
-      r'%LOCALAPPDATA%\Programs\Python\Python312\Scripts\beet.exe',
-    ],
-    trust: {
-      'title': 0.80,
-      'artist': 0.80,
-      'album': 0.85,
-      'year': 0.85,
-      'original_year': 0.85,
-      'record_label': 0.75,
-      'genre': 0.60,
-    },
-  ),
-  TaggerDef(
-    id: 'picard',
-    name: 'MusicBrainz Picard',
-    mode: TaggerMode.interactive,
-    strength:
-        'Acoustic fingerprints (AcoustID) and MusicBrainz: finds the exact '
-        'release even for badly tagged files. You check and save in Picard.',
-    sends:
-        'Picard (not DJ Assistant) sends fingerprints and tags to AcoustID and '
-        'MusicBrainz when you look tracks up.',
-    site: 'https://picard.musicbrainz.org',
-    exeNames: ['picard'],
-    windowsPaths: [
-      r'%ProgramFiles%\MusicBrainz Picard\picard.exe',
-      r'%ProgramFiles(x86)%\MusicBrainz Picard\picard.exe',
-      r'%LOCALAPPDATA%\Programs\MusicBrainz Picard\picard.exe',
-    ],
-    trust: {
-      'title': 0.85,
-      'artist': 0.85,
-      'album': 0.90,
-      'year': 0.85,
-      'original_year': 0.85,
-      'record_label': 0.80,
-      'genre': 0.60,
-    },
-  ),
-  TaggerDef(
-    id: 'mp3tag',
-    name: 'Mp3tag',
-    mode: TaggerMode.interactive,
-    strength:
-        'Hands-on editing: tag sources (Discogs, MusicBrainz…), actions and '
-        'batch fixes, checked by you before saving.',
-    sends:
-        'Mp3tag (not DJ Assistant) only goes online when you use one of its '
-        'tag sources.',
-    site: 'https://www.mp3tag.de/en/',
-    exeNames: ['Mp3tag'],
-    windowsPaths: [
-      r'%ProgramFiles%\Mp3tag\Mp3tag.exe',
-      r'%ProgramFiles(x86)%\Mp3tag\Mp3tag.exe',
-    ],
-    trust: {
-      'title': 0.90,
-      'artist': 0.90,
-      'album': 0.90,
-      'genre': 0.90,
-      'year': 0.90,
-      'original_year': 0.90,
-      'record_label': 0.90,
-      'bpm': 0.90,
-      'key': 0.90,
     },
   ),
 ];
@@ -277,78 +186,6 @@ String agreeKey(String field, String v) {
 
 /// One tool's finding for a track: field → the value it wrote.
 typedef Findings = Map<int, Map<String, String>>;
-
-/// A merged suggestion before it is stored.
-class MergedSuggestion {
-  MergedSuggestion(
-    this.trackId,
-    this.field,
-    this.value,
-    this.confidence,
-    this.evidence,
-    this.tools,
-  );
-  final int trackId;
-  final String field, value, evidence;
-  final double confidence;
-  final List<String> tools;
-}
-
-/// Merges every tool's findings: per track and field, the value most tools
-/// agree on wins (ties: the more trusted tools). Confidence starts at the most
-/// trusted agreeing tool's trust, gains 0.07 for each extra tool that agrees
-/// and loses 0.12 when another tool disagrees.
-List<MergedSuggestion> mergeFindings(Map<String, Findings> byTool) {
-  final out = <MergedSuggestion>[];
-  final tracks = {for (final f in byTool.values) ...f.keys};
-  for (final id in tracks.toList()..sort()) {
-    for (final field in taggerFields) {
-      // agreement key → (display value, tools)
-      final groups = <String, (String, List<String>)>{};
-      for (final MapEntry(key: tool, value: f) in byTool.entries) {
-        final v = f[id]?[field];
-        if (v == null) continue;
-        final g = groups[agreeKey(field, v)] ??= (v, <String>[]);
-        g.$2.add(tool);
-      }
-      if (groups.isEmpty) continue;
-      double trustOf(List<String> tools) => tools
-          .map((t) => taggerById(t)?.trust[field] ?? 0.5)
-          .fold(0.0, (a, b) => a > b ? a : b);
-      final ranked = groups.values.toList()
-        ..sort((a, b) {
-          final n = b.$2.length.compareTo(a.$2.length);
-          return n != 0 ? n : trustOf(b.$2).compareTo(trustOf(a.$2));
-        });
-      final (value, tools) = ranked.first;
-      final others = ranked.skip(1).toList();
-      var conf = trustOf(tools) + 0.07 * (tools.length - 1);
-      if (others.isNotEmpty) conf -= 0.12;
-      conf = conf.clamp(0.3, 0.97);
-      String names(List<String> t) =>
-          t.map((x) => taggerById(x)?.name ?? x).join(' + ');
-      final evidence = StringBuffer(
-        tools.length > 1
-            ? '${names(tools)} agree'
-            : '${names(tools)} found this',
-      );
-      for (final (v, t) in others) {
-        evidence.write('; ${names(t)} said “$v”');
-      }
-      out.add(
-        MergedSuggestion(
-          id,
-          field,
-          value,
-          conf,
-          evidence.toString(),
-          List.of(tools),
-        ),
-      );
-    }
-  }
-  return out;
-}
 
 /// What one workspace holds: the tracks (id, original path, the original's
 /// tags) and each tool's findings so far.
@@ -496,7 +333,6 @@ Future<ProcessResult> _runProcess(
   TaggerWorkspace ws,
   String tool, {
   String? platforms,
-  String? beetsPlugins,
 }) {
   final dir = ws.toolDir(tool);
   switch (tool) {
@@ -518,56 +354,9 @@ Future<ProcessResult> _runProcess(
         ],
         null,
       );
-    case 'beets':
-      // beets gets its own config and library inside the workspace, so the
-      // DJ's own beets library and settings are never touched. It writes tags
-      // into the copies in place (copy: no, move: no) and never asks.
-      final home = p.join(ws.dir, 'beets');
-      Directory(home).createSync(recursive: true);
-      final plugins = (beetsPlugins ?? '')
-          .split(RegExp(r'[\s,]+'))
-          .where((x) => RegExp(r'^[a-z0-9_]+$').hasMatch(x))
-          .toList();
-      String yaml(String s) => "'${s.replaceAll("'", "''")}'";
-      File(p.join(home, 'config.yaml')).writeAsStringSync(
-        [
-          'directory: ${yaml(p.join(home, 'unused'))}',
-          'library: ${yaml(p.join(home, 'library.db'))}',
-          'import:',
-          '  copy: no',
-          '  move: no',
-          '  write: yes',
-          '  quiet: yes',
-          '  quiet_fallback: skip',
-          '  resume: no',
-          '  incremental: no',
-          '  log: ${yaml(p.join(home, 'import.log'))}',
-          if (plugins.isNotEmpty) 'plugins: ${plugins.join(' ')}',
-          if (plugins.contains('lastgenre')) ...[
-            'lastgenre:',
-            '  auto: yes',
-            '  force: yes',
-          ],
-          '',
-        ].join('\n'),
-      );
-      return (
-        ['-c', p.join(home, 'config.yaml'), 'import', '-q', '-s', dir],
-        {'BEETSDIR': home},
-      );
   }
   _no('${taggerById(tool)?.name ?? tool} is not an automatic tool');
 }
-
-/// The command that opens an interactive tool on its copies.
-List<String> interactiveCommand(TaggerWorkspace ws, String tool) =>
-    switch (tool) {
-      // Picard loads every file and folder it is given
-      'picard' => [ws.toolDir(tool)],
-      // Mp3tag: /fp: opens a folder (with its subfolders)
-      'mp3tag' => ['/fp:${ws.toolDir(tool)}'],
-      _ => _no('${taggerById(tool)?.name ?? tool} is not an interactive tool'),
-    };
 
 /// Finds a tool: the path the DJ set, else PATH, else the usual install
 /// locations. Null when it isn't installed.
@@ -606,27 +395,6 @@ String? findTool(
   return null;
 }
 
-/// The background job that runs an automatic tool on its copies and reads
-/// them back. Sendable values only (it runs in an isolate).
-JobBody taggerJob(
-  String wsDir,
-  String tool,
-  String exe, {
-  String? platforms,
-  String? beetsPlugins,
-  Duration timeout = const Duration(hours: 2),
-}) => (ctx) async {
-  await runAutomaticTool(
-    TaggerWorkspace.load(wsDir),
-    tool,
-    exe,
-    progress: ctx,
-    platforms: platforms,
-    beetsPlugins: beetsPlugins,
-    timeout: timeout,
-  );
-};
-
 /// Copies, runs and collects one automatic tool. Its output goes to the
 /// workspace's log; a failure says what the tool printed last.
 Future<Findings> runAutomaticTool(
@@ -635,7 +403,6 @@ Future<Findings> runAutomaticTool(
   String exe, {
   JobProgress? progress,
   String? platforms,
-  String? beetsPlugins,
   ToolRunner run = _runProcess,
   Duration timeout = const Duration(hours: 2),
 }) async {
@@ -646,12 +413,7 @@ Future<Findings> runAutomaticTool(
   ws.manifest['opened'] = {...ws.opened, tool: nowMs()};
   ws.save();
   progress?.message = 'Running $name on the copies…';
-  final (args, env) = automaticCommand(
-    ws,
-    tool,
-    platforms: platforms,
-    beetsPlugins: beetsPlugins,
-  );
+  final (args, env) = automaticCommand(ws, tool, platforms: platforms);
   final r = await run(
     exe,
     args,
@@ -713,9 +475,6 @@ class TaggerService {
     cat.setSetting('tagger_onetagger_platforms', v.replaceAll(' ', ''));
   }
 
-  String get beetsPlugins => cat.getSetting('tagger_beets_plugins') ?? '';
-  set beetsPlugins(String v) => cat.setSetting('tagger_beets_plugins', v);
-
   /// Every tool with where it was found (null: not installed).
   List<Map<String, Object?>> tools() => [
     for (final d in taggerDefs)
@@ -746,19 +505,6 @@ class TaggerService {
     }
     return out;
   }
-
-  /// Tracks missing a genre, BPM, key, year or label (the usual tagging job).
-  List<int> incompleteTracks({int? limit}) => [
-    for (final r in cat.db.select(
-      'SELECT t.id FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id '
-      "WHERE t.presence='present' AND t.read_status='ok' AND t.media_kind IS NOT 'video' AND ("
-      'COALESCE(u.genre, t.genre) IS NULL OR COALESCE(u.year, t.year) IS NULL OR '
-      'COALESCE(u.bpm, t.bpm_tag) IS NULL OR COALESCE(u.musical_key, t.key_tag) IS NULL OR '
-      'COALESCE(u.record_label, t.label) IS NULL) ORDER BY t.id LIMIT ?',
-      [limit ?? 1 << 30],
-    ))
-      r['id'] as int,
-  ];
 
   /// A new workspace for these tracks. The originals' tags are read once
   /// (read-only) so every tool is compared with the same starting point.
@@ -803,63 +549,5 @@ class TaggerService {
   void remove(TaggerWorkspace ws) {
     if (!p.isWithin(root, ws.dir)) _no('not a tagger workspace');
     Directory(ws.dir).deleteSync(recursive: true);
-  }
-
-  /// Copies the tracks for an interactive tool and opens it on them.
-  Future<void> openInteractive(TaggerWorkspace ws, String tool) async {
-    final exe = path(tool) ?? _no('${taggerById(tool)!.name} was not found');
-    await ws.ensureCopies(tool);
-    ws.manifest['opened'] = {...ws.opened, tool: nowMs()};
-    ws.save();
-    await Process.start(
-      exe,
-      interactiveCommand(ws, tool),
-      mode: ProcessStartMode.detached,
-    );
-  }
-
-  /// Merges every tool's findings in [ws] into pending Suggestions (source
-  /// "taggers"). Returns how many suggestions were made or refreshed.
-  int merge(TaggerWorkspace ws) {
-    final lib = LibraryService(cat);
-    var n = 0;
-    for (final m in mergeFindings(ws.findings)) {
-      final row = lib.row(m.trackId);
-      if (row == null) continue;
-      final current = switch (m.field) {
-        'title' => row.title,
-        'artist' => row.artist,
-        'album' => row.album,
-        'genre' => row.genre,
-        'year' => row.year?.toString(),
-        'original_year' => row.originalYear?.toString(),
-        'bpm' => row.bpm == null ? null : rustNumber(row.bpm!),
-        'key' => row.key,
-        'record_label' =>
-          cat.db.select(
-                'SELECT COALESCE(u.record_label, t.label) AS v FROM tracks t '
-                'LEFT JOIN track_user u ON u.track_id=t.id WHERE t.id=?',
-                [m.trackId],
-              ).firstOrNull?['v']
-              as String?,
-        _ => null,
-      };
-      if (current != null &&
-          agreeKey(m.field, current) == agreeKey(m.field, m.value)) {
-        continue; // the catalogue already says this
-      }
-      insertSuggestion(
-        cat,
-        m.trackId,
-        m.field,
-        current,
-        m.value,
-        'taggers',
-        m.evidence,
-        m.confidence,
-      );
-      n++;
-    }
-    return n;
   }
 }

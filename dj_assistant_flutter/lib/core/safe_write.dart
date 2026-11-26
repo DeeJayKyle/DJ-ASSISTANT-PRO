@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 
 import 'blake3.dart';
 import 'catalogue.dart';
-import 'organize.dart' show organiseModeOn;
 import 'tag_writer.dart';
 
 /// Opt-in, verified tag writing (1.x `safe_write.rs`). This and the organiser are
@@ -98,8 +97,7 @@ class SafeWriteService {
   /// or as part of Organise Files mode.
   bool get enabled =>
       cat.getSetting('allow_file_changes') == '1' ||
-      cat.getSetting('sync_to_files') == '1' ||
-      organiseModeOn(cat);
+      (cat.getSetting('sync_to_files') ?? '1') == '1';
 
   /// The exact preview for writing [values] (field → value, null to remove) to
   /// each track. Nothing is written.
@@ -227,23 +225,29 @@ class SafeWriteService {
         'The file changed since the preview. Nothing was written; preview again.',
       );
     }
-    // 4. a verified backup
-    final day = nowMs() ~/ 86400000;
-    final dir = Directory(p.join(dataDir, 'backups', '$day'))
-      ..createSync(recursive: true);
-    final backup = p.join(
-      dir.path,
-      '${pc.trackId}-${nowMs()}-${p.basename(path)}',
-    );
-    if (File(backup).existsSync()) _no('backup name collision; try again');
-    try {
-      File(path).copySync(backup);
-    } on FileSystemException catch (e) {
-      _no('Backup failed, nothing was written: ${e.message}');
-    }
-    if (blake3File(backup) != pc.stamp.hash) {
-      File(backup).deleteSync();
-      _no('Backup could not be verified, nothing was written.');
+    // 4. a verified backup, only when the DJ asked for backups (Settings →
+    // Changes to music files). By default the original is changed in place
+    // with no copy kept; undo writes the previous values back instead.
+    String? backup;
+    if (cat.getSetting('write_backups') == '1') {
+      final day = nowMs() ~/ 86400000;
+      final dir = Directory(p.join(dataDir, 'backups', '$day'))
+        ..createSync(recursive: true);
+      final b = p.join(
+        dir.path,
+        '${pc.trackId}-${nowMs()}-${p.basename(path)}',
+      );
+      if (File(b).existsSync()) _no('backup name collision; try again');
+      try {
+        File(path).copySync(b);
+      } on FileSystemException catch (e) {
+        _no('Backup failed, nothing was written: ${e.message}');
+      }
+      if (blake3File(b) != pc.stamp.hash) {
+        File(b).deleteSync();
+        _no('Backup could not be verified, nothing was written.');
+      }
+      backup = b;
     }
     // 5. write a temporary copy and verify it
     final edited = pc.changes.keys.toList();
@@ -334,6 +338,11 @@ class SafeWriteService {
     }
     final path = r['path'] as String;
     final backup = (r['backup_path'] as String?) ?? '';
+    if (backup.isEmpty) {
+      _no(
+        'No backup was kept for this change (backups are off). Use Undo under Analysis → Changes to put the previous values back.',
+      );
+    }
     final before = (r['before_hash'] as String?) ?? '',
         after = (r['after_hash'] as String?) ?? '';
     if (blake3File(path) != after) {

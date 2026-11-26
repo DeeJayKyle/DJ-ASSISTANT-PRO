@@ -38,14 +38,7 @@ void main() {
 
   test('whole files hash as in 1.x', () {
     for (final e in (golden['files'] as Map).entries) {
-      final path = p.join(
-        '..',
-        'crates',
-        'dj-core',
-        'tests',
-        'fixtures',
-        e.key as String,
-      );
+      final path = p.join('test', 'fixtures', e.key as String);
       expect(blake3File(path), e.value, reason: e.key as String);
     }
   });

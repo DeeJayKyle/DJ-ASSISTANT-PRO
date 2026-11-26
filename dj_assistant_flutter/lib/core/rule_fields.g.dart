@@ -1,4 +1,4 @@
-// Generated from 1.x crates/dj-core/src/rules.rs FIELD_LIST. Do not edit.
+// Rule fields (originally generated from 1.x rules.rs). Edit by hand.
 
 /// A field usable in filters and smart crates.
 class RuleField {
@@ -21,6 +21,7 @@ const ruleFields = <RuleField>[
   RuleField('energy', 'Energy (1–10)', 'number'),
   RuleField('rating', 'Rating (0–5)', 'number'),
   RuleField('mood', 'Mood', 'text'),
+  RuleField('event', 'Event', 'text'),
   RuleField('color', 'Colour', 'enum'),
   RuleField('tag', 'Tag', 'tag'),
   RuleField('version', 'Version label', 'text'),

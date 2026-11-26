@@ -5,20 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/session.dart';
 import '../core/crates.dart';
-import '../core/export.dart';
-import '../core/json.dart';
 import '../core/library.dart';
 import '../core/library_edit.dart';
 import '../core/rules.dart';
 import 'format.dart';
 import 'rules_ui.dart';
-import 'crew_screen.dart' show crewTargetProvider;
+import 'analyse_screen.dart' show startOnlineAnalysis;
 import 'state.dart';
 import 'theme.dart';
 import 'track_detail.dart';
 import 'widgets.dart';
 import 'crates_screen.dart';
-import 'organise_preview.dart' show replaceWithBetterFile;
 import 'remove_dialog.dart';
 import 'write_dialog.dart';
 
@@ -280,23 +277,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           child: Text('Write tags to files…'),
         ),
         const PopupMenuItem(
-          value: 'crew',
-          child: Text('Analyse with the crew…'),
+          value: 'analyse',
+          child: Text('Analyse online and fix tags'),
         ),
-        const PopupMenuItem(
-          value: 'taggers',
-          child: Text('Tag with Picard, OneTagger, Mp3tag, beets…'),
-        ),
-        const PopupMenuItem(value: 'organise', child: Text('Organise…')),
-        if (ids.length == 1)
-          const PopupMenuItem(
-            value: 'replace',
-            child: Text('Replace with a better file…'),
-          ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'delete',
-          child: Text('Delete ${plural(ids.length, 'song')}…'),
+          child: Text('Remove ${plural(ids.length, 'song')} from the library…'),
         ),
       ],
     );
@@ -331,37 +318,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         _invert(s, eff);
       case 'write':
         await showWriteDialog(context, ref, ids);
-      case 'crew':
-        ref.read(crewTargetProvider.notifier).set((
-          '${plural(ids.length, 'selected track')} from the Library',
-          ids,
-        ));
-        ref.read(viewProvider.notifier).go('crew');
-      case 'taggers':
-        _taggers(ids);
-      case 'organise':
-        _organise(ids);
-      case 'replace':
-        await replaceWithBetterFile(context, ref, ids.single);
+      case 'analyse':
+        await startOnlineAnalysis(ref, ids);
       case 'delete':
         await _delete(context, ids);
     }
-  }
-
-  void _taggers(List<int> ids) {
-    ref.read(taggerTargetProvider.notifier).set((
-      '${plural(ids.length, 'selected track')} from the Library',
-      ids,
-    ));
-    ref.read(viewProvider.notifier).go('taggers');
-  }
-
-  void _organise(List<int> ids) {
-    ref.read(organiseTargetProvider.notifier).set((
-      '${plural(ids.length, 'selected track')} from the Library',
-      ids,
-    ));
-    ref.read(viewProvider.notifier).go('organize');
   }
 
   LibraryQuery _sub = const LibraryQuery();
@@ -486,7 +447,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         : root != null
         ? '${root.path} · ${root.status == 'offline' ? 'offline' : 'online'}'
         : 'Your local DJ music collection for Serato DJ';
-    final scanning = s.lastScan?.state == 'running';
     final activeRules =
         countRules(cleanRuleSet(base.filters)) +
         _quick.values.whereType<QuickOption>().length;
@@ -590,23 +550,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   onPressed: () => showCrateDialog(context, ref, crate: crate),
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: const Text('Edit crate'),
-                )
-              else
-                OutlinedButton.icon(
-                  onPressed: () => addMusicFolders(ref),
-                  icon: const Icon(Icons.create_new_folder_outlined, size: 18),
-                  label: const Text('Add folder…'),
                 ),
-              FilledButton.icon(
-                onPressed: scanning
-                    ? null
-                    : () => guard(() {
-                        s.startScan();
-                        ref.read(versionProvider.notifier).bump();
-                      }, done: 'Read-only scan started.'),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: Text(scanning ? 'Scanning…' : 'Scan'),
-              ),
             ],
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1037,36 +981,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               label: const Text('Write tags to files…'),
             ),
             OutlinedButton.icon(
-              onPressed: () => _taggers(ids),
-              icon: const Icon(Icons.auto_awesome_motion_outlined, size: 18),
-              label: const Text('Tag with tools…'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => _organise(ids),
-              icon: const Icon(Icons.drive_file_move_outline, size: 18),
-              label: const Text('Organise…'),
-            ),
-            MenuAnchor(
-              builder: (c, ctl, _) => OutlinedButton.icon(
-                onPressed: ctl.open,
-                icon: const Icon(Icons.ios_share, size: 16),
-                label: const Text('Export'),
-              ),
-              menuChildren: [
-                MenuItemButton(
-                  onPressed: () => _export(s, ids, 'm3u8', crate),
-                  child: const Text('Playlist (M3U8)…'),
-                ),
-                MenuItemButton(
-                  onPressed: () => _export(s, ids, 'csv', crate),
-                  child: const Text('Spreadsheet (CSV)…'),
-                ),
-              ],
+              onPressed: () => startOnlineAnalysis(ref, ids),
+              icon: const Icon(Icons.travel_explore_outlined, size: 18),
+              label: const Text('Analyse online'),
             ),
             OutlinedButton.icon(
               onPressed: () => _delete(context, ids),
               icon: const Icon(Icons.delete_outline, size: 18),
-              label: const Text('Delete…'),
+              label: const Text('Remove…'),
             ),
             TextButton(
               onPressed: () => _selectAll(s, eff),
@@ -1083,31 +1005,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Future<void> _export(
-    AppSession s,
-    List<int> ids,
-    String ext,
-    Crate? crate,
-  ) async {
-    final name = (crate?.name ?? 'DJ Assistant selection').replaceAll(
-      RegExp(r'[\\/:*?"<>|]'),
-      '_',
-    );
-    final loc = await getSaveLocation(
-      suggestedName: '$name.$ext',
-      acceptedTypeGroups: [
-        XTypeGroup(label: ext.toUpperCase(), extensions: [ext]),
-      ],
-    );
-    if (loc == null) return;
-    await guard(
-      () => ext == 'csv'
-          ? s.exports.writeCsv(ids, loc.path)
-          : s.exports.writeM3u(ids, loc.path),
-      done: 'Exported to ${loc.path}. Your music files were not touched.',
     );
   }
 }
@@ -1208,11 +1105,3 @@ class Stars extends StatelessWidget {
     );
   }
 }
-
-/// Export helpers re-exported for screens that only need them.
-typedef Exports = ExportService;
-
-/// Rows as JSON (used by the assistant panel previews).
-List<Map<String, Object?>> rowsJson(List<TrackRow> rows) => [
-  for (final r in rows) r.toJson(),
-];

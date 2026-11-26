@@ -22,6 +22,8 @@ const writableFields = [
   'bpm',
   'key',
   'comment',
+  'grouping',
+  'label',
 ];
 
 class TagWriteException implements Exception {
@@ -228,6 +230,8 @@ const _id3Ids = {
   'year': ['TDRC', 'TYER'],
   'bpm': ['TBPM'],
   'key': ['TKEY'],
+  'grouping': ['TIT1'],
+  'label': ['TPUB'],
 };
 
 Map<String, String> _id3Current(_Id3? tag) {
@@ -254,6 +258,8 @@ Map<String, String> _id3Current(_Id3? tag) {
   put('year', first('TDRC') ?? first('TYER'));
   put('bpm', first('TBPM'));
   put('key', first('TKEY'));
+  put('grouping', first('TIT1'));
+  put('label', first('TPUB'));
   for (final f in tag.frames) {
     final c = _comment(f);
     if (c != null && c.$1.isEmpty) {
@@ -406,6 +412,8 @@ const _vorbisKeys = {
   'bpm': 'BPM',
   'key': 'INITIALKEY',
   'comment': 'COMMENT',
+  'grouping': 'GROUPING',
+  'label': 'LABEL',
 };
 
 String _entryKey(String e) {
@@ -553,6 +561,7 @@ const _mp4Atoms = {
   'genre': '©gen',
   'year': '©day',
   'comment': '©cmt',
+  'grouping': '©grp',
 };
 
 const _gnre = [
@@ -693,6 +702,7 @@ Map<String, String> _mp4Current(Uint8List b) {
   put('album', get('©alb'));
   put('genre', get('©gen') ?? get('gnre'));
   put('comment', get('©cmt'));
+  put('grouping', get('©grp'));
   final day = get('©day');
   if (day != null &&
       day.length >= 4 &&

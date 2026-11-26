@@ -179,36 +179,6 @@ CatalogMatch? parseYoutubeRelease(Object? v) {
   );
 }
 
-List<CatalogMatch> parseGetsongbpm(Object? v) => [
-  for (final r in list(at(v, 'search')))
-    if (str(at(r, 'title')) case final title?)
-      if (str(at(r, 'artist/name')) case final artist?)
-        CatalogMatch(
-          source: 'GetSongBPM',
-          title: title,
-          artist: artist,
-          album: str(at(r, 'album/title')),
-          bpm: () {
-            final t = at(r, 'tempo');
-            final b = t is String ? double.tryParse(t.trim()) : number(t);
-            return (b != null && b > 0) ? b : null;
-          }(),
-          releaseDate: switch (at(r, 'album/year')) {
-            final String y => y,
-            final int y => '$y',
-            _ => null,
-          },
-          genres: [
-            for (final g in list(at(r, 'artist/genres')))
-              if (g is String) titleCase(g),
-          ],
-          key: switch (str(at(r, 'key_of'))) {
-            final k? when k.trim().isNotEmpty => k,
-            _ => null,
-          },
-        ),
-];
-
 List<CatalogMatch> parseItunes(Object? v) => [
   for (final r in list(at(v, 'results')))
     if (str(at(r, 'kind')) == null || str(at(r, 'kind')) == 'song')
@@ -269,76 +239,48 @@ List<MbRecording> parseMbRecordings(Object? v) => [
     }(),
 ];
 
-List<AcoustidMatch> parseAcoustid(Object? v) {
-  if (at(v, 'status') != 'ok') {
-    throw OnlineException(
-      str(at(v, 'error/message')) ?? 'AcoustID lookup failed',
-    );
-  }
-  final out = <AcoustidMatch>[];
-  for (final r in list(at(v, 'results'))) {
-    final score = number(at(r, 'score')) ?? 0;
-    for (final rec in list(at(r, 'recordings'))) {
-      final artists = [
-        for (final a in list(at(rec, 'artists'))) ?str(at(a, 'name')),
-      ].join(', ');
-      out.add(
-        AcoustidMatch(
-          score: score,
-          recordingMbid: str(at(rec, 'id')) ?? '',
-          title: str(at(rec, 'title')),
-          artist: artists.isEmpty ? null : artists,
-        ),
-      );
-    }
-  }
-  // stable, highest score first
-  final idx = List.generate(out.length, (i) => i)
-    ..sort((a, b) {
-      final c = out[b].score.compareTo(out[a].score);
-      return c != 0 ? c : a.compareTo(b);
-    });
-  return [for (final i in idx) out[i]];
-}
-
-void _lastfmError(Object? v) {
-  final m = str(at(v, 'message'));
-  if (m != null && at(v, 'error') is num) {
-    throw OnlineException('Last.fm: $m');
-  }
-}
-
-double _match(Object? m) => (m is String ? double.tryParse(m) : number(m)) ?? 0;
-
-List<SimilarItem> parseLastfmArtists(Object? v) {
-  _lastfmError(v);
-  return [
-    for (final x in list(at(v, 'similarartists/artist')))
-      if (str(at(x, 'name')) case final n?)
-        SimilarItem(
-          artist: n,
-          score: _match(at(x, 'match')),
-          url: str(at(x, 'url')),
-        ),
-  ];
-}
-
-List<SimilarItem> parseLastfmTracks(Object? v) {
-  _lastfmError(v);
-  return [
-    for (final x in list(at(v, 'similartracks/track')))
-      if (str(at(x, 'artist/name')) case final a?)
-        SimilarItem(
-          artist: a,
-          title: str(at(x, 'name')),
-          score: _match(at(x, 'match')),
-          url: str(at(x, 'url')),
-        ),
-  ];
-}
-
 /// A key in any notation as Camelot, when it is a real key.
 String? camelotOf(String k) {
   final c = normalizeKey(k);
   return (c != null && parseCamelot(c) != null) ? c : null;
+}
+
+/// Discogs database search (`type=release`): each release that holds the
+/// track [title] by [artist]. Discogs titles read "Artist - Release"; its
+/// styles ("Deep House") are more precise than its genres ("Electronic"),
+/// so they come first. Earliest release first, so the original wins over
+/// reissues.
+List<CatalogMatch> parseDiscogsSearch(Object? v, String artist, String title) {
+  final out = <CatalogMatch>[];
+  for (final r in list(at(v, 'results'))) {
+    final full = str(at(r, 'title'));
+    if (full == null) continue;
+    final i = full.indexOf(' - ');
+    final a = i < 0
+        ? artist
+        : full.substring(0, i).replaceAll(RegExp(r' \(\d+\)$'), '');
+    final album = i < 0 ? full : full.substring(i + 3);
+    final year = str(at(r, 'year')) ?? integer(at(r, 'year'))?.toString();
+    out.add(
+      CatalogMatch(
+        source: 'Discogs',
+        title: title,
+        artist: a.trim(),
+        album: album.trim(),
+        releaseDate: year != null && year.length == 4 ? year : null,
+        genres: [
+          for (final g in [...list(at(r, 'style')), ...list(at(r, 'genre'))])
+            ?str(g),
+        ],
+        label: switch (list(at(r, 'label'))) {
+          [final l, ...] => str(l),
+          _ => null,
+        },
+      ),
+    );
+  }
+  out.sort(
+    (x, y) => (x.releaseDate ?? '9999').compareTo(y.releaseDate ?? '9999'),
+  );
+  return out;
 }

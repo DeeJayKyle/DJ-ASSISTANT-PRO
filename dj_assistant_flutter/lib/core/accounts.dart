@@ -253,6 +253,56 @@ class AccountsService {
     return kept;
   }
 
+  /// Deletes everything DJ Assistant keeps in its data folder: every
+  /// account's catalogue (library, crates, analysis, settings), backups,
+  /// temporary tagger folders and the account list. The log folder is kept
+  /// (it may be open). Music files and Serato's files are not touched.
+  /// Callers close every open session first; a fresh account is made on
+  /// next use.
+  void wipeAll() {
+    _current?.close();
+    _current = null;
+    _currentId = null;
+    _last = null;
+    _accounts.clear();
+    final d = Directory(base);
+    if (d.existsSync()) {
+      for (final e in d.listSync()) {
+        if (p.basename(e.path) == 'logs') continue;
+        try {
+          e.deleteSync(recursive: true);
+        } on FileSystemException {
+          // in use: removed on the next reset
+        }
+      }
+    }
+    Directory(base).createSync(recursive: true);
+  }
+
+  /// Empties one account: its catalogue is deleted and made again, empty.
+  /// The account keeps its name.
+  void wipeAccount(String id) {
+    if (!_accounts.any((a) => a.id == id)) {
+      throw AccountException('that account no longer exists');
+    }
+    final wasOpen = _currentId == id;
+    if (wasOpen) {
+      _current?.close();
+      _current = null;
+      _currentId = null;
+    }
+    final path = cataloguePath(id);
+    for (final suffix in ['', '-wal', '-shm']) {
+      final f = File('$path$suffix');
+      if (f.existsSync()) f.deleteSync();
+    }
+    for (final sub in ['backups', 'taggers']) {
+      final d = Directory(p.join(p.dirname(path), sub));
+      if (d.existsSync()) d.deleteSync(recursive: true);
+    }
+    if (wasOpen) switchTo(id);
+  }
+
   void close() {
     _current?.close();
     _current = null;

@@ -7,7 +7,6 @@ import 'catalogue.dart';
 import 'serato_tags.dart';
 import 'limits.dart';
 import 'jobs.dart';
-import 'keys.dart';
 import 'suggestions.dart';
 
 /// Stores analysis estimates and runs analysis as a background job (1.x
@@ -127,53 +126,62 @@ class AnalysisStore {
     );
   }
 
-  /// Estimates that disagree with (or fill gaps in) file tags become suggestions.
+  /// BPM and key from this computer fill only what nothing else has given:
+  /// Serato's own analysis (read first) and the file's tags win. Filled
+  /// values are applied at once as automatic changes, so they show under
+  /// Changes, go into the file and Serato, and can be undone.
   void _suggest(int id, an.Analysis a) {
-    final t = cat.db.select('SELECT bpm_tag, key_tag FROM tracks WHERE id=?', [
-      id,
-    ]).first;
-    final bpmTag = (t['bpm_tag'] as num?)?.toDouble();
-    final keyTag = t['key_tag'] as String?;
-    final bpm = a.bpm;
-    if (bpm != null) {
-      final differs =
-          bpmTag != null &&
-          ![0.5, 1.0, 2.0].any((x) => ((bpmTag / bpm) / x - 1).abs() < 0.02);
-      if (bpmTag == null || differs) {
-        final alt = a.bpmAlt == null
-            ? ''
-            : ' It could also be heard as ${a.bpmAlt!.toStringAsFixed(1)} BPM (half/double time).';
-        insertSuggestion(
-          cat,
-          id,
-          'bpm',
-          bpmTag == null ? null : rustNumber(bpmTag),
-          bpm.toStringAsFixed(1),
-          'Local analysis',
-          'Tempo estimated from the audio.$alt',
-          a.bpmConfidence,
-        );
+    final t = cat.db.select(
+      'SELECT COALESCE(u.bpm, t.bpm_tag) AS bpm, '
+      'COALESCE(u.musical_key, t.key_tag) AS k '
+      'FROM tracks t LEFT JOIN track_user u ON u.track_id=t.id WHERE t.id=?',
+      [id],
+    ).first;
+    final sugg = SuggestionsService(cat);
+    void fill(String field, String value, String evidence, double conf) {
+      insertSuggestion(
+        cat,
+        id,
+        field,
+        null,
+        value,
+        'This computer',
+        evidence,
+        conf,
+      );
+      final r = cat.db.select(
+        "SELECT id FROM suggestions WHERE track_id=? AND field=? AND "
+        "suggested_value=? AND source='This computer' AND status='pending'",
+        [id, field, value],
+      );
+      if (r.isEmpty) return;
+      try {
+        sugg.accept(r.first['id'] as int, by: 'auto');
+      } on Object {
+        // left for the DJ under Changes
       }
     }
+
+    final bpm = a.bpm;
+    if (t['bpm'] == null && bpm != null) {
+      final alt = a.bpmAlt == null
+          ? ''
+          : ' It could also be heard as ${a.bpmAlt!.toStringAsFixed(1)} BPM (half/double time).';
+      fill(
+        'bpm',
+        bpm.toStringAsFixed(1),
+        'Serato has not analysed this track; tempo estimated from the audio.$alt',
+        a.bpmConfidence,
+      );
+    }
     final k = a.key, cam = a.camelot;
-    if (k != null && cam != null) {
-      final tagCam = keyTag == null
-          ? null
-          : (parseCamelot(keyTag) != null
-                ? keyTag.toUpperCase()
-                : camelotFor(keyTag));
-      if (keyTag == null || tagCam != cam) {
-        insertSuggestion(
-          cat,
-          id,
-          'key',
-          keyTag,
-          cam,
-          'Local analysis',
-          'Key estimated from the audio: $k ($cam).',
-          a.keyConfidence,
-        );
-      }
+    if (t['k'] == null && k != null && cam != null) {
+      fill(
+        'key',
+        cam,
+        'Serato has not analysed this track; key estimated from the audio: $k ($cam).',
+        a.keyConfidence,
+      );
     }
   }
 

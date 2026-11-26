@@ -7,7 +7,7 @@ import 'package:dj_assistant/core/tags.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-final lib = p.join('..', 'crates', 'dj-core', 'tests', 'fixtures', 'library');
+final lib = p.join('test', 'fixtures', 'library');
 final hasFfprobe =
     Process.runSync('sh', ['-c', 'command -v ffprobe']).exitCode == 0;
 

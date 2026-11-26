@@ -11,8 +11,6 @@ import '../core/accounts.dart';
 import '../core/crates.dart';
 import '../core/jobs.dart';
 import '../online/http_online.dart' show appVersion;
-import 'assistant_panel.dart';
-import 'crates_screen.dart';
 import 'format.dart';
 import 'screens.dart';
 import 'shortcuts_sheet.dart';
@@ -33,11 +31,10 @@ class NavPage {
   final IconData icon;
 }
 
-/// Every page, hub by hub, for Go to (Ctrl+K). Ctrl+1…4 opens the hubs.
+/// Every page, hub by hub, for Go to (Ctrl+K). Ctrl+1…3 opens the hubs.
 final allPages = [
   for (final h in hubs)
     for (final x in h.tabs) NavPage(x.id, x.pageTitle ?? x.label, x.icon),
-  const NavPage('settings', 'Settings', Icons.settings_outlined),
 ];
 
 /// Ctrl+K: type part of a page's name and press Enter to go there.
@@ -112,29 +109,6 @@ class Shell extends ConsumerStatefulWidget {
 class _ShellState extends ConsumerState<Shell> {
   bool _dragging = false;
 
-  /// The assistant's width while it is being resized (saved when done).
-  double? _chatDrag;
-
-  static const _chatMin = 280.0;
-
-  double _savedChatWidth() {
-    final prefs = ref.read(settingsProvider)['ui_prefs'];
-    final v = prefs is Map ? prefs['chat_width'] : null;
-    return v is num ? v.toDouble() : 0;
-  }
-
-  void _saveChatWidth(double w) {
-    final s = ref.read(sessionProvider);
-    final prefs = ref.read(settingsProvider)['ui_prefs'];
-    guard(
-      () => s.settings.set('ui_prefs', {
-        if (prefs is Map) ...prefs.cast<String, Object?>(),
-        'chat_width': w.round(),
-      }),
-      bump: ref,
-    );
-  }
-
   Future<void> _dropped(List<String> paths) async {
     setState(() => _dragging = false);
     if (paths.isEmpty) return;
@@ -198,7 +172,8 @@ class _ShellState extends ConsumerState<Shell> {
       if (was != null && live(was) && !live(j.state)) {
         changed = true;
         final name = switch (j.kind) {
-          'crew' => 'The analysis crew',
+          'online' => 'Online analysis',
+          'serato_sync' => 'Reading Serato BPM and key',
           'file_sync' => 'Writing to music files',
           _ => j.kind[0].toUpperCase() + j.kind.substring(1),
         };
@@ -223,12 +198,7 @@ class _ShellState extends ConsumerState<Shell> {
 
   @override
   Widget build(BuildContext context) {
-    PageFrame.onAskAssistant = (_) {
-      final mode = ref.read(chatModeProvider);
-      if (mode == 'hidden') ref.read(chatModeProvider.notifier).set('open');
-    };
     final view = ref.watch(viewProvider);
-    final chat = ref.watch(chatModeProvider);
     final hub = hubOf(view.id);
     final page = screenFor(view);
     final body = hub != null && hub.owns(view.id)
@@ -245,16 +215,6 @@ class _ShellState extends ConsumerState<Shell> {
             showShortcuts(context),
         const SingleActivator(LogicalKeyboardKey.slash, control: true): () =>
             showShortcuts(context),
-        const SingleActivator(LogicalKeyboardKey.keyJ, control: true): () => ref
-            .read(chatModeProvider.notifier)
-            .set(chat == 'hidden' ? 'open' : 'hidden'),
-        const SingleActivator(
-          LogicalKeyboardKey.keyJ,
-          control: true,
-          shift: true,
-        ): () => ref
-            .read(chatModeProvider.notifier)
-            .set(chat == 'full' ? 'open' : 'full'),
         // navigation
         const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): () =>
             ref.read(viewProvider.notifier).back(),
@@ -321,38 +281,7 @@ class _ShellState extends ConsumerState<Shell> {
               child: Scaffold(
                 body: LayoutBuilder(
                   builder: (context, box) {
-                    final w = box.maxWidth;
-                    final rail = w < 1240;
-                    // Narrow windows: the assistant floats over the page
-                    // instead of squeezing it, and stays open.
-                    final overlay = w < 960;
-                    final sideW = rail ? 72.0 : 240.0;
-                    final maxChat = (w - sideW - 520).clamp(_chatMin, 720.0);
-                    final auto = w < 1280 ? 320.0 : (w < 1600 ? 360.0 : 400.0);
-                    final saved = _savedChatWidth();
-                    final chatW = overlay
-                        ? (w * 0.86).clamp(_chatMin, 420.0)
-                        : (_chatDrag ?? (saved > 0 ? saved : auto))
-                              .clamp(_chatMin, maxChat)
-                              .toDouble();
-                    final page = Expanded(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(child: body),
-                          if (overlay && chat == 'open')
-                            Positioned(
-                              top: 0,
-                              bottom: 0,
-                              right: 0,
-                              width: chatW,
-                              child: const Material(
-                                elevation: 4,
-                                child: AssistantPanel(),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
+                    final rail = box.maxWidth < 1240;
                     return Column(
                       children: [
                         const _TitleBar(),
@@ -360,29 +289,9 @@ class _ShellState extends ConsumerState<Shell> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (chat != 'full') _Sidebar(rail: rail),
-                              if (chat != 'full')
-                                const VerticalDivider(width: 1),
-                              if (chat != 'full') page,
-                              if (chat == 'open' && !overlay) ...[
-                                _ResizeHandle(
-                                  width: chatW,
-                                  min: _chatMin,
-                                  max: maxChat,
-                                  onChanged: (v) =>
-                                      setState(() => _chatDrag = v),
-                                  onDone: (v) {
-                                    _saveChatWidth(v);
-                                    setState(() => _chatDrag = null);
-                                  },
-                                ),
-                                SizedBox(
-                                  width: chatW,
-                                  child: const AssistantPanel(),
-                                ),
-                              ],
-                              if (chat == 'full')
-                                const Expanded(child: AssistantPanel()),
+                              _Sidebar(rail: rail),
+                              const VerticalDivider(width: 1),
+                              Expanded(child: body),
                             ],
                           ),
                         ),
@@ -390,88 +299,6 @@ class _ShellState extends ConsumerState<Shell> {
                       ],
                     );
                   },
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The divider between the page and the assistant: drag it, or focus it and
-/// use the Left and Right arrow keys, to change the assistant's width.
-class _ResizeHandle extends StatefulWidget {
-  const _ResizeHandle({
-    required this.width,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-    required this.onDone,
-  });
-  final double width, min, max;
-  final ValueChanged<double> onChanged, onDone;
-  @override
-  State<_ResizeHandle> createState() => _ResizeHandleState();
-}
-
-class _ResizeHandleState extends State<_ResizeHandle> {
-  bool hover = false, focused = false;
-  double? start, startX;
-
-  void _set(double v, {bool done = false}) {
-    final c = v.clamp(widget.min, widget.max).toDouble();
-    done ? widget.onDone(c) : widget.onChanged(c);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = DjTokens.of(context);
-    final active = hover || focused || start != null;
-    return Semantics(
-      label: 'Assistant width',
-      value: '${widget.width.round()} pixels',
-      hint: 'Use the left and right arrow keys to resize',
-      child: Focus(
-        onFocusChange: (f) => setState(() => focused = f),
-        onKeyEvent: (_, e) {
-          if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
-            return KeyEventResult.ignored;
-          }
-          if (e.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            _set(widget.width + 24, done: true);
-            return KeyEventResult.handled;
-          }
-          if (e.logicalKey == LogicalKeyboardKey.arrowRight) {
-            _set(widget.width - 24, done: true);
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: MouseRegion(
-          cursor: SystemMouseCursors.resizeColumn,
-          onEnter: (_) => setState(() => hover = true),
-          onExit: (_) => setState(() => hover = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (d) => setState(() {
-              start = widget.width;
-              startX = d.globalPosition.dx;
-            }),
-            onHorizontalDragUpdate: (d) =>
-                _set(start! - (d.globalPosition.dx - startX!)),
-            onHorizontalDragEnd: (_) {
-              _set(widget.width, done: true);
-              setState(() => start = null);
-            },
-            onDoubleTap: () => _set(widget.min + 80, done: true),
-            child: SizedBox(
-              width: 6,
-              child: Center(
-                child: Container(
-                  width: active ? 3 : 1,
-                  color: active ? t.accent : t.line,
                 ),
               ),
             ),
@@ -604,12 +431,6 @@ class _TitleBar extends ConsumerWidget {
             ],
           ),
           const Spacer(),
-          if (ref.watch(chatModeProvider) == 'hidden')
-            TextButton.icon(
-              onPressed: () => ref.read(chatModeProvider.notifier).set('open'),
-              icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('Assistant'),
-            ),
         ],
       ),
     );
@@ -699,38 +520,23 @@ class _TitleBar extends ConsumerWidget {
 class _Sidebar extends ConsumerStatefulWidget {
   const _Sidebar({this.rail = false});
 
-  /// Icons only (compact windows): crates and sources are one click away on
-  /// the Virtual Crates and Scan Activity pages.
+  /// Icons only (compact windows): Home and the three hubs.
   final bool rail;
   @override
   ConsumerState<_Sidebar> createState() => _SidebarState();
 }
 
 class _SidebarState extends ConsumerState<_Sidebar> {
-  final open = <int>{};
-  bool sources = true;
-
   @override
   Widget build(BuildContext context) {
-    final t = DjTokens.of(context);
     final view = ref.watch(viewProvider);
     final stats = ref.watch(statsProvider);
     final crates = ref.watch(cratesProvider);
-    final roots = ref.watch(rootsProvider);
     final pending = ref.watch(pendingSuggestionsProvider);
-    final docs = ref.watch(settingsProvider)['docs_enabled'] == true;
     final problems =
         (stats['errors'] ?? 0) +
         (stats['missing'] ?? 0) +
         (stats['low_bitrate'] ?? 0);
-    Widget item(_Nav n, {String? count, bool warn = false}) => _NavItem(
-      nav: n,
-      selected: view.id == n.id,
-      rail: widget.rail,
-      count: count,
-      warn: warn,
-      onTap: () => ref.read(viewProvider.notifier).go(n.id),
-    );
     final here = hubOf(view.id);
     final homeItem = _NavItem(
       nav: const _Nav('home', 'Home', Icons.dashboard_outlined),
@@ -743,9 +549,9 @@ class _SidebarState extends ConsumerState<_Sidebar> {
     // One entry per hub; it opens the hub's first tab.
     Widget hubItem(Hub h) {
       final (count, warn) = switch (h.id) {
-        'hub:library' => (fmtNumber(stats['tracks'] ?? 0), false),
-        'hub:analysis' when pending > 0 => ('$pending', false),
-        'hub:analysis' when problems > 0 => ('$problems', true),
+        'hub:metadata' when pending > 0 => ('$pending', false),
+        'hub:metadata' when problems > 0 => ('$problems', true),
+        'hub:metadata' => (fmtNumber(stats['tracks'] ?? 0), false),
         'hub:crates' when crates.isNotEmpty => ('${crates.length}', false),
         _ => (null, false),
       };
@@ -758,100 +564,18 @@ class _SidebarState extends ConsumerState<_Sidebar> {
             '${h.tabs.map((x) => x.label).join(', ')}',
         selected: identical(here, h),
         rail: widget.rail,
-        count: widget.rail && h.id == 'hub:library' ? null : count,
+        count: widget.rail && h.id == 'hub:metadata' ? null : count,
         warn: warn,
         onTap: () => ref.read(viewProvider.notifier).go(h.tabs.first.id),
       );
     }
-
-    Widget section(String label, {Widget? trailing}) => widget.rail
-        ? const Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: Space.x4,
-              vertical: Space.x2,
-            ),
-            child: Divider(),
-          )
-        : Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 10, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: DjType.caption,
-                      letterSpacing: 1.2,
-                      color: t.faint,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ?trailing,
-              ],
-            ),
-          );
-
-    List<Widget> tree(int? parent, int depth) => [
-      for (final c in crates.where((c) => c.parentId == parent)) ...[
-        ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: EdgeInsets.only(left: 18.0 + depth * 14, right: 10),
-          selected: view.id == 'crate' && view.crateId == c.id,
-          selectedColor: t.accent,
-          leading: crates.any((k) => k.parentId == c.id)
-              ? InkWell(
-                  onTap: () => setState(
-                    () => open.contains(c.id)
-                        ? open.remove(c.id)
-                        : open.add(c.id),
-                  ),
-                  child: Icon(
-                    open.contains(c.id)
-                        ? Icons.expand_more
-                        : Icons.chevron_right,
-                    size: 18,
-                  ),
-                )
-              : (c.color != null
-                    ? ColorDot(c.color)
-                    : const Icon(Icons.inventory_2_outlined, size: 16)),
-          minLeadingWidth: 18,
-          title: Text(c.name, overflow: TextOverflow.ellipsis),
-          subtitle: c.smart
-              ? const Text('smart', style: TextStyle(fontSize: DjType.caption))
-              : null,
-          trailing: Text(
-            c.trackCount == 0 ? '' : '${c.trackCount}',
-            style: TextStyle(fontSize: DjType.caption, color: t.faint),
-          ),
-          onTap: () =>
-              ref.read(viewProvider.notifier).go('crate', crateId: c.id),
-        ),
-        if (open.contains(c.id)) ...tree(c.id, depth + 1),
-      ],
-    ];
 
     if (widget.rail) {
       return SizedBox(
         width: 64,
         child: ListView(
           padding: const EdgeInsets.symmetric(vertical: Space.x2),
-          children: [
-            homeItem,
-            for (final h in hubs) hubItem(h),
-            section(''),
-            if (docs)
-              item(
-                const _Nav(
-                  'files',
-                  'Personal Files',
-                  Icons.description_outlined,
-                ),
-              ),
-            item(const _Nav('settings', 'Settings', Icons.settings_outlined)),
-          ],
+          children: [homeItem, for (final h in hubs) hubItem(h)],
         ),
       );
     }
@@ -859,73 +583,7 @@ class _SidebarState extends ConsumerState<_Sidebar> {
       width: 232,
       child: ListView(
         padding: const EdgeInsets.only(top: 8, bottom: 8),
-        children: [
-          homeItem,
-          for (final h in hubs) hubItem(h),
-          section(
-            'My crates',
-            trailing: IconButton(
-              tooltip: 'New crate',
-              iconSize: 18,
-              onPressed: () => showCrateDialog(context, ref),
-              icon: const Icon(Icons.add),
-            ),
-          ),
-          if (crates.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Text(
-                'No crates yet. Try a template under Virtual Crates.',
-                style: TextStyle(fontSize: DjType.small, color: t.faint),
-              ),
-            ),
-          ...tree(null, 0),
-          section(
-            'Sources',
-            trailing: IconButton(
-              iconSize: 18,
-              onPressed: () => setState(() => sources = !sources),
-              icon: Icon(sources ? Icons.expand_more : Icons.chevron_right),
-            ),
-          ),
-          if (sources)
-            for (final r in roots)
-              ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-                selected: view.id == 'root' && view.rootId == r.id,
-                leading: const Icon(Icons.storage_outlined, size: 18),
-                minLeadingWidth: 18,
-                title: Tooltip(
-                  message: r.path,
-                  child: Text(
-                    r.label ?? r.path,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                trailing: Icon(
-                  Icons.circle,
-                  size: 9,
-                  color: r.status == 'offline' ? t.warn : t.ok,
-                ),
-                onTap: () =>
-                    ref.read(viewProvider.notifier).go('root', rootId: r.id),
-              ),
-          if (sources && roots.isEmpty)
-            ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-              leading: const Icon(Icons.add, size: 16),
-              title: const Text('Add a music folder'),
-              onTap: () => ref.read(viewProvider.notifier).go('activity'),
-            ),
-          const Divider(height: 24),
-          if (docs)
-            item(
-              const _Nav('files', 'Personal Files', Icons.description_outlined),
-            ),
-          item(const _Nav('settings', 'Settings', Icons.settings_outlined)),
-        ],
+        children: [homeItem, for (final h in hubs) hubItem(h)],
       ),
     );
   }
@@ -1173,10 +831,8 @@ class _StatusBar extends ConsumerWidget {
             const SizedBox(width: 14),
             InkWell(
               onTap: () => ref.read(viewProvider.notifier).go(switch (j.kind) {
-                'gigpack' => 'gig-pack',
-                'docs' => 'files',
                 'analysis' || 'hash' => 'activity',
-                'pack:stems-ai' || 'ai_pack' || 'ai_model' => 'settings',
+                'online' || 'serato_sync' => 'analyse',
                 _ => 'suggestions',
               }),
               child: Text(
