@@ -77,8 +77,9 @@ const _analysers = [
   ),
 ];
 
-/// Analysis → Analyse: one button for BPM and key from Serato, energy, and
-/// every online analyser at once with the majority deciding the tags.
+/// Analysis → Analyse: one button for BPM and key from Serato, energy (on
+/// every CPU core), and the online analysers on many tracks at once with the
+/// majority deciding the tags.
 class AnalyseScreen extends ConsumerStatefulWidget {
   const AnalyseScreen({super.key});
   @override
@@ -384,8 +385,9 @@ class _AnalyseScreenState extends ConsumerState<AnalyseScreen> {
     return PageFrame(
       title: 'Analyse',
       subtitle:
-          'BPM and key from Serato; genre, year, album and label from every '
-          'online analyser at once. The majority wins and is written into your files.',
+          'BPM and key from Serato; genre, year, album and label from the '
+          'online analysers, many tracks at once. The majority wins and is '
+          'written into your files.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

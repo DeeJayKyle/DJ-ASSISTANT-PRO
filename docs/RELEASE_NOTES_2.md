@@ -1,3 +1,15 @@
+DJ Assistant 2.7.0
+
+**Analyse is much faster on big libraries**
+- Only tracks that still miss a genre, year, album or label are looked up online. Every finished track is remembered, so a stopped run picks up where it left off and the next run only does new music. A track no catalogue knew is tried again after 90 days.
+- Many tracks are looked up at the same time. Each online service still gets no more requests than it allows.
+- The fast services (Deezer, Spotify) are asked first. The slow ones (MusicBrainz, Discogs, YouTube Music, Apple Music) are only asked while a field is still undecided, for example when two sources disagree. Two sources agreeing with none against is enough.
+- Songs from the same album share one lookup. The answers are kept, so a song from that album added later is filled in straight away. "Every track (check all again)" always asks again.
+- Energy and BPM/key from the audio now run on every CPU core (up to 6), at the same time as the online lookups instead of before them.
+- Serato's BPM and key come from its database. Files are only opened for tracks that still have no BPM or key.
+- Tags are written into your files as soon as the online part is done; energy follows when the audio part finishes. Only newly measured tracks get their Grouping rewritten.
+- The majority rules, writing into your original files and Undo under Changes are unchanged.
+
 DJ Assistant 2.6.0
 
 **A Serato crate and metadata organiser**

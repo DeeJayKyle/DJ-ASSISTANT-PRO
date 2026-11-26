@@ -74,6 +74,19 @@ abstract class Online {
   Future<List<CatalogMatch>> catalogLookup(String artist, String title) async =>
       _na('music catalogue lookups');
 
+  /// True when Deezer and Apple Music can be asked separately
+  /// ([deezerLookup], [appleLookup]), so Apple Music's slow speed limit is
+  /// only paid when its vote is needed.
+  bool get separateCatalogs => false;
+
+  /// Deezer alone (fast: about ten requests a second).
+  Future<List<CatalogMatch>> deezerLookup(String artist, String title) async =>
+      _na('music catalogue lookups');
+
+  /// Apple Music alone (slow: about 20 requests a minute).
+  Future<List<CatalogMatch>> appleLookup(String artist, String title) async =>
+      _na('music catalogue lookups');
+
   /// Spotify Web API; [creds] is "client_id:client_secret".
   Future<List<CatalogMatch>> spotifyLookup(
     String creds,

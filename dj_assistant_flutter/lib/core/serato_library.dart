@@ -593,8 +593,8 @@ int? camelotSortKey(String? key) {
 /// and puts them into the catalogue (field `bpm` / `key`), recorded as
 /// automatic changes from "Serato" so they show under Changes and can be
 /// undone. Sources, best first: Serato's library database, then the
-/// "Serato Autotags" Serato writes into the file, then the file's BPM/key
-/// tags. Returns (tracks updated, tracks Serato hasn't analysed).
+/// "Serato Autotags" Serato writes into the file (read only for tracks still
+/// missing a BPM or key), then the file's BPM/key tags. Returns (tracks updated, tracks Serato hasn't analysed).
 (int, int) syncSeratoAnalysis(
   Catalogue cat,
   List<String> seratoDirs, {
@@ -625,10 +625,15 @@ int? camelotSortKey(String? key) {
     if (v == null || v.bpm == null || v.key == null) {
       double? bpm = v?.bpm;
       String? key = v?.key;
-      try {
-        bpm ??= readSeratoAnalysis(r['path'] as String).bpm;
-      } on Object {
-        // unreadable now
+      // Serato's own tags in the file are only read when the catalogue
+      // still lacks a BPM or key: reading 35,000 files to confirm values
+      // the library already has is what made this step slow.
+      if (bpm == null && (r['bpm'] == null || r['k'] == null)) {
+        try {
+          bpm = readSeratoAnalysis(r['path'] as String).bpm;
+        } on Object {
+          // unreadable now
+        }
       }
       bpm ??= (r['bpm_tag'] as num?)?.toDouble();
       final kt = r['key_tag'] as String?;

@@ -9,7 +9,7 @@ import '../core/text.dart';
 import 'online.dart';
 import 'parsers.dart';
 
-const appVersion = '2.6.0';
+const appVersion = '2.7.0';
 const userAgent =
     'DJAssistant/$appVersion ( https://github.com/DeeJayKyle/DJ-ASSISTANT-PRO )';
 
@@ -36,6 +36,20 @@ class HttpOnline extends Online {
   final http.Client localWeb;
 
   final _last = <String, DateTime>{};
+
+  /// Album and artist pages already fetched this session: tracks of the
+  /// same album or artist reuse them instead of asking again.
+  final _deezerAlbums = <int, Object?>{};
+  final _spotifyGenres = <String, List<String>>{};
+
+  /// Spotify no longer gives audio features to new apps: once refused,
+  /// it is not asked again.
+  bool _audioFeatures = true;
+
+  static void _bound(Map<Object, Object?> m) {
+    if (m.length > 5000) m.clear();
+  }
+
   (String, String, DateTime)? _spotifyToken;
 
   /// Waits so calls through [slot] are at least [gap] apart.
@@ -149,11 +163,13 @@ class HttpOnline extends Online {
       );
       if (i == 0) {
         final albumId = integer(at(t, 'album/id')) ?? 0;
-        Object? album;
-        if (albumId > 0) {
+        Object? album = _deezerAlbums[albumId];
+        if (albumId > 0 && !_deezerAlbums.containsKey(albumId)) {
           await throttle('deezer', gap);
           try {
             album = await getJson('https://api.deezer.com/album/$albumId');
+            _bound(_deezerAlbums);
+            _deezerAlbums[albumId] = album;
           } on OnlineException {
             album = null;
           }
@@ -185,6 +201,17 @@ class HttpOnline extends Online {
       }),
     );
   }
+
+  @override
+  bool get separateCatalogs => true;
+
+  @override
+  Future<List<CatalogMatch>> deezerLookup(String artist, String title) =>
+      deezer(artist, title);
+
+  @override
+  Future<List<CatalogMatch>> appleLookup(String artist, String title) =>
+      itunes(artist, title);
 
   @override
   Future<List<CatalogMatch>> catalogLookup(String artist, String title) async {
@@ -345,26 +372,37 @@ class HttpOnline extends Online {
       if (i == 0) {
         // genres live on the artist; tempo and key on audio features (older apps only)
         if (str(at(t, 'artists/0/id')) case final aid?) {
-          await throttle('spotify', gap);
-          final a = await _bearer(
-            'https://api.spotify.com/v1/artists/$aid',
-            token,
-          );
-          if (a != null) {
-            m.genres = [
-              for (final g in list(at(a, 'genres')))
-                if (g is String) titleCase(g),
-            ];
+          if (_spotifyGenres[aid] case final g?) {
+            m.genres = g;
+          } else {
+            await throttle('spotify', gap);
+            final a = await _bearer(
+              'https://api.spotify.com/v1/artists/$aid',
+              token,
+            );
+            if (a != null) {
+              m.genres = [
+                for (final g in list(at(a, 'genres')))
+                  if (g is String) titleCase(g),
+              ];
+              _bound(_spotifyGenres);
+              _spotifyGenres[aid] = m.genres;
+            }
           }
         }
-        if (str(at(t, 'id')) case final id?) {
+        if (_audioFeatures && str(at(t, 'id')) != null) {
+          final id = str(at(t, 'id'))!;
           await throttle('spotify', gap);
           try {
             final f = await _bearer(
               'https://api.spotify.com/v1/audio-features/$id',
               token,
             );
-            if (f != null) applyAudioFeatures(m, f);
+            if (f != null) {
+              applyAudioFeatures(m, f);
+            } else {
+              _audioFeatures = false; // refused for this app
+            }
           } on OnlineException {
             // audio features are optional
           }
